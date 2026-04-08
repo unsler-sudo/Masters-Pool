@@ -109,11 +109,20 @@ export default function App(){
   };
 
   const fetchScores=async(quiet)=>{
+    // Don't auto-refresh if picks are still hidden (tournament hasn't started)
+    if(quiet && picksHidden) return;
     setRefreshing(true);
     try{
       const r=await fetch('/api/scores?endpoint=in-play');
       if(!r.ok) throw new Error('API '+r.status);
       const data=await r.json();
+
+      // Check if this is actually the Masters
+      const eventName = (data.event_name || data.tournament || '').toLowerCase();
+      if(eventName && !eventName.includes('master')) {
+        throw new Error('Waiting for Masters to go live — currently showing: ' + (data.event_name || 'other event'));
+      }
+
       const raw=data.data||data.players||data||[];
       if(!Array.isArray(raw)||raw.length===0) throw new Error('No live scores yet');
 
@@ -272,13 +281,14 @@ export default function App(){
             </div>}
             {ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name;return(
               <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:'1px solid #cdc8b8',animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
-                <div style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}} onClick={()=>setOpenCard(op?null:e.name)}>
-                  <div style={{fontSize:i<3?18:14,fontWeight:800,width:32,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</div>
+                <div style={{display:'flex',alignItems:'center',gap:10,cursor:picksHidden?'default':'pointer'}} onClick={()=>!picksHidden&&setOpenCard(op?null:e.name)}>
+                  {!picksHidden&&<div style={{fontSize:i<3?18:14,fontWeight:800,width:32,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</div>}
+                  {picksHidden&&<div style={{width:32,textAlign:'center',fontSize:16}}>✅</div>}
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700}}>{e.name}</div>
-                    <div style={{fontSize:11,color:'#8a9580'}}>{picksHidden?'Picks hidden':'Tap to '+(op?'collapse':'expand')}</div>
+                    <div style={{fontSize:11,color:'#8a9580'}}>{picksHidden?'Entry submitted — picks hidden until tee-off':'Tap to '+(op?'collapse':'expand')}</div>
                   </div>
-                  <div style={{fontWeight:800,fontSize:17,color:'#2d5016'}}>{fmt(tot)}</div>
+                  {!picksHidden&&<div style={{fontWeight:800,fontSize:17,color:'#2d5016'}}>{fmt(tot)}</div>}
                 </div>
 
                 {/* Show picks only if not hidden */}
