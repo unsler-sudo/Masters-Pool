@@ -1,14 +1,13 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 
-const TOURNAMENT = { name: 'The Masters 2026', purse: 21000000, picksPerTier: 3 };
+const TOURNAMENT = { name: 'The Masters 2026', purse: 21000000 };
 const TIERS = [
   { id: 1, name: 'Group A — Favorites', color: '#b8960c', picks: 3 },
   { id: 2, name: 'Group B — Contenders', color: '#2d5016', picks: 3 },
   { id: 3, name: 'Group C — Longshots', color: '#555', picks: 3 },
 ];
 const TOTAL_PICKS = 9;
-const REFRESH_INTERVAL = 60000;
 
 const PAYOUT={1:.20,2:.109,3:.069,4:.049,5:.041,6:.03625,7:.03375,8:.03125,9:.02925,10:.02725,11:.02525,12:.02325,13:.02125,14:.01925,15:.01825,16:.01725,17:.01625,18:.01525,19:.01425,20:.01325,21:.01225,22:.01125,23:.01045,24:.00965,25:.00885,26:.00805,27:.00775,28:.00745,29:.00715,30:.00685,31:.00655,32:.00625,33:.00595,34:.0057,35:.00545,36:.0052,37:.00495,38:.00475,39:.00455,40:.00435,41:.00415,42:.00395,43:.00375,44:.00355,45:.00335,46:.00315,47:.00295,48:.00279,49:.00265,50:.00257,51:.00251,52:.00245,53:.00241,54:.00237,55:.00235,56:.00233,57:.00231,58:.00229,59:.00227,60:.00225,61:.00223,62:.00221,63:.00219,64:.00217,65:.00215};
 
@@ -70,7 +69,7 @@ const SEED_FIELD = [
   {name:'Holtz, Brandon',country:'USA',odds:'AM',tier:3},{name:'Howell, Mason',country:'USA',odds:'AM',tier:3},
   {name:'Keefer, Johnny',country:'USA',odds:'AM',tier:3},{name:'Laopakdee, Fifa',country:'THA',odds:'AM',tier:3},
   {name:'Pulcini, Mateo',country:'ARG',odds:'AM',tier:3},
-].map(p=>({...p,pos:'-',score:'E',today:'',thru:'',r1:'',r2:'',r3:'',r4:'',earnings:0}));
+].map(p=>({...p,pos:'-',score:'E',today:'',thru:'',earnings:0}));
 
 const TABS=['Standings','Enter Pool','Field','Admin'];
 
@@ -88,26 +87,27 @@ export default function App(){
   const [adminPw,setAdminPw]=useState('');
   const [adminOk,setAdminOk]=useState(false);
   const [locked,setLocked]=useState(false);
+  const [picksHidden,setPicksHidden]=useState(true);
   const [lastUp,setLastUp]=useState(null);
   const [openCard,setOpenCard]=useState(null);
   const [activeTier,setActiveTier]=useState(1);
+  const [submitting,setSubmitting]=useState(false);
   const timer=useRef(null);
 
   const allPicks=[...picks[1],...picks[2],...picks[3]];
   const totalPicked=allPicks.length;
-  const msg=m=>{setToast(m);setTimeout(()=>setToast(''),3000);};
+  const msg=m=>{setToast(m);setTimeout(()=>setToast(''),3500);};
 
-  // Load entries from API
   const loadEntries=async()=>{
     try{
       const r=await fetch('/api/entries');
       const d=await r.json();
       if(d.entries)setEntries(d.entries);
       if(d.locked!==undefined)setLocked(d.locked);
-    }catch(e){}
+      if(d.picksHidden!==undefined)setPicksHidden(d.picksHidden);
+    }catch(e){ console.error('loadEntries:',e); }
   };
 
-  // Fetch scores from DataGolf via API proxy
   const fetchScores=async(quiet)=>{
     setRefreshing(true);
     try{
@@ -115,16 +115,7 @@ export default function App(){
       if(!r.ok) throw new Error('API '+r.status);
       const data=await r.json();
       const raw=data.data||data.players||data||[];
-      if(!Array.isArray(raw)||raw.length===0){
-        // Try pre-tournament endpoint if in-play has no data
-        const r2=await fetch('/api/scores?endpoint=pre-tournament');
-        if(r2.ok){
-          const d2=await r2.json();
-          // Pre-tournament doesn't have live scores, just probabilities
-          if(!quiet) msg('Tournament not live yet — showing pre-tournament data');
-        }
-        throw new Error('No live scores — tournament may not have started');
-      }
+      if(!Array.isArray(raw)||raw.length===0) throw new Error('No live scores yet');
 
       const updated=field.map(f=>{
         const match=raw.find(p=>{
@@ -145,7 +136,6 @@ export default function App(){
         }
         return f;
       });
-
       const em=calcEarnings(updated);
       updated.forEach(p=>{p.earnings=em[p.name]||0;});
       setField(updated);
@@ -158,11 +148,10 @@ export default function App(){
     setRefreshing(false);
   };
 
-  // Init
   useEffect(()=>{
     loadEntries().then(()=>setReady(true));
     fetchScores(true);
-    timer.current=setInterval(()=>fetchScores(true),REFRESH_INTERVAL);
+    timer.current=setInterval(()=>{fetchScores(true);loadEntries();},60000);
     return()=>clearInterval(timer.current);
   },[]);
 
@@ -176,14 +165,27 @@ export default function App(){
   const submit=async()=>{
     if(!entryName.trim())return msg('Enter your name!');
     for(const t of TIERS)if(picks[t.id].length!==t.picks)return msg(`Pick ${t.picks} from ${t.name}`);
+    setSubmitting(true);
     try{
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',name:entryName.trim(),picks:allPicks})});
       const d=await r.json();
-      if(d.error)return msg(d.error);
+      if(d.error){msg(d.error);setSubmitting(false);return;}
       if(d.entries)setEntries(d.entries);
       setEntryName('');setPicks({1:[],2:[],3:[]});setSearch('');
       msg('Entry submitted!');setTab('Standings');
-    }catch(e){msg('Error submitting');}
+    }catch(e){msg('Error submitting — check connection');}
+    setSubmitting(false);
+  };
+
+  const deleteOwnEntry=async(name)=>{
+    if(!confirm(`Remove your entry "${name}"? You can re-enter if entries aren't locked.`))return;
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete-own',name})});
+      const d=await r.json();
+      if(d.error){msg(d.error);return;}
+      if(d.entries)setEntries(d.entries);
+      msg('Entry removed');
+    }catch(e){msg('Error removing entry');}
   };
 
   const teamE=e=>e.picks.reduce((s,n)=>s+(field.find(f=>f.name===n)?.earnings||0),0);
@@ -198,9 +200,10 @@ export default function App(){
     try{
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,password:adminPw,...extra})});
       const d=await r.json();
-      if(d.error)return msg(d.error);
+      if(d.error){msg(d.error);return null;}
       if(d.entries!==undefined)setEntries(d.entries||[]);
       if(d.locked!==undefined)setLocked(d.locked);
+      if(d.picksHidden!==undefined)setPicksHidden(d.picksHidden);
       return d;
     }catch(e){msg('Error');return null;}
   };
@@ -216,6 +219,7 @@ export default function App(){
   return(
     <div style={{fontFamily:"'DM Sans',sans-serif",background:'linear-gradient(180deg,#d8d3c4 0%,#f3efe6 300px)',minHeight:'100vh',color:'#1a2e0a'}}>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes fu{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         @keyframes sd{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes glow{0%,100%{opacity:1}50%{opacity:.3}}
@@ -225,7 +229,7 @@ export default function App(){
         ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#2d501630;border-radius:3px}
       `}</style>
 
-      {toast&&<div style={{position:'fixed',top:12,left:'50%',transform:'translateX(-50%)',background:'#1a2e0a',color:'#faf6ed',padding:'8px 20px',borderRadius:9,fontSize:13,fontWeight:600,zIndex:100,animation:'sd .25s ease',boxShadow:'0 4px 14px rgba(0,0,0,.2)'}}>{toast}</div>}
+      {toast&&<div style={{position:'fixed',top:12,left:'50%',transform:'translateX(-50%)',background:'#1a2e0a',color:'#faf6ed',padding:'8px 20px',borderRadius:9,fontSize:13,fontWeight:600,zIndex:100,animation:'sd .25s ease',boxShadow:'0 4px 14px rgba(0,0,0,.2)',maxWidth:'90%',textAlign:'center'}}>{toast}</div>}
 
       <header style={{background:'linear-gradient(145deg,#0f2b04,#2d5016 60%,#3a6520)',padding:'20px 16px 16px',color:'#faf6ed'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -259,31 +263,51 @@ export default function App(){
 
       <main style={{padding:'12px 12px 80px',maxWidth:660,margin:'0 auto',animation:'fu .35s ease'}}>
 
+        {/* STANDINGS */}
         {tab==='Standings'&&(ranked.length===0?
           <div style={bx}><div style={{fontSize:44,marginBottom:10}}>⛳</div><p style={{color:'#6b7c5e',marginBottom:14}}>No entries yet!</p><button type="button" style={pri} onClick={()=>setTab('Enter Pool')}>Enter the Pool</button></div>
-          :ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name;return(
-            <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:'1px solid #cdc8b8',cursor:'pointer',animation:'fu .3s ease both',animationDelay:i*.04+'s'}} onClick={()=>setOpenCard(op?null:e.name)}>
-              <div style={{display:'flex',alignItems:'center',gap:10}}>
-                <div style={{fontSize:i<3?18:14,fontWeight:800,width:32,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</div>
-                <div style={{flex:1}}><div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700}}>{e.name}</div><div style={{fontSize:11,color:'#8a9580'}}>Tap to {op?'collapse':'expand'}</div></div>
-                <div style={{fontWeight:800,fontSize:17,color:'#2d5016'}}>{fmt(tot)}</div>
-              </div>
-              {op?<div style={{marginTop:8,borderTop:'1px solid #eee8dc',paddingTop:8,animation:'sd .2s ease'}}>
-                {TIERS.map(t=>{const tp=e.picks.filter(pn=>field.find(f=>f.name===pn)?.tier===t.id);if(!tp.length)return null;return<div key={t.id} style={{marginBottom:6}}>
-                  <div style={{fontSize:10,fontWeight:700,color:t.color,marginBottom:3,letterSpacing:.5}}>{t.name.toUpperCase()}</div>
-                  {tp.map(pn=>{const p=field.find(f=>f.name===pn);return<div key={pn} style={{display:'flex',padding:'4px 0',borderBottom:'1px solid #f5f0e8'}}>
-                    <div style={{flex:1}}><span style={{fontWeight:600,fontSize:13}}>{flip(pn)}</span>{p&&<span style={{fontSize:11,color:'#8a9580',marginLeft:6}}>{p.pos} · {p.score}</span>}</div>
-                    <span style={{fontWeight:700,fontSize:13,color:'#2d5016'}}>{fmt(p?.earnings)}</span>
+          :<>
+            {picksHidden&&<div style={{background:'#e8f4e8',padding:'10px 16px',borderRadius:9,marginBottom:10,fontSize:13,color:'#2d5016',textAlign:'center',border:'1px solid #c8dcc8'}}>
+              🔒 Picks are hidden until the first group tees off. Earnings will show once scores are live.
+            </div>}
+            {ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name;return(
+              <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:'1px solid #cdc8b8',animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}} onClick={()=>setOpenCard(op?null:e.name)}>
+                  <div style={{fontSize:i<3?18:14,fontWeight:800,width:32,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700}}>{e.name}</div>
+                    <div style={{fontSize:11,color:'#8a9580'}}>{picksHidden?'Picks hidden':'Tap to '+(op?'collapse':'expand')}</div>
+                  </div>
+                  <div style={{fontWeight:800,fontSize:17,color:'#2d5016'}}>{fmt(tot)}</div>
+                </div>
+
+                {/* Show picks only if not hidden */}
+                {!picksHidden&&op&&<div style={{marginTop:8,borderTop:'1px solid #eee8dc',paddingTop:8,animation:'sd .2s ease'}}>
+                  {TIERS.map(t=>{const tp=e.picks.filter(pn=>field.find(f=>f.name===pn)?.tier===t.id);if(!tp.length)return null;return<div key={t.id} style={{marginBottom:6}}>
+                    <div style={{fontSize:10,fontWeight:700,color:t.color,marginBottom:3,letterSpacing:.5}}>{t.name.toUpperCase()}</div>
+                    {tp.map(pn=>{const p=field.find(f=>f.name===pn);return<div key={pn} style={{display:'flex',padding:'4px 0',borderBottom:'1px solid #f5f0e8'}}>
+                      <div style={{flex:1}}><span style={{fontWeight:600,fontSize:13}}>{flip(pn)}</span>{p&&<span style={{fontSize:11,color:'#8a9580',marginLeft:6}}>{p.pos} · {p.score}</span>}</div>
+                      <span style={{fontWeight:700,fontSize:13,color:'#2d5016'}}>{fmt(p?.earnings)}</span>
+                    </div>;})}
                   </div>;})}
-                </div>;})}
-              </div>:<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>
-                {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} style={{fontSize:10,background:'#f3efe6',padding:'2px 7px',borderRadius:4,border:'1px solid #ddd8ca',borderLeft:`3px solid ${t?.color||'#ccc'}`}}>{pn.split(', ')[0]} <b style={{color:'#2d5016'}}>{fmt(p?.earnings)}</b></span>;})}
-              </div>}
-            </div>);})
+                </div>}
+
+                {!picksHidden&&!op&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>
+                  {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} style={{fontSize:10,background:'#f3efe6',padding:'2px 7px',borderRadius:4,border:'1px solid #ddd8ca',borderLeft:`3px solid ${t?.color||'#ccc'}`}}>{pn.split(', ')[0]} <b style={{color:'#2d5016'}}>{fmt(p?.earnings)}</b></span>;})}
+                </div>}
+
+                {/* Delete own entry button (only if not locked) */}
+                {!locked&&<div style={{marginTop:8,textAlign:'right'}}>
+                  <button type="button" onClick={(ev)=>{ev.stopPropagation();deleteOwnEntry(e.name);}} style={{background:'transparent',border:'1px solid #cc8888',color:'#aa4444',padding:'3px 10px',borderRadius:5,fontSize:11}}>Remove Entry</button>
+                </div>}
+              </div>
+            );})}
+          </>
         )}
 
+        {/* ENTER POOL */}
         {tab==='Enter Pool'&&(locked?
-          <div style={bx}><div style={{fontSize:44,marginBottom:10}}>🔒</div><p style={{color:'#6b7c5e'}}>Entries locked!</p></div>
+          <div style={bx}><div style={{fontSize:44,marginBottom:10}}>🔒</div><p style={{color:'#6b7c5e'}}>Entries locked — tournament has started!</p></div>
           :<>
             <div style={{display:'flex',gap:8,marginBottom:10}}>
               <input style={inp} placeholder="Your Name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
@@ -312,15 +336,18 @@ export default function App(){
                   <div style={{flex:1}}>
                     <div style={{fontWeight:600,fontSize:13}}>{flip(p.name)}</div>
                     <div style={{fontSize:11,color:'#8a9580'}}>{p.country} · {p.odds}</div>
-                    {ow.length>0&&<div style={{fontSize:10,color:'#8b6914',marginTop:1}}>Picked by: {ow.join(', ')}</div>}
+                    {!picksHidden&&ow.length>0&&<div style={{fontSize:10,color:'#8b6914',marginTop:1}}>Picked by: {ow.join(', ')}</div>}
                   </div>
                   <div style={sel?{width:20,height:20,borderRadius:'50%',background:'#2d5016',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}:{width:20,height:20,borderRadius:'50%',border:'2px solid #c8c3b5'}}>{sel?'✓':''}</div>
                 </button>);})}
             </div>
-            <button type="button" style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:10,borderRadius:9,opacity:totalPicked!==TOTAL_PICKS?.4:1}} onClick={submit}>Submit Entry ({totalPicked}/{TOTAL_PICKS})</button>
+            <button type="button" disabled={submitting||totalPicked!==TOTAL_PICKS} style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:10,borderRadius:9,opacity:(submitting||totalPicked!==TOTAL_PICKS)?.4:1}} onClick={submit}>
+              {submitting?'Submitting...':'Submit Entry ('+totalPicked+'/'+TOTAL_PICKS+')'}
+            </button>
           </>
         )}
 
+        {/* FIELD */}
         {tab==='Field'&&<>
           <input style={{...inp,marginBottom:8}} placeholder="Search..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <div style={{borderRadius:9,overflow:'hidden',border:'1px solid #c8c3b5'}}>
@@ -328,9 +355,9 @@ export default function App(){
               <span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:38,textAlign:'center'}}>Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span>
             </div>
             {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);return(
-              <div key={p.name} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',background:ow.length?'#f0ebd6':i%2===0?'#fff':'#faf8f3'}}>
+              <div key={p.name} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',background:ow.length&&!picksHidden?'#f0ebd6':i%2===0?'#fff':'#faf8f3'}}>
                 <span style={{width:40,textAlign:'center',fontWeight:700,color:'#2d5016',fontSize:12}}>{p.pos}</span>
-                <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis'}}><span style={{fontWeight:600,fontSize:12}}>{flip(p.name)}</span><span style={{color:'#aaa',fontSize:10,marginLeft:4}}>{p.country}</span>{ow.length>0&&<span style={{fontSize:9,color:'#8b6914',marginLeft:4}}>({ow.join(',')})</span>}</span>
+                <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis'}}><span style={{fontWeight:600,fontSize:12}}>{flip(p.name)}</span><span style={{color:'#aaa',fontSize:10,marginLeft:4}}>{p.country}</span>{!picksHidden&&ow.length>0&&<span style={{fontSize:9,color:'#8b6914',marginLeft:4}}>({ow.join(',')})</span>}</span>
                 <span style={{width:30,textAlign:'center'}}><span style={{fontSize:9,fontWeight:700,color:t?.color,background:t?.color+'18',padding:'1px 5px',borderRadius:3}}>{String.fromCharCode(64+p.tier)}</span></span>
                 <span style={{width:38,textAlign:'center',fontSize:11,color:'#888'}}>{p.thru||'-'}</span>
                 <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:sc}}>{p.score}</span>
@@ -339,6 +366,7 @@ export default function App(){
           </div>
         </>}
 
+        {/* ADMIN */}
         {tab==='Admin'&&(!adminOk?
           <div style={{background:'#fff',padding:20,borderRadius:11,border:'1px solid #c8c3b5'}}>
             <p style={{color:'#6b7c5e',marginBottom:10,fontSize:13}}>Enter admin password:</p>
@@ -352,12 +380,22 @@ export default function App(){
               <button type="button" style={{...pri,opacity:refreshing?.5:1}} onClick={()=>fetchScores(false)} disabled={refreshing}>{refreshing?'Updating...':'⟳ Refresh Now'}</button>
               {lastUp&&<span style={{fontSize:11,color:'#8a9580',marginLeft:8}}>Last: {lastUp}</span>}
             </div>
-            <div style={sec}><h3 style={stl}>🔒 Entry Lock</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Lock before R1 tees off Thursday.</p>
+
+            <div style={sec}><h3 style={stl}>🔒 Entry Lock</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Lock entries before R1 tees off. Also prevents users from deleting their entries.</p>
               <button type="button" style={locked?dan:pri} onClick={async()=>{const d=await adminAction(locked?'unlock':'lock');if(d?.ok)msg(locked?'Unlocked':'Locked!');}}>{locked?'🔓 Unlock':'🔒 Lock'} Entries</button>
             </div>
-            <div style={sec}><h3 style={stl}>👥 Entries ({entries.length})</h3>
-              {entries.length===0?<p style={{color:'#8a9580',fontSize:12}}>None</p>:entries.map(e=><div key={e.name} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f0ebe0',fontSize:13}}><span><b>{e.name}</b></span><button type="button" style={{background:'transparent',border:'1px solid #c44',color:'#c44',padding:'3px 9px',borderRadius:5,fontSize:11}} onClick={async()=>{await adminAction('delete',{name:e.name});msg('Removed');}}>Remove</button></div>)}
+
+            <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>. Reveal picks once the first group tees off Thursday so everyone can see each other's teams.</p>
+              <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
             </div>
+
+            <div style={sec}><h3 style={stl}>👥 Entries ({entries.length})</h3>
+              {entries.length===0?<p style={{color:'#8a9580',fontSize:12}}>None</p>:entries.map(e=><div key={e.name} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f0ebe0',fontSize:13,alignItems:'center'}}>
+                <span><b>{e.name}</b> <span style={{fontSize:10,color:'#8a9580'}}>{e.picks.length} picks</span></span>
+                <button type="button" style={{background:'transparent',border:'1px solid #c44',color:'#c44',padding:'3px 9px',borderRadius:5,fontSize:11}} onClick={async()=>{await adminAction('delete',{name:e.name});msg('Removed');}}>Remove</button>
+              </div>)}
+            </div>
+
             <div style={{...sec,borderColor:'#d4444460'}}><h3 style={{...stl,color:'#a03030'}}>⚠ Danger</h3><button type="button" style={dan} onClick={async()=>{if(!confirm('Reset everything?'))return;await adminAction('reset');setEntries([]);msg('Reset');}}>Reset All</button></div>
           </>
         )}
