@@ -422,7 +422,7 @@ export default function App(){
                 <span>{t.name.split('—')[0].trim()}</span><span style={{fontSize:10,opacity:.8}}>{picks[t.id].length}/{t.picks} {full?'✓':''}</span>
               </button>;})}
             </div>
-            <input style={{...inp,marginBottom:8}} placeholder={`Search ${TIERS.find(t=>t.id===activeTier)?.name}...`} value={search} onChange={e=>setSearch(e.target.value)}/>
+            <input style={{...inp,marginBottom:8}} placeholder={`Search ${(TIERS.find(t=>t.id===activeTier)?.name||'').split('—')[1]?.trim()||''}...`} value={search} onChange={e=>setSearch(e.target.value)}/>
             <div style={{maxHeight:320,overflowY:'auto',borderRadius:9,border:'1px solid #c8c3b5',background:'#fff'}}>
               {filteredTier.map(p=>{const sel=picks[activeTier].includes(p.name),full=!sel&&picks[activeTier].length>=TIERS.find(t=>t.id===activeTier)?.picks,ow=owners(p.name);return(
                 <button key={p.name} type="button" onClick={()=>!full&&togglePick(p.name,activeTier)}
