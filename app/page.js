@@ -73,6 +73,10 @@ const SEED_FIELD = [
 
 const TABS=['Standings','Enter Pool','Field','Admin'];
 
+// Auto-lock entries and reveal picks at first tee time
+// Thursday April 9, 2026 at 7:00 AM ET (11:00 UTC)
+const TEE_TIME = new Date('2026-04-09T11:00:00Z').getTime();
+
 export default function App(){
   const [tab,setTab]=useState('Standings');
   const [entries,setEntries]=useState([]);
@@ -86,13 +90,32 @@ export default function App(){
   const [toast,setToast]=useState('');
   const [adminPw,setAdminPw]=useState('');
   const [adminOk,setAdminOk]=useState(false);
-  const [locked,setLocked]=useState(false);
-  const [picksHidden,setPicksHidden]=useState(true);
+  const [serverLocked,setServerLocked]=useState(false);
+  const [serverPicksHidden,setServerPicksHidden]=useState(true);
   const [lastUp,setLastUp]=useState(null);
   const [openCard,setOpenCard]=useState(null);
   const [activeTier,setActiveTier]=useState(1);
   const [submitting,setSubmitting]=useState(false);
+  const [now,setNow]=useState(Date.now());
   const timer=useRef(null);
+
+  // Auto-lock and auto-reveal based on tee time
+  const pastTeeTime = now >= TEE_TIME;
+  const locked = serverLocked || pastTeeTime;
+  const picksHidden = serverPicksHidden && !pastTeeTime;
+
+  // Countdown display
+  const getCountdown = () => {
+    const diff = TEE_TIME - now;
+    if (diff <= 0) return null;
+    const days = Math.floor(diff / 86400000);
+    const hrs = Math.floor((diff % 86400000) / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    if (days > 0) return `${days}d ${hrs}h until entries lock`;
+    if (hrs > 0) return `${hrs}h ${mins}m until entries lock`;
+    return `${mins}m until entries lock`;
+  };
+  const countdown = getCountdown();
 
   const allPicks=[...picks[1],...picks[2],...picks[3]];
   const totalPicked=allPicks.length;
@@ -103,8 +126,8 @@ export default function App(){
       const r=await fetch('/api/entries');
       const d=await r.json();
       if(d.entries)setEntries(d.entries);
-      if(d.locked!==undefined)setLocked(d.locked);
-      if(d.picksHidden!==undefined)setPicksHidden(d.picksHidden);
+      if(d.locked!==undefined)setServerLocked(d.locked);
+      if(d.picksHidden!==undefined)setServerPicksHidden(d.picksHidden);
     }catch(e){ console.error('loadEntries:',e); }
   };
 
@@ -160,8 +183,10 @@ export default function App(){
   useEffect(()=>{
     loadEntries().then(()=>setReady(true));
     fetchScores(true);
-    timer.current=setInterval(()=>{fetchScores(true);loadEntries();},60000);
-    return()=>clearInterval(timer.current);
+    timer.current=setInterval(()=>{fetchScores(true);loadEntries();setNow(Date.now());},60000);
+    // Update countdown every 30s
+    const clock=setInterval(()=>setNow(Date.now()),30000);
+    return()=>{clearInterval(timer.current);clearInterval(clock);};
   },[]);
 
   const togglePick=(name,tier)=>{
@@ -211,8 +236,8 @@ export default function App(){
       const d=await r.json();
       if(d.error){msg(d.error);return null;}
       if(d.entries!==undefined)setEntries(d.entries||[]);
-      if(d.locked!==undefined)setLocked(d.locked);
-      if(d.picksHidden!==undefined)setPicksHidden(d.picksHidden);
+      if(d.locked!==undefined)setServerLocked(d.locked);
+      if(d.picksHidden!==undefined)setServerPicksHidden(d.picksHidden);
       return d;
     }catch(e){msg('Error');return null;}
   };
@@ -251,7 +276,8 @@ export default function App(){
           </div>
           <div style={{textAlign:'right'}}>
             <div style={{background:'#ffffff18',borderRadius:16,padding:'3px 12px',fontSize:12,fontWeight:600}}>{entries.length} {entries.length===1?'entry':'entries'}</div>
-            {lastUp&&<div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end',marginTop:4}}>
+            {countdown&&<div style={{fontSize:10,opacity:.7,marginTop:4}}>⏱ {countdown}</div>}
+            {lastUp&&!countdown&&<div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end',marginTop:4}}>
               <div style={{width:6,height:6,borderRadius:'50%',background:'#4ade80',animation:'glow 2s infinite'}}/>
               <span style={{fontSize:9,opacity:.5}}>Live · {lastUp}</span>
             </div>}
@@ -277,7 +303,7 @@ export default function App(){
           <div style={bx}><div style={{fontSize:44,marginBottom:10}}>⛳</div><p style={{color:'#6b7c5e',marginBottom:14}}>No entries yet!</p><button type="button" style={pri} onClick={()=>setTab('Enter Pool')}>Enter the Pool</button></div>
           :<>
             {picksHidden&&<div style={{background:'#e8f4e8',padding:'10px 16px',borderRadius:9,marginBottom:10,fontSize:13,color:'#2d5016',textAlign:'center',border:'1px solid #c8dcc8'}}>
-              🔒 Picks are hidden until the first group tees off. Earnings will show once scores are live.
+              🔒 Picks are hidden until first tee Thursday 7:00 AM ET.{countdown?' '+countdown+'.':' Revealing soon!'}
             </div>}
             {ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name;return(
               <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:'1px solid #cdc8b8',animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
@@ -317,8 +343,11 @@ export default function App(){
 
         {/* ENTER POOL */}
         {tab==='Enter Pool'&&(locked?
-          <div style={bx}><div style={{fontSize:44,marginBottom:10}}>🔒</div><p style={{color:'#6b7c5e'}}>Entries locked — tournament has started!</p></div>
+          <div style={bx}><div style={{fontSize:44,marginBottom:10}}>🔒</div><p style={{color:'#6b7c5e'}}>Entries locked — tournament has started!</p><p style={{color:'#8a9580',fontSize:12,marginTop:6}}>Picks were locked at 7:00 AM ET Thursday.</p></div>
           :<>
+            {countdown&&<div style={{background:'#fef3cd',padding:'8px 14px',borderRadius:9,marginBottom:10,fontSize:12,color:'#856404',textAlign:'center',border:'1px solid #f0e4a8'}}>
+              ⏱ {countdown} — submit before Thursday 7:00 AM ET!
+            </div>}
             <div style={{display:'flex',gap:8,marginBottom:10}}>
               <input style={inp} placeholder="Your Name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
               <div style={{background:'#2d5016',color:'#faf6ed',minWidth:50,height:44,borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'0 6px'}}>
