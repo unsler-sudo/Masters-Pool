@@ -387,10 +387,6 @@ export default function App(){
                   {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} style={{fontSize:10,background:'#f3efe6',padding:'2px 7px',borderRadius:4,border:'1px solid #ddd8ca',borderLeft:`3px solid ${t?.color||'#ccc'}`}}>{pn.split(', ')[0]} <b style={{color:'#2d5016'}}>{fmt(p?.earnings)}</b></span>;})}
                 </div>}
 
-                {/* Delete own entry button (only if not locked) */}
-                {!locked&&<div style={{marginTop:8,textAlign:'right'}}>
-                  <button type="button" onClick={(ev)=>{ev.stopPropagation();deleteOwnEntry(e.name);}} style={{background:'transparent',border:'1px solid #cc8888',color:'#aa4444',padding:'3px 10px',borderRadius:5,fontSize:11}}>Remove Entry</button>
-                </div>}
               </div>
             );})}
           </>
