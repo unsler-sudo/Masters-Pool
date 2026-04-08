@@ -253,10 +253,12 @@ export default function App(){
   return(
     <div style={{fontFamily:"'DM Sans',sans-serif",background:'linear-gradient(180deg,#d8d3c4 0%,#f3efe6 300px)',minHeight:'100vh',color:'#1a2e0a'}}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,800;0,900;1,400&family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes fu{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         @keyframes sd{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes glow{0%,100%{opacity:1}50%{opacity:.3}}
+        @keyframes sway{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
+        @keyframes flagWave{0%,100%{transform:skewX(0deg)}25%{transform:skewX(-3deg)}75%{transform:skewX(2deg)}}
         *{box-sizing:border-box;margin:0;padding:0}
         button{cursor:pointer;font-family:'DM Sans',sans-serif;transition:opacity .15s}button:active{opacity:.7}
         input:focus{outline:2px solid #2d5016;outline-offset:1px}
@@ -265,19 +267,73 @@ export default function App(){
 
       {toast&&<div style={{position:'fixed',top:12,left:'50%',transform:'translateX(-50%)',background:'#1a2e0a',color:'#faf6ed',padding:'8px 20px',borderRadius:9,fontSize:13,fontWeight:600,zIndex:100,animation:'sd .25s ease',boxShadow:'0 4px 14px rgba(0,0,0,.2)',maxWidth:'90%',textAlign:'center'}}>{toast}</div>}
 
-      <header style={{background:'linear-gradient(145deg,#0f2b04,#2d5016 60%,#3a6520)',padding:'20px 16px 16px',color:'#faf6ed'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div style={{display:'flex',gap:10,alignItems:'center'}}>
-            <div style={{width:38,height:38,borderRadius:'50%',background:'#ffffff14',display:'flex',alignItems:'center',justifyContent:'center',border:'1px solid #ffffff22',fontSize:18}}>⛳</div>
-            <div>
-              <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:800}}>{TOURNAMENT.name}</h1>
-              <div style={{fontSize:11,opacity:.5}}>{fmt(TOURNAMENT.purse)} purse · 3 picks × 3 tiers</div>
-            </div>
+      {/* AUGUSTA-INSPIRED HEADER */}
+      <header style={{background:'linear-gradient(170deg,#0a1f04 0%,#163a0a 30%,#1e5010 60%,#2a6818 100%)',padding:0,color:'#faf6ed',position:'relative',overflow:'hidden'}}>
+        {/* SVG Scene - Rolling hills, flag, azaleas */}
+        <svg viewBox="0 0 800 200" style={{width:'100%',display:'block'}} xmlns="http://www.w3.org/2000/svg">
+          {/* Sky gradient */}
+          <defs>
+            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#1a3f0a"/>
+              <stop offset="100%" stopColor="#2d5016"/>
+            </linearGradient>
+            <linearGradient id="fairway" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#2d7a1e"/>
+              <stop offset="100%" stopColor="#1e5a12"/>
+            </linearGradient>
+          </defs>
+          <rect width="800" height="200" fill="url(#sky)"/>
+          
+          {/* Distant tree line */}
+          <ellipse cx="120" cy="95" rx="45" ry="35" fill="#1a4a0e" opacity=".6"/>
+          <ellipse cx="200" cy="90" rx="55" ry="40" fill="#1d4f10" opacity=".5"/>
+          <ellipse cx="300" cy="92" rx="40" ry="32" fill="#1a4a0e" opacity=".55"/>
+          <ellipse cx="500" cy="88" rx="60" ry="42" fill="#1d4f10" opacity=".5"/>
+          <ellipse cx="620" cy="93" rx="50" ry="36" fill="#1a4a0e" opacity=".6"/>
+          <ellipse cx="720" cy="90" rx="45" ry="38" fill="#1d4f10" opacity=".5"/>
+          
+          {/* Rolling fairway hills */}
+          <path d="M0,140 Q100,110 200,130 Q350,155 450,125 Q550,100 650,128 Q750,150 800,130 L800,200 L0,200 Z" fill="url(#fairway)"/>
+          <path d="M0,160 Q150,140 300,155 Q450,170 600,150 Q700,140 800,155 L800,200 L0,200 Z" fill="#256a16" opacity=".7"/>
+          
+          {/* Flag stick */}
+          <line x1="580" y1="72" x2="580" y2="120" stroke="#ddd" strokeWidth="1.5"/>
+          <path d="M580,72 L608,80 L580,88 Z" fill="#d42a2a" style={{animation:'flagWave 3s ease-in-out infinite'}}/>
+          
+          {/* Azalea bushes - pink flowers */}
+          <circle cx="80" cy="155" r="12" fill="#d94878" opacity=".8"/>
+          <circle cx="95" cy="150" r="10" fill="#e05a8a" opacity=".7"/>
+          <circle cx="68" cy="152" r="9" fill="#c93868" opacity=".75"/>
+          <circle cx="88" cy="160" r="8" fill="#d94878" opacity=".6"/>
+          
+          <circle cx="700" cy="148" r="11" fill="#d94878" opacity=".75"/>
+          <circle cx="715" cy="144" r="9" fill="#e05a8a" opacity=".65"/>
+          <circle cx="688" cy="146" r="8" fill="#c93868" opacity=".7"/>
+          
+          {/* Dogwood white flowers */}
+          <circle cx="160" cy="100" r="4" fill="#fff" opacity=".3"/>
+          <circle cx="170" cy="95" r="3" fill="#fff" opacity=".25"/>
+          <circle cx="640" cy="98" r="4" fill="#fff" opacity=".3"/>
+          <circle cx="650" cy="93" r="3" fill="#fff" opacity=".2"/>
+          
+          {/* Amen Corner bridge hint */}
+          <path d="M340,165 Q370,155 400,165" stroke="#c4a86c" strokeWidth="2" fill="none" opacity=".4"/>
+          
+          {/* Water reflection */}
+          <ellipse cx="370" cy="175" rx="50" ry="12" fill="#1a4a3a" opacity=".3"/>
+        </svg>
+        
+        {/* Title overlay */}
+        <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
+          <div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:400,fontStyle:'italic',opacity:.7,letterSpacing:1.5,marginBottom:2}}>A Tradition Unlike Any Other</div>
+            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
+            <div style={{fontSize:11,opacity:.55,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 3 picks × 3 tiers</div>
           </div>
           <div style={{textAlign:'right'}}>
-            <div style={{background:'#ffffff18',borderRadius:16,padding:'3px 12px',fontSize:12,fontWeight:600}}>{entries.length} {entries.length===1?'entry':'entries'}</div>
-            {countdown&&<div style={{fontSize:10,opacity:.7,marginTop:4}}>⏱ {countdown}</div>}
-            {lastUp&&!countdown&&<div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end',marginTop:4}}>
+            <div style={{background:'#ffffff18',borderRadius:16,padding:'4px 14px',fontSize:12,fontWeight:600,backdropFilter:'blur(4px)',border:'1px solid #ffffff15'}}>{entries.length} {entries.length===1?'entry':'entries'}</div>
+            {countdown&&<div style={{fontSize:10,opacity:.7,marginTop:5}}>⏱ {countdown}</div>}
+            {lastUp&&!countdown&&<div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end',marginTop:5}}>
               <div style={{width:6,height:6,borderRadius:'50%',background:'#4ade80',animation:'glow 2s infinite'}}/>
               <span style={{fontSize:9,opacity:.5}}>Live · {lastUp}</span>
             </div>}
@@ -285,12 +341,12 @@ export default function App(){
         </div>
       </header>
 
-      <nav style={{display:'flex',background:'#fff',borderBottom:'1px solid #c8c3b5',position:'sticky',top:0,zIndex:10}}>
-        {TABS.map(t=><button key={t} onClick={()=>{setTab(t);setSearch('')}} style={{flex:1,padding:'10px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:'transparent',color:tab===t?'#1a3f0a':'#8a9580',borderBottom:tab===t?'2.5px solid #2d5016':'2.5px solid transparent'}}>{t==='Admin'?'⚙ ':''}{t}</button>)}
+      <nav style={{display:'flex',background:'#fff',borderBottom:'2px solid #1e5010',position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)'}}>
+        {TABS.map(t=><button key={t} onClick={()=>{setTab(t);setSearch('')}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?'#f5f0e8':'transparent',color:tab===t?'#1e5010':'#8a9580',borderBottom:tab===t?'3px solid #1e5010':'3px solid transparent',letterSpacing:.3}}>{t==='Admin'?'⚙ ':''}{t}</button>)}
       </nav>
 
-      <div style={{display:'flex',gap:6,padding:'8px 14px',background:'#fff',borderBottom:'1px solid #e0dbd0',justifyContent:'center',alignItems:'center'}}>
-        <button type="button" style={{...pri,opacity:refreshing?.5:1}} onClick={()=>fetchScores(false)} disabled={refreshing}>{refreshing?'⟳ Updating...':'⟳ Refresh Scores'}</button>
+      <div style={{display:'flex',gap:6,padding:'8px 14px',background:'#f5f0e8',borderBottom:'1px solid #e0dbd0',justifyContent:'center',alignItems:'center'}}>
+        <button type="button" style={{background:'#1e5010',color:'#faf6ed',border:'none',padding:'7px 18px',borderRadius:7,fontWeight:600,fontSize:12,opacity:refreshing?.5:1}} onClick={()=>fetchScores(false)} disabled={refreshing}>{refreshing?'⟳ Updating...':'⟳ Refresh Scores'}</button>
         {lastUp&&<span style={{fontSize:11,color:'#8a9580'}}>{lastUp}</span>}
       </div>
 
@@ -300,10 +356,10 @@ export default function App(){
 
         {/* STANDINGS */}
         {tab==='Standings'&&(ranked.length===0?
-          <div style={bx}><div style={{fontSize:44,marginBottom:10}}>⛳</div><p style={{color:'#6b7c5e',marginBottom:14}}>No entries yet!</p><button type="button" style={pri} onClick={()=>setTab('Enter Pool')}>Enter the Pool</button></div>
+          <div style={bx}><div style={{fontSize:44,marginBottom:10}}>🏌️</div><p style={{color:'#2d5016',fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:16,marginBottom:14}}>The field awaits your picks.</p><button type="button" style={pri} onClick={()=>setTab('Enter Pool')}>Enter the Pool</button></div>
           :<>
-            {picksHidden&&<div style={{background:'#e8f4e8',padding:'10px 16px',borderRadius:9,marginBottom:10,fontSize:13,color:'#2d5016',textAlign:'center',border:'1px solid #c8dcc8'}}>
-              🔒 Picks are hidden until first tee Thursday 7:00 AM ET.{countdown?' '+countdown+'.':' Revealing soon!'}
+            {picksHidden&&<div style={{background:'linear-gradient(135deg,#f9f0f3,#f5e8ee)',padding:'12px 16px',borderRadius:9,marginBottom:10,fontSize:13,color:'#8b3060',textAlign:'center',border:'1px solid #e8c8d8'}}>
+              🌸 Picks are hidden until first tee Thursday 7:00 AM ET.{countdown?' '+countdown+'.':' Revealing soon!'}
             </div>}
             {ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name;return(
               <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:'1px solid #cdc8b8',animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
@@ -439,7 +495,10 @@ export default function App(){
           </>
         )}
       </main>
-      <footer style={{textAlign:'center',padding:'12px',fontSize:10,color:'#8a9580',borderTop:'1px solid #cdc8b8'}}>3 picks per tier · 9 total · Highest combined earnings wins</footer>
+      <footer style={{textAlign:'center',padding:'16px 12px',fontSize:10,color:'#8a9580',borderTop:'1px solid #cdc8b8',background:'#f3efe6'}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:12,color:'#2d5016',marginBottom:4}}>Pick 3 from each tier · 9 golfers total</div>
+        <div>Highest combined earnings wins</div>
+      </footer>
     </div>
   );
 }
