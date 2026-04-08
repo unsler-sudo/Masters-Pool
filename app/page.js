@@ -345,10 +345,9 @@ export default function App(){
         {TABS.map(t=><button key={t} onClick={()=>{setTab(t);setSearch('')}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?'#f5f0e8':'transparent',color:tab===t?'#1e5010':'#8a9580',borderBottom:tab===t?'3px solid #1e5010':'3px solid transparent',letterSpacing:.3}}>{t==='Admin'?'⚙ ':''}{t}</button>)}
       </nav>
 
-      <div style={{display:'flex',gap:6,padding:'8px 14px',background:'#f5f0e8',borderBottom:'1px solid #e0dbd0',justifyContent:'center',alignItems:'center'}}>
-        <button type="button" style={{background:'#1e5010',color:'#faf6ed',border:'none',padding:'7px 18px',borderRadius:7,fontWeight:600,fontSize:12,opacity:refreshing?.5:1}} onClick={()=>fetchScores(false)} disabled={refreshing}>{refreshing?'⟳ Updating...':'⟳ Refresh Scores'}</button>
-        {lastUp&&<span style={{fontSize:11,color:'#8a9580'}}>{lastUp}</span>}
-      </div>
+      {lastUp&&!picksHidden&&<div style={{padding:'4px 14px',background:'#f5f0e8',borderBottom:'1px solid #e0dbd0',textAlign:'center'}}>
+        <span style={{fontSize:10,color:'#8a9580'}}>Scores update automatically · Last: {lastUp}</span>
+      </div>}
 
       {status&&<div style={{background:'#fef3cd',padding:'8px 16px',fontSize:12,color:'#856404',textAlign:'center'}}>{status}</div>}
 
