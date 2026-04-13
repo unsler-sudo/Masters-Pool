@@ -11,9 +11,15 @@ export async function GET(request) {
   const endpoint = searchParams.get('endpoint') || 'in-play';
 
   const urls = {
-    'in-play': `https://feeds.datagolf.com/preds/in-play?tour=pga&odds_format=percent&file_format=json&key=${DG_KEY}`,
-    'pre-tournament': `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${DG_KEY}`,
-    'field-updates': `https://feeds.datagolf.com/field-updates?tour=pga&file_format=json&key=${DG_KEY}`,
+    'in-play':
+      `https://feeds.datagolf.com/preds/in-play?tour=pga&odds_format=percent&file_format=json&key=${DG_KEY}`,
+    'pre-tournament':
+      `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${DG_KEY}`,
+    'field-updates':
+      `https://feeds.datagolf.com/field-updates?tour=pga&file_format=json&key=${DG_KEY}`,
+    // Round-by-round strokes gained stats — used for player scorecards
+    'live-stats':
+      `https://feeds.datagolf.com/preds/live-tournament-stats?stats=sg_total,sg_putt,sg_arg,sg_app,sg_ott,driving_dist,driving_acc&round=event_avg&display=value&tour=pga&file_format=json&key=${DG_KEY}`,
   };
 
   const url = urls[endpoint];
