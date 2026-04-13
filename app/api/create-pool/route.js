@@ -94,7 +94,7 @@ export async function POST(request) {
         'mode':                          'payment',
         'line_items[0][price_data][currency]': 'usd',
         'line_items[0][price_data][product_data][name]': `${poolName} — Golf Pool`,
-        'line_items[0][price_data][product_data][description]': `Access to your private golf pool for all 2026 majors`,
+        'line_items[0][price_data][product_data][description]': `Access to your private golf pool for the current major`,
         'line_items[0][price_data][unit_amount]': String(POOL_PRICE),
         'line_items[0][quantity]':       '1',
         'success_url':                   `${BASE_URL}/pool/${poolId}?activated=1`,
