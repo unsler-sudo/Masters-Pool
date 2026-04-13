@@ -125,7 +125,7 @@ export default function LandingPage() {
           {error&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:16}}>{error}</div>}
 
           <div style={{background:'#f9fafb',borderRadius:8,padding:'12px 14px',marginBottom:20,fontSize:12,color:'#6b7280',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span>Pool access — all 2026 majors</span>
+            <span>Pool access — one major</span>
             <span style={{fontWeight:700,color:'#1a2a5c',fontSize:16}}>$10</span>
           </div>
 
@@ -159,7 +159,7 @@ export default function LandingPage() {
         }}>
           Create Your Pool — $10 ⛳
         </button>
-        <div style={{fontSize:12,opacity:.5,marginTop:10}}>One-time fee · All 4 majors included · No subscription</div>
+        <div style={{fontSize:12,opacity:.5,marginTop:10}}>$10 per major · Renew each tournament · Cancel anytime</div>
       </div>
 
       {/* Features */}
