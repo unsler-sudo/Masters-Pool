@@ -5,10 +5,8 @@ const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const ADMIN_PW = process.env.ADMIN_PASSWORD || 'masters2026';
 
 async function redis(cmd, ...args) {
-  const url = `${REDIS_URL}`;
   const body = [cmd, ...args];
-  
-  const res = await fetch(url, {
+  const res = await fetch(REDIS_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${REDIS_TOKEN}`,
@@ -17,12 +15,10 @@ async function redis(cmd, ...args) {
     body: JSON.stringify(body),
     cache: 'no-store',
   });
-
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Redis error ${res.status}: ${text}`);
   }
-
   const data = await res.json();
   return data.result;
 }
@@ -53,25 +49,39 @@ async function getLocked() {
 async function getPicksHidden() {
   try {
     const raw = await redis('GET', 'pool:picks_hidden');
-    // Default to true (hidden) if not set
     return raw === null ? true : raw === 'true';
   } catch {
     return true;
   }
 }
 
-// GET - fetch all entries + lock status + picks visibility
+// payments: { "Entry Name": true/false }
+async function getPayments() {
+  try {
+    const raw = await redis('GET', 'pool:payments');
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function savePayments(payments) {
+  await redis('SET', 'pool:payments', JSON.stringify(payments));
+}
+
+// GET - fetch all entries + lock status + picks visibility + payments
 export async function GET() {
   try {
-    const [entries, locked, picksHidden] = await Promise.all([
+    const [entries, locked, picksHidden, payments] = await Promise.all([
       getEntries(),
       getLocked(),
       getPicksHidden(),
+      getPayments(),
     ]);
-    return Response.json({ entries, locked, picksHidden });
+    return Response.json({ entries, locked, picksHidden, payments });
   } catch (err) {
     console.error('GET /api/entries error:', err);
-    return Response.json({ entries: [], locked: false, picksHidden: true, error: err.message });
+    return Response.json({ entries: [], locked: false, picksHidden: true, payments: {}, error: err.message });
   }
 }
 
@@ -99,7 +109,7 @@ export async function POST(request) {
       return Response.json({ ok: true, entries });
     }
 
-    // Delete own entry (no password needed, but entries must not be locked)
+    // Delete own entry (no password, entries must not be locked)
     if (body.action === 'delete-own') {
       const locked = await getLocked();
       if (locked) return Response.json({ error: 'Cannot remove entry — tournament has started!' }, { status: 403 });
@@ -111,7 +121,7 @@ export async function POST(request) {
       return Response.json({ ok: true, entries: filtered });
     }
 
-    // Admin: lock/unlock entries
+    // Admin: lock/unlock
     if (body.action === 'lock' || body.action === 'unlock') {
       if (body.password !== ADMIN_PW) return Response.json({ error: 'Wrong password' }, { status: 401 });
       await redis('SET', 'pool:locked', body.action === 'lock' ? 'true' : 'false');
@@ -134,13 +144,24 @@ export async function POST(request) {
       return Response.json({ ok: true, entries: filtered });
     }
 
+    // Admin: mark paid
+    if (body.action === 'mark-paid' || body.action === 'mark-unpaid') {
+      if (body.password !== ADMIN_PW) return Response.json({ error: 'Wrong password' }, { status: 401 });
+      if (!body.entryName) return Response.json({ error: 'entryName required' }, { status: 400 });
+      const payments = await getPayments();
+      payments[body.entryName] = body.action === 'mark-paid';
+      await savePayments(payments);
+      return Response.json({ ok: true, payments });
+    }
+
     // Admin: reset all
     if (body.action === 'reset') {
       if (body.password !== ADMIN_PW) return Response.json({ error: 'Wrong password' }, { status: 401 });
       await redis('DEL', 'pool:entries');
       await redis('DEL', 'pool:locked');
       await redis('DEL', 'pool:picks_hidden');
-      return Response.json({ ok: true });
+      await redis('DEL', 'pool:payments');
+      return Response.json({ ok: true, entries: [], payments: {} });
     }
 
     return Response.json({ error: 'Invalid action' }, { status: 400 });
