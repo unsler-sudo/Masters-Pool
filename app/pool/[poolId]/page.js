@@ -802,8 +802,8 @@ export default function App(){
         </>)}
 
         {/* ─── ENTER POOL ────────────────────────────────────────────── */}
-        {tab==='Enter Pool'&&(locked?
-          {poolMeta?.paid===false
+        {tab==='Enter Pool'&&(locked
+          ? poolMeta?.paid===false
             ?<div style={bx}>
               <div style={{fontSize:44,marginBottom:10}}>💳</div>
               <p style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:16,color:T.primary,marginBottom:6}}>{poolMeta?.poolName}</p>
@@ -819,7 +819,6 @@ export default function App(){
               <div style={{fontSize:11,color:'#9ca3af'}}>Your pool history and URL are preserved · Secure payment via Stripe</div>
             </div>
             :<div style={bx}><div style={{fontSize:44,marginBottom:10}}>🔒</div><p style={{color:'#6b7c5e'}}>Entries locked — tournament has started!</p></div>
-          }
           :<>
             {countdown&&<div style={{background:T.accentLight,padding:'8px 14px',borderRadius:9,marginBottom:10,fontSize:12,color:T.accent,textAlign:'center',border:`1px solid ${T.accent}30`}}>⏱ {countdown}</div>}
             <div style={{display:'flex',gap:8,marginBottom:10}}>
