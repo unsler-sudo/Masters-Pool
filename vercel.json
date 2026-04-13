@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "app/api/scrape-field/route.js": {
+      "maxDuration": 60,
+      "memory": 3008
+    },
+    "app/api/stripe-webhook/route.js": {
+      "maxDuration": 10
+    }
+  }
+}
