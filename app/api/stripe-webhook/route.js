@@ -60,6 +60,46 @@ export async function POST(request) {
         meta.paidAt = new Date().toISOString();
         meta.stripeSessionId = session.id;
         await redis('SET', `pool:${poolId}:meta`, JSON.stringify(meta));
+
+        // Send confirmation email
+        if (meta.commissionerEmail && process.env.RESEND_API_KEY) {
+          const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com';
+          const poolUrl  = `${BASE_URL}/pool/${poolId}`;
+          const MAJOR_NAMES = {
+            players:'The Players Championship', masters:'The Masters',
+            pga:'PGA Championship', usopen:'U.S. Open', open:'The Open Championship',
+          };
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+              to: meta.commissionerEmail,
+              subject: `Your pool "${meta.poolName}" is live! ⛳`,
+              html: `
+                <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
+                  <h2 style="color:#1a2a5c">Hey ${meta.commissionerName}! 🎉</h2>
+                  <p>Payment confirmed! Your golf pool <strong>${meta.poolName}</strong> is live for <strong>${MAJOR_NAMES[meta.major]||meta.major}</strong>.</p>
+                  <p>Share this link with your group:</p>
+                  <div style="background:#f3f4f6;padding:12px 16px;margin:16px 0;font-size:14px;font-weight:600;color:#1a2a5c;word-break:break-all">
+                    ${poolUrl}
+                  </div>
+                  <div style="text-align:center;margin:28px 0">
+                    <a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">
+                      Go to Your Pool →
+                    </a>
+                  </div>
+                  <div style="background:#fef9e7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin:20px 0">
+                    <p style="margin:0;font-size:13px;color:#92400e"><strong>Save your details:</strong><br/>
+                    Pool ID: <code>${poolId}</code> · Join code: <strong>${meta.joinCode||'N/A'}</strong></p>
+                  </div>
+                  <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
+                  <p style="color:#9ca3af;font-size:11px">Tuna Golf Pool · tunagolfpool.com</p>
+                </div>
+              `,
+            }),
+          }).catch(e => console.error('Confirmation email failed:', e.message));
+        }
       }
 
       // Unlock entries so people can start submitting
