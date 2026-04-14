@@ -15,23 +15,32 @@ async function redis(cmd, ...args) {
   return (await res.json()).result;
 }
 
+async function deletePool(poolId) {
+  const keys = ['meta','entries','payments','locked','picks_hidden','major'];
+  await Promise.all(keys.map(k => redis('DEL', `pool:${poolId}:${k}`)));
+  await redis('SREM', 'pools:index', poolId);
+}
+
 export async function POST(request) {
   try {
-    const { password } = await request.json();
-    if (!PLATFORM_PW || password !== PLATFORM_PW)
+    const body = await request.json();
+    if (!PLATFORM_PW || body.password !== PLATFORM_PW)
       return Response.json({ error: 'Wrong password' }, { status: 401 });
 
-    // Get all pool IDs from index
-    const poolIds = await redis('SMEMBERS', 'pools:index') || [];
+    // ── Delete a pool ─────────────────────────────────────────────────────────
+    if (body.action === 'delete') {
+      await deletePool(body.poolId);
+      return Response.json({ ok: true });
+    }
 
-    // Load meta for each pool
+    // ── Get all pools ─────────────────────────────────────────────────────────
+    const poolIds = await redis('SMEMBERS', 'pools:index') || [];
     const pools = [];
     for (const poolId of poolIds) {
       try {
         const metaRaw = await redis('GET', `pool:${poolId}:meta`);
         if (!metaRaw) continue;
         const meta = JSON.parse(metaRaw);
-        // Get entry count
         const entriesRaw = await redis('GET', `pool:${poolId}:entries`);
         const entries = entriesRaw ? JSON.parse(entriesRaw) : [];
         pools.push({
@@ -48,7 +57,6 @@ export async function POST(request) {
       } catch {}
     }
 
-    // Sort by createdAt descending
     pools.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     const totalPools   = pools.length;
