@@ -208,7 +208,7 @@ export default function LandingPage() {
         }}>
           Get Started — $10 ⛳
         </button>
-        <div style={{fontSize:12,opacity:.5,marginTop:10}}>Powered by DataGolf · Live scores · Real prize payouts</div>
+        <div style={{fontSize:12,opacity:.5,marginTop:10}}>Powered by DataGolf · Live scores · Updates every 60s</div>
       </div>
     </div>
   );
