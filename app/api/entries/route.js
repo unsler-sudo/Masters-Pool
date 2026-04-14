@@ -92,6 +92,20 @@ async function getPoolMeta(pid)    { try { const r=await redis('GET',k(pid,'meta
 async function autoManage(poolId) {
   try {
     const now = Date.now();
+
+    // ── Auto-delete abandoned unpaid pools older than 24 hours ────────────────
+    const meta = await getPoolMeta(poolId);
+    if (meta && !meta.paid) {
+      const age = now - new Date(meta.createdAt).getTime();
+      if (age > 24 * 60 * 60 * 1000) {
+        const keys = ['meta','entries','payments','locked','picks_hidden','major'];
+        await Promise.all(keys.map(k2 => redis('DEL', `pool:${poolId}:${k2}`)));
+        await redis('SREM', 'pools:index', poolId);
+        console.log(`[autoManage] Deleted abandoned pool ${poolId}`);
+        return null;
+      }
+    }
+
     const MAJOR_SCHEDULE = await getMajorSchedule();
     const currentMajor = await getMajor(poolId);
     const idx = MAJOR_SCHEDULE.findIndex(m => m.key === currentMajor);
