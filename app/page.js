@@ -64,6 +64,10 @@ export default function LandingPage() {
           <button type="button" style={{...pri,marginBottom:12}} onClick={()=>navigator.clipboard.writeText(result.poolUrl).then(()=>alert('Copied!'))}>
             📋 Copy Link
           </button>
+          {result.joinCode&&<div style={{background:'#f0f9ff',border:'1px solid #bae6fd',borderRadius:8,padding:'10px 14px',marginBottom:12,fontSize:13,color:'#0c4a6e',textAlign:'center'}}>
+            <b>Join Code:</b> <span style={{fontFamily:'monospace',fontSize:16,letterSpacing:2}}>{result.joinCode}</span>
+            <div style={{fontSize:11,color:'#0369a1',marginTop:3}}>Share this code with people you want to join your pool</div>
+          </div>}
           <a href={result.poolUrl} style={{display:'block',textAlign:'center',color:'#1a2a5c',fontSize:14,fontWeight:600,textDecoration:'none',marginTop:8}}>
             Go to your pool →
           </a>
