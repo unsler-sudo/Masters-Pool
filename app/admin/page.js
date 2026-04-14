@@ -78,7 +78,7 @@ export default function AdminDashboard() {
             :<table style={{width:'100%',borderCollapse:'collapse'}}>
               <thead>
                 <tr style={{background:'#f9fafb'}}>
-                  {['Pool Name','Commissioner','Email','Major','Entries','Status','Created'].map(h=>(
+                  {['Pool Name','Commissioner','Email','Major','Entries','Status','Created',''].map(h=>(
                     <th key={h} style={{padding:'10px 16px',textAlign:'left',fontSize:11,fontWeight:700,color:'#6b7280',textTransform:'uppercase',letterSpacing:.5,borderBottom:'1px solid #e5e7eb'}}>{h}</th>
                   ))}
                 </tr>
@@ -102,6 +102,20 @@ export default function AdminDashboard() {
                     </td>
                     <td style={{padding:'12px 16px',fontSize:11,color:'#9ca3af'}}>
                       {new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                    </td>
+                    <td style={{padding:'12px 16px'}}>
+                      <button type="button" onClick={async()=>{
+                        if(!confirm(`Delete "${p.poolName}"? This cannot be undone.`)) return;
+                        await fetch('/api/admin-pools',{method:'POST',headers:{'Content-Type':'application/json'},
+                          body:JSON.stringify({password,action:'delete',poolId:p.poolId})});
+                        setData(d=>({...d,pools:d.pools.filter(x=>x.poolId!==p.poolId),
+                          stats:{...d.stats,totalPools:d.stats.totalPools-1,
+                            paidPools:d.stats.paidPools-(p.paid?1:0),
+                            totalRevenue:d.stats.totalRevenue-(p.paid?10:0)}}));
+                      }} style={{background:'#fee2e2',color:'#991b1b',border:'none',borderRadius:6,
+                        padding:'4px 10px',fontSize:11,fontWeight:700,cursor:'pointer'}}>
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
