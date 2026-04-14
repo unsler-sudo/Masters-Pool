@@ -124,6 +124,7 @@ async function autoManage(poolId) {
         meta.paid = false;
         meta.major = nextKey;
         meta.paidAt = null;
+        meta.reminderSent = false;
         await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
       }
       await Promise.all([
@@ -178,6 +179,47 @@ async function autoManage(poolId) {
       const meta = await getPoolMeta(poolId);
       if (await getLocked(poolId) && meta?.paid) {
         await redis('SET', k(poolId,'locked'), 'false');
+      }
+      // Send reminder email if unpaid and haven't sent one yet
+      if (meta && !meta.paid && !meta.reminderSent && meta.commissionerEmail && process.env.RESEND_API_KEY) {
+        const MAJOR_NAMES = {
+          players:'The Players Championship', masters:'The Masters',
+          pga:'PGA Championship', usopen:'U.S. Open', open:'The Open Championship',
+        };
+        const majorName = MAJOR_NAMES[currentMajor] || currentMajor;
+        const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
+        // Format tee time nicely
+        const teeDate = new Date(current.teeTime).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+            to: meta.commissionerEmail,
+            subject: `⏰ ${majorName} starts in 7 days — unlock your pool!`,
+            html: `
+              <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
+                <h2 style="color:#1a2a5c">Hey ${meta.commissionerName}! ⏰</h2>
+                <p><strong>${majorName}</strong> tees off on ${teeDate} — just 7 days away.</p>
+                <p>Unlock your pool now so your group has time to enter their picks before the tournament starts.</p>
+                <div style="text-align:center;margin:32px 0">
+                  <a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">
+                    Unlock Your Pool — $10 →
+                  </a>
+                </div>
+                <p style="color:#6b7280;font-size:13px">Pool: ${meta.poolName}<br/>${poolUrl}</p>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
+                <p style="color:#9ca3af;font-size:11px">Tuna Golf Pool · tunagolfpool.com</p>
+              </div>
+            `,
+          }),
+        }).catch(e => console.error('Reminder email failed:', e.message));
+        // Mark reminder as sent so we don't spam them
+        meta.reminderSent = true;
+        await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
       }
     }
 
