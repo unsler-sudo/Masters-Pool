@@ -216,6 +216,7 @@ export default function LandingPage() {
           Get Started — $10 ⛳
         </button>
         <div style={{fontSize:12,opacity:.5,marginTop:10}}>Powered by DataGolf · Live scores · Updates every 60s</div>
+        <div style={{fontSize:11,opacity:.4,marginTop:8}}><a href="/terms" style={{color:'#fff',textDecoration:'none'}}>Terms of Service</a></div>
       </div>
     </div>
   );
