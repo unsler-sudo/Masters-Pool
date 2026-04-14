@@ -24,6 +24,46 @@ function generatePoolId() {
   return Array.from({length:8}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
 }
 
+async function sendConfirmationEmail(meta, poolId) {
+  if (!meta.commissionerEmail || !process.env.RESEND_API_KEY) return;
+  const poolUrl = `${BASE_URL}/pool/${poolId}`;
+  const MAJOR_NAMES = {
+    players:'The Players Championship', masters:'The Masters',
+    pga:'PGA Championship', usopen:'U.S. Open', open:'The Open Championship',
+  };
+  await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+      to: meta.commissionerEmail,
+      subject: `Your pool "${meta.poolName}" is live! ⛳`,
+      html: `
+        <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
+          <h2 style="color:#1a2a5c">Hey ${meta.commissionerName}! 🎉</h2>
+          <p>Your golf pool <strong>${meta.poolName}</strong> is live and ready for <strong>${MAJOR_NAMES[meta.major]||meta.major}</strong>.</p>
+          <p>Share this link with your group:</p>
+          <div style="background:#f3f4f6;borderRadius:8px;padding:12px 16px;margin:16px 0;wordBreak:break-all;fontSize:14;fontWeight:600;color:#1a2a5c">
+            ${poolUrl}
+          </div>
+          <div style="text-align:center;margin:28px 0">
+            <a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">
+              Go to Your Pool →
+            </a>
+          </div>
+          <div style="background:#fef9e7;border:1px solid #f59e0b;border-radius:8px;padding:14px 16px;margin:20px 0">
+            <p style="margin:0;font-size:13px;color:#92400e"><strong>Save your admin password:</strong><br/>
+            Your pool ID is <code>${poolId}</code> and your admin password is the one you set at signup. Keep these safe — you'll need them to manage entries.</p>
+          </div>
+          <p style="color:#6b7280;font-size:12px">Join code for your pool: <strong>${meta.joinCode}</strong> — share this with people you want to join</p>
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
+          <p style="color:#9ca3af;font-size:11px">Tuna Golf Pool · tunagolfpool.com · <a href="${BASE_URL}/terms" style="color:#9ca3af">Terms of Service</a></p>
+        </div>
+      `,
+    }),
+  }).catch(e => console.error('Confirmation email failed:', e.message));
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -44,16 +84,22 @@ export async function POST(request) {
     }
     if (!poolId) return Response.json({ error:'Could not generate pool ID' }, { status:500 });
 
+    // Generate a 6-char join code (e.g. GOLF42)
+    const joinCode = Array.from({length:6}, () =>
+      'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[Math.floor(Math.random()*32)]
+    ).join('');
+
     const meta = {
       poolId,
-      poolName:         poolName.trim(),
-      commissionerName: commissionerName.trim(),
+      joinCode,
+      poolName:          poolName.trim(),
+      commissionerName:  commissionerName.trim(),
       commissionerEmail: commissionerEmail.trim().toLowerCase(),
-      adminPassword:    adminPassword.trim(),
+      adminPassword:     adminPassword.trim(),
       major,
-      paid:             false,
-      active:           false,
-      createdAt:        new Date().toISOString(),
+      paid:              false,
+      active:            false,
+      createdAt:         new Date().toISOString(),
     };
 
     // Save meta first (pending state)
@@ -72,9 +118,9 @@ export async function POST(request) {
       meta.active = true;
       await redis('SET', `pool:${poolId}:meta`, JSON.stringify(meta));
       await redis('SET', `pool:${poolId}:locked`, 'false');
+      await sendConfirmationEmail(meta, poolId);
       return Response.json({
-        ok: true,
-        poolId,
+        ok: true, poolId, joinCode,
         poolUrl: `${BASE_URL}/pool/${poolId}`,
         free: true,
       });
