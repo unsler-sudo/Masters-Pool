@@ -27,12 +27,13 @@ function generatePoolId() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { poolName, commissionerName, adminPassword, major, bypassCode } = body;
+    const { poolName, commissionerName, commissionerEmail, adminPassword, major, bypassCode } = body;
 
-    if (!poolName?.trim())         return Response.json({ error:'Pool name required' }, { status:400 });
-    if (!commissionerName?.trim()) return Response.json({ error:'Your name required' }, { status:400 });
-    if (!adminPassword?.trim())    return Response.json({ error:'Admin password required' }, { status:400 });
-    if (!major)                    return Response.json({ error:'Major required' }, { status:400 });
+    if (!poolName?.trim())          return Response.json({ error:'Pool name required' }, { status:400 });
+    if (!commissionerName?.trim())  return Response.json({ error:'Your name required' }, { status:400 });
+    if (!commissionerEmail?.trim()) return Response.json({ error:'Your email required' }, { status:400 });
+    if (!adminPassword?.trim())     return Response.json({ error:'Admin password required' }, { status:400 });
+    if (!major)                     return Response.json({ error:'Major required' }, { status:400 });
 
     // Generate unique pool ID (retry if collision)
     let poolId;
@@ -47,6 +48,7 @@ export async function POST(request) {
       poolId,
       poolName:         poolName.trim(),
       commissionerName: commissionerName.trim(),
+      commissionerEmail: commissionerEmail.trim().toLowerCase(),
       adminPassword:    adminPassword.trim(),
       major,
       paid:             false,
