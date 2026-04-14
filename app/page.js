@@ -11,7 +11,7 @@ const MAJORS = [
 
 export default function LandingPage() {
   const [step, setStep]     = useState('home'); // home | create | paying | done
-  const [form, setForm]     = useState({ poolName:'', commissionerName:'', adminPassword:'', major:'pga', bypassCode:'' });
+  const [form, setForm]     = useState({ poolName:'', commissionerName:'', commissionerEmail:'', adminPassword:'', major:'pga', bypassCode:'' });
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -22,6 +22,7 @@ export default function LandingPage() {
     setError('');
     if (!form.poolName.trim())         return setError('Pool name is required');
     if (!form.commissionerName.trim()) return setError('Your name is required');
+    if (!form.commissionerEmail.trim()) return setError('Your email is required');
     if (!form.adminPassword.trim())    return setError('Admin password is required');
     setLoading(true);
     try {
@@ -92,6 +93,12 @@ export default function LandingPage() {
           <div style={{marginBottom:14}}>
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Your Name (Commissioner)</label>
             <input style={inp} placeholder="e.g. John Smith" value={form.commissionerName} onChange={e=>upd('commissionerName',e.target.value)}/>
+          </div>
+
+          <div style={{marginBottom:14}}>
+            <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Your Email</label>
+            <input style={inp} type="email" placeholder="e.g. john@email.com" value={form.commissionerEmail} onChange={e=>upd('commissionerEmail',e.target.value)}/>
+            <div style={{fontSize:11,color:'#9ca3af',marginTop:4}}>We'll email you when entries open for the next major</div>
           </div>
 
           <div style={{marginBottom:14}}>
