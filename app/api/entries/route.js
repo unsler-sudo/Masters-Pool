@@ -118,8 +118,9 @@ async function autoManage(poolId) {
       }
       // Mark pool as unpaid for next major — commissioner must pay $10 to unlock
       const metaRaw = await redis('GET', k(poolId,'meta'));
+      let meta = null;
       if (metaRaw) {
-        const meta = JSON.parse(metaRaw);
+        meta = JSON.parse(metaRaw);
         meta.paid = false;
         meta.major = nextKey;
         meta.paidAt = null;
@@ -132,6 +133,44 @@ async function autoManage(poolId) {
         redis('SET', k(poolId,'locked'),       'true'),
         redis('SET', k(poolId,'picks_hidden'), 'true'),
       ]);
+
+      // Email commissioner about the next major
+      if (meta?.commissionerEmail && process.env.RESEND_API_KEY) {
+        const MAJOR_NAMES = {
+          players:'The Players Championship', masters:'The Masters',
+          pga:'PGA Championship', usopen:'U.S. Open', open:'The Open Championship',
+        };
+        const nextMajorName = MAJOR_NAMES[nextKey] || nextKey;
+        const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+            to: meta.commissionerEmail,
+            subject: `Your Golf Pool is ready for ${nextMajorName} ⛳`,
+            html: `
+              <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
+                <h2 style="color:#1a2a5c">Hey ${meta.commissionerName}! 👋</h2>
+                <p>${currentMajor === 'masters' ? 'The Masters' : MAJOR_NAMES[currentMajor] || currentMajor} is over — time to set up your pool for <strong>${nextMajorName}</strong>.</p>
+                <p>Your pool URL and history are preserved. Just unlock it for $10 to open entries for your group.</p>
+                <div style="text-align:center;margin:32px 0">
+                  <a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">
+                    Unlock for ${nextMajorName} →
+                  </a>
+                </div>
+                <p style="color:#6b7280;font-size:13px">Pool: ${meta.poolName}<br/>${poolUrl}</p>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"/>
+                <p style="color:#9ca3af;font-size:11px">Tuna Golf Pool · tunagolfpool.com</p>
+              </div>
+            `,
+          }),
+        }).catch(e => console.error('Email send failed:', e.message));
+      }
+
       return nextKey;
     }
 
