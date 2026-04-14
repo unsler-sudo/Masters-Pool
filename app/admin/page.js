@@ -101,7 +101,8 @@ export default function AdminDashboard() {
                       </span>
                     </td>
                     <td style={{padding:'12px 16px',fontSize:11,color:'#9ca3af'}}>
-                      {new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+                      {new Date(p.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}<br/>
+                      <span style={{fontSize:10}}>{new Date(p.createdAt).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true})}</span>
                     </td>
                     <td style={{padding:'12px 16px'}}>
                       <button type="button" onClick={async()=>{
