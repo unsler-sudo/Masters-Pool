@@ -121,6 +121,57 @@ export default function App(){
   const searchParams = useSearchParams();
   const poolId       = params?.poolId || 'default';
   const justActivated = searchParams?.get('activated') === '1';
+
+  // ─── Join code gate ────────────────────────────────────────────────────────
+  // Set JOIN_CODE_REQUIRED = true to enable gating. Currently disabled.
+  const JOIN_CODE_REQUIRED = false;
+  const [joinCodeEntry, setJoinCodeEntry] = useState('');
+  const [joinCodeError, setJoinCodeError] = useState('');
+  const [joinCodePassed, setJoinCodePassed] = useState(
+    typeof window !== 'undefined'
+      ? localStorage.getItem(`jc_${poolId}`) === 'true'
+      : true
+  );
+
+  const handleJoinCodeSubmit = async () => {
+    setJoinCodeError('');
+    const res = await fetch('/api/entries?poolId=' + poolId);
+    const d = await res.json();
+    const correct = d.meta?.joinCode?.toUpperCase();
+    if (!correct || joinCodeEntry.toUpperCase().trim() === correct) {
+      localStorage.setItem(`jc_${poolId}`, 'true');
+      setJoinCodePassed(true);
+    } else {
+      setJoinCodeError('Incorrect join code — check with your pool commissioner.');
+    }
+  };
+
+  // Show join code gate if required and not yet passed
+  if (JOIN_CODE_REQUIRED && !joinCodePassed && !justActivated) {
+    return (
+      <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'DM Sans',sans-serif"}}>
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+        <div style={{background:'#fff',borderRadius:16,padding:36,maxWidth:400,width:'100%',textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
+          <div style={{fontSize:48,marginBottom:12}}>⛳</div>
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:800,color:'#1a2a5c',marginBottom:8}}>Private Pool</h2>
+          <p style={{color:'#6b7280',fontSize:14,marginBottom:24}}>Enter the join code from your commissioner to access this pool.</p>
+          <input
+            style={{width:'100%',padding:'12px 14px',borderRadius:8,border:'1px solid #d1d5db',fontSize:18,textAlign:'center',letterSpacing:4,fontWeight:700,boxSizing:'border-box',marginBottom:12,textTransform:'uppercase'}}
+            placeholder="XXXXXX"
+            maxLength={8}
+            value={joinCodeEntry}
+            onChange={e=>setJoinCodeEntry(e.target.value.toUpperCase())}
+            onKeyDown={e=>e.key==='Enter'&&handleJoinCodeSubmit()}
+          />
+          {joinCodeError&&<div style={{color:'#dc2626',fontSize:13,marginBottom:12}}>{joinCodeError}</div>}
+          <button type="button" onClick={handleJoinCodeSubmit}
+            style={{width:'100%',background:'#1a2a5c',color:'#fff',border:'none',borderRadius:8,padding:'12px',fontSize:15,fontWeight:700,cursor:'pointer'}}>
+            Join Pool →
+          </button>
+        </div>
+      </div>
+    );
+  }
   // ─── State ────────────────────────────────────────────────────────────────
   const [tab,setTab]=useState('Standings');
   const [activeMajor,setActiveMajor]=useState('pga');
