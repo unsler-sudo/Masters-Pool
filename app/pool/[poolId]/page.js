@@ -124,14 +124,16 @@ export default function App(){
 
   // ─── Join code gate ────────────────────────────────────────────────────────
   // Set JOIN_CODE_REQUIRED = true to enable gating. Currently disabled.
-  const JOIN_CODE_REQUIRED = true;
+  const JOIN_CODE_REQUIRED = false;
   const [joinCodeEntry, setJoinCodeEntry] = useState('');
   const [joinCodeError, setJoinCodeError] = useState('');
-  const [joinCodePassed, setJoinCodePassed] = useState(
-    typeof window !== 'undefined'
-      ? localStorage.getItem(`jc_${poolId}`) === 'true'
-      : true
-  );
+  const [joinCodePassed, setJoinCodePassed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setJoinCodePassed(localStorage.getItem(`jc_${poolId}`) === 'true');
+    }
+  }, [poolId]);
 
   const handleJoinCodeSubmit = async () => {
     setJoinCodeError('');
