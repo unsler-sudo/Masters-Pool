@@ -124,7 +124,7 @@ export default function App(){
 
   // ─── Join code gate ────────────────────────────────────────────────────────
   // Set JOIN_CODE_REQUIRED = true to enable gating. Currently disabled.
-  const JOIN_CODE_REQUIRED = false;
+  const JOIN_CODE_REQUIRED = true;
   const [joinCodeEntry, setJoinCodeEntry] = useState('');
   const [joinCodeError, setJoinCodeError] = useState('');
   const [joinCodePassed, setJoinCodePassed] = useState(
