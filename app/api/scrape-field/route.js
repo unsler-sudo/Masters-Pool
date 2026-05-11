@@ -70,7 +70,19 @@ export async function GET(request) {
     const { chromium: pw } = await import('playwright-core');
 
     browser = await pw.launch({
-      args: [...chromium.args, '--disable-blink-features=AutomationControlled'],
+      args: [
+        ...chromium.args,
+        '--disable-blink-features=AutomationControlled',
+        // Minimize disk usage — /tmp on serverless is tiny
+        '--disable-dev-shm-usage',
+        '--disable-cache',
+        '--disable-application-cache',
+        '--disable-offline-load-stale-cache',
+        '--disk-cache-size=0',
+        '--media-cache-size=0',
+        '--aggressive-cache-discard',
+        '--no-zygote',
+      ],
       executablePath: await chromium.executablePath(),
       headless: true,
     });
