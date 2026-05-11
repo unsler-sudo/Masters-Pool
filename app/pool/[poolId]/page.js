@@ -343,13 +343,21 @@ export default function App(){
             preds = (rd.rankings||rd.players||[]).map((p,idx)=>({player_name:p.player_name,win:1/(idx+1)}));
           }
         }
-        preds.forEach(p=>{
+    preds.forEach(p=>{
           if(!p.player_name) return;
           const w = p.win||0;
           const raw = p.player_name.toLowerCase().trim();
+          // Store original "last, first" format
           oddsMap[raw] = w;
-          const pts = raw.split(' ');
-          if(pts.length>=2) oddsMap[`${pts[pts.length-1]}, ${pts.slice(0,-1).join(' ')}`] = w;
+          // Convert "last, first" → "first last" for scraper name matching
+          if (raw.includes(',')) {
+            const [last, first] = raw.split(',').map(s => s.trim());
+            oddsMap[`${first} ${last}`] = w;
+          } else {
+            // Already in "first last" format — also store "last, first"
+            const pts = raw.split(' ');
+            if(pts.length>=2) oddsMap[`${pts[pts.length-1]}, ${pts.slice(0,-1).join(' ')}`] = w;
+          }
         });
       }
 
@@ -360,11 +368,12 @@ export default function App(){
       const useOdds   = Date.now() >= teeTimeMs - 7 * 24 * 60 * 60 * 1000;
 
       // Build odds rank only when within 7 days
-      const oddsRank = {};
+     const oddsRank = {};
       if(useOdds && Object.keys(oddsMap).length > 0){
         // Sort by win probability descending → assign rank
+        // Only use "first last" format keys (no comma) for deduplication
         const sorted = Object.entries(oddsMap)
-          .filter(([k]) => !k.includes(',')) // dedupe — only use "first last" keys
+          .filter(([k]) => !k.includes(','))
           .sort((a,b) => b[1]-a[1]);
         sorted.forEach(([name], idx) => {
           oddsRank[name] = idx;
