@@ -724,7 +724,7 @@ export default function App(){
               const third=fee;
               const second=fee*2;
               const first=pot-third-second;
-              return <div style={{display:'flex',gap:6,fontSize:9,opacity:.85,whiteSpace:'nowrap'}}>
+              return <div style={{display:'flex',flexDirection:'column',gap:1,fontSize:9,opacity:.85,whiteSpace:'nowrap',lineHeight:1.2,marginTop:2,background:'#ffffff10',borderRadius:6,padding:'3px 7px',border:'1px solid #ffffff10'}}>
                 <span>🥇 ${first}</span>
                 <span>🥈 ${second}</span>
                 <span>🥉 ${third}</span>
