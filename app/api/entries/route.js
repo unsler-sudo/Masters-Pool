@@ -331,6 +331,18 @@ export async function POST(request) {
       return Response.json({ ok:true, major:body.major });
     }
 
+    if (body.action==='set-entry-fee') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const fee = Math.max(0, parseFloat(body.entryFee) || 0);
+      const metaRaw = await redis('GET', k(poolId,'meta'));
+      if (metaRaw) {
+        const meta = JSON.parse(metaRaw);
+        meta.entryFee = fee;
+        await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
+      }
+      return Response.json({ ok:true, entryFee:fee });
+    }
+
     if (body.action==='save-archive-earnings') {
       if (body.password!=='auto' && !await checkAdmin(body.password))
         return Response.json({ error:'Wrong password' }, { status:401 });
