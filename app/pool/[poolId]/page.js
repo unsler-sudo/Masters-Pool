@@ -724,10 +724,10 @@ export default function App(){
               const third=fee;
               const second=fee*2;
               const first=pot-third-second;
-              return <div style={{display:'flex',flexDirection:'column',gap:1,fontSize:9,opacity:.85,whiteSpace:'nowrap',lineHeight:1.2,marginTop:2,background:'#ffffff10',borderRadius:6,padding:'3px 7px',border:'1px solid #ffffff10'}}>
-                <span>🥇 ${first}</span>
-                <span>🥈 ${second}</span>
-                <span>🥉 ${third}</span>
+              return <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,fontSize:10,whiteSpace:'nowrap',lineHeight:1.1,marginTop:2}}>
+                <span style={{opacity:.9}}><span style={{opacity:.6,marginRight:3}}>1st</span><b>${first}</b></span>
+                <span style={{opacity:.7}}><span style={{opacity:.6,marginRight:3}}>2nd</span>${second}</span>
+                <span style={{opacity:.55}}><span style={{opacity:.6,marginRight:3}}>3rd</span>${third}</span>
               </div>;
             })()}
             {countdown&&<div style={{fontSize:10,opacity:.7}}>⏱ {countdown}</div>}
