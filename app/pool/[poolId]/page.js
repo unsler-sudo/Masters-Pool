@@ -8,7 +8,6 @@ import { useParams, useSearchParams } from 'next/navigation';
 const THEMES = {
   players: {
     emoji:'⛳', tagline:"Golf's Fifth Major",
-    // Fallback values used until schedule API loads
     eventName:'The Players Championship', courseName:'TPC Sawgrass · Ponte Vedra Beach, FL',
     teeTime:'2027-03-11T12:00:00Z', purse:25000000,
     primary:'#0f3d5c', dark:'#061e2e', mid:'#1a5a7a', accent:'#c8a84b', accentLight:'#faf3e0',
@@ -59,10 +58,8 @@ const THEMES = {
   },
 };
 
-// DataGolf event IDs → our major keys (for schedule API matching)
 const DG_EVENT_IDS = { 11:'players', 14:'masters', 33:'pga', 26:'usopen', 100:'open' };
 
-// ─── TIER DEFINITIONS (Contenders color overridden in component to match theme) ─
 const TIER_DEFS = [
   { id:1, name:'Favorites',  label:'Group A — Favorites',  color:'#b8960c', picks:2 },
   { id:2, name:'Contenders', label:'Group B — Contenders', color:'#1a2a5c', picks:4 },
@@ -71,7 +68,6 @@ const TIER_DEFS = [
 const TOTAL_PICKS = 9;
 const TIER_CUTS = [10, 40];
 
-// ─── COUNTRY FLAGS ─────────────────────────────────────────────────────────
 const FLAG_MAP = {
   USA:'🇺🇸',ENG:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',SCO:'🏴󠁧󠁢󠁳󠁣󠁴󠁿',WAL:'🏴󠁧󠁢󠁷󠁬󠁳󠁿',NIR:'🇬🇧',
   IRL:'🇮🇪',ESP:'🇪🇸',AUS:'🇦🇺',JPN:'🇯🇵',NOR:'🇳🇴',
@@ -86,7 +82,6 @@ const FLAG_MAP = {
 };
 const Flag = ({c}) => FLAG_MAP[c] ? <span>{FLAG_MAP[c]}</span> : null;
 
-// ─── Hole color coding ─────────────────────────────────────────────────────
 function holeStyle(toPar) {
   if (toPar == null) return { bg:'#f0f0f0', text:'#ccc',  ring:'#ddd' };
   if (toPar <= -2)   return { bg:'#1565c0', text:'#fff',  ring:'#0d47a1', label:'🦅' };
@@ -97,7 +92,6 @@ function holeStyle(toPar) {
   return               { bg:'#880e4f', text:'#fff',  ring:'#560027', label:'💀' };
 }
 
-// ─── PAYOUT TABLE ──────────────────────────────────────────────────────────
 const PAYOUT={1:.20,2:.109,3:.069,4:.049,5:.041,6:.03625,7:.03375,8:.03125,9:.02925,10:.02725,11:.02525,12:.02325,13:.02125,14:.01925,15:.01825,16:.01725,17:.01625,18:.01525,19:.01425,20:.01325,21:.01225,22:.01125,23:.01045,24:.00965,25:.00885,26:.00805,27:.00775,28:.00745,29:.00715,30:.00685,31:.00655,32:.00625,33:.00595,34:.0057,35:.00545,36:.0052,37:.00495,38:.00475,39:.00455,40:.00435,41:.00415,42:.00395,43:.00375,44:.00355,45:.00335,46:.00315,47:.00295,48:.00279,49:.00265,50:.00257,51:.00251,52:.00245,53:.00241,54:.00237,55:.00235,56:.00233,57:.00231,58:.00229,59:.00227,60:.00225,61:.00223,62:.00221,63:.00219,64:.00217,65:.00215};
 
 const fmt=n=>'$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
@@ -112,8 +106,6 @@ function calcEarnings(players, purse){
   return m;
 }
 
-// ─── SEED FIELD ────────────────────────────────────────────────────────────
-
 const TABS=['Standings','Enter Pool','Field','History','Admin'];
 
 export default function App(){
@@ -122,8 +114,6 @@ export default function App(){
   const poolId       = params?.poolId || 'default';
   const justActivated = searchParams?.get('activated') === '1';
 
-  // ─── Join code gate ────────────────────────────────────────────────────────
-  // Set JOIN_CODE_REQUIRED = true to enable gating. Currently disabled.
   const JOIN_CODE_REQUIRED = false;
   const [joinCodeEntry, setJoinCodeEntry] = useState('');
   const [joinCodeError, setJoinCodeError] = useState('');
@@ -148,7 +138,6 @@ export default function App(){
     }
   };
 
-  // Show join code gate if required and not yet passed
   if (JOIN_CODE_REQUIRED && !joinCodePassed && !justActivated) {
     return (
       <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'DM Sans',sans-serif"}}>
@@ -174,20 +163,20 @@ export default function App(){
       </div>
     );
   }
-  // ─── State ────────────────────────────────────────────────────────────────
+
   const [tab,setTab]=useState('Standings');
   const [activeMajor,setActiveMajor]=useState('pga');
-  const [scheduleData,setScheduleData]=useState({}); // auto-populated from DataGolf schedule API
+  const [scheduleData,setScheduleData]=useState({});
   const [entries,setEntries]=useState([]);
   const [poolMeta,setPoolMeta]=useState(null);
   const [payments,setPayments]=useState({});
   const [field,setField]=useState([]);
-  const [fields,setFields]=useState({}); // cache of all 5 major fields
+  const [fields,setFields]=useState({});
   const [fieldSource,setFieldSource]=useState('preliminary');
   const [fieldLastUpdated,setFieldLastUpdated]=useState(null);
   const [ready,setReady]=useState(false);
   const [status,setStatus]=useState('');
-  const activeMajorRef=useRef('pga'); // always current, safe inside intervals
+  const activeMajorRef=useRef('pga');
   const [refreshing,setRefreshing]=useState(false);
   const [entryName,setEntryName]=useState('');
   const [picks,setPicks]=useState({1:[],2:[],3:[]});
@@ -210,7 +199,6 @@ export default function App(){
   const [historyLoaded,setHistoryLoaded]=useState(false);
   const timer=useRef(null);
 
-  // ─── Theme derived from activeMajor + live schedule data ──────────────────
   const T = { ...THEMES[activeMajor]||THEMES.pga, ...scheduleData[activeMajor] };
   const TEE_TIME = new Date(T.teeTime).getTime();
   const TOURNAMENT = { name: T.eventName, purse: T.purse };
@@ -255,8 +243,6 @@ export default function App(){
     }catch(e){console.error('loadEntries:',e);}
   };
 
-  // ─── Fetch schedule from DataGolf — auto-populates eventName, courseName, purse, teeTime ──
-  // Runs once on load. Falls back to THEMES values if API unavailable.
   const fetchSchedule=async()=>{
     try{
       const year = new Date().getFullYear();
@@ -271,21 +257,16 @@ export default function App(){
         const majorKey = DG_EVENT_IDS[eventId];
         if(!majorKey) continue;
 
-        // Build course name from city + course
         const course = ev.course || ev.course_name || '';
         const city   = ev.location?.city || ev.city || '';
         const country= ev.location?.country || ev.country || '';
         const courseName = course ? `${course}${city?` · ${city}`:''}${country&&country!=='United States'?`, ${country}`:''}` : '';
 
-        // Parse tee time — DataGolf gives start_date like "2026-05-14"
         const startDate = ev.start_date || ev.date || '';
-        // Default to 11:00 UTC (7am ET) if no time given
         const teeTime = startDate ? `${startDate}T11:00:00Z` : null;
 
-        // Purse
         const purse = ev.purse || ev.total_purse || null;
 
-        // Event name with year
         const evName = ev.event_name || ev.name || '';
         const eventName = evName ? `${evName} ${year}` : '';
 
@@ -300,11 +281,9 @@ export default function App(){
       if(Object.keys(updates).length > 0) setScheduleData(updates);
     }catch(e){ console.warn('fetchSchedule failed:', e.message); }
   };
-  // updateDisplay=true → updates the visible field tab
-  // updateDisplay=false → silently caches in Redis + local state (background prefetch)
+
   const fetchField=async(major=activeMajor, updateDisplay=true)=>{
     const theme = THEMES[major] || THEMES.pga;
-    // When switching majors, immediately show loading state or cached data
     if(updateDisplay){
       setFields(prev=>{
         const cached = prev[major];
@@ -312,7 +291,7 @@ export default function App(){
           setField(cached);
           setFieldSource(`📡 datagolf.com/major-fields · ${cached.length} confirmed in field ✓ · cached`);
         } else {
-          setField([]); // Clear old major's data while loading
+          setField([]);
           setFieldSource(`⏳ Loading ${theme.eventName} field...`);
         }
         return prev;
@@ -325,9 +304,8 @@ export default function App(){
       const scrapedPlayers = scrapeData.players || [];
       if(scrapedPlayers.length < 5) return;
 
-      // Enrich with odds — use scraper index (i) for tier assignment
-      // DataGolf summary table is sorted by DG rank: i=0=Scheffler, i=1=McIlroy etc.
-      // This is reliable regardless of name format. Odds fetched separately for display only.
+      // Build odds map — DataGolf returns names as "Last, First", scraper returns "First Last"
+      // Store BOTH formats so lookups work regardless of which side queries
       const oddsMap = {};
       if(updateDisplay){
         let preds = [];
@@ -343,41 +321,39 @@ export default function App(){
             preds = (rd.rankings||rd.players||[]).map((p,idx)=>({player_name:p.player_name,win:1/(idx+1)}));
           }
         }
-    preds.forEach(p=>{
+        preds.forEach(p=>{
           if(!p.player_name) return;
           const w = p.win||0;
           const raw = p.player_name.toLowerCase().trim();
-          // Store original "last, first" format
+          // Store original format (whatever DataGolf returned)
           oddsMap[raw] = w;
-          // Convert "last, first" → "first last" for scraper name matching
+          // If "Last, First" format → also store as "First Last"
           if (raw.includes(',')) {
-            const [last, first] = raw.split(',').map(s => s.trim());
-            oddsMap[`${first} ${last}`] = w;
+            const parts = raw.split(',').map(s => s.trim());
+            if (parts.length === 2) {
+              oddsMap[`${parts[1]} ${parts[0]}`] = w;
+            }
           } else {
-            // Already in "first last" format — also store "last, first"
+            // "First Last" format → also store as "Last, First"
             const pts = raw.split(' ');
             if(pts.length>=2) oddsMap[`${pts[pts.length-1]}, ${pts.slice(0,-1).join(' ')}`] = w;
           }
         });
       }
 
-      // Tier assignment strategy:
-      // > 7 days before tee time → use scraper index (DG rank order, always available)
-      // ≤ 7 days before tee time → use pre-tournament odds (major-specific, published ~1 week out)
       const teeTimeMs = new Date(T.teeTime).getTime();
       const useOdds   = Date.now() >= teeTimeMs - 7 * 24 * 60 * 60 * 1000;
 
-      // Build odds rank only when within 7 days
-     const oddsRank = {};
+      const oddsRank = {};
       if(useOdds && Object.keys(oddsMap).length > 0){
-        // Sort by win probability descending → assign rank
-        // Only use "first last" format keys (no comma) for deduplication
+        // Dedupe — only use one format (prefer "First Last") for sorting
+        const seen = new Set();
         const sorted = Object.entries(oddsMap)
           .filter(([k]) => !k.includes(','))
+          .filter(([k,v]) => { if(seen.has(k)) return false; seen.add(k); return v > 0; })
           .sort((a,b) => b[1]-a[1]);
         sorted.forEach(([name], idx) => {
           oddsRank[name] = idx;
-          // Also store "last, first" version
           const parts = name.split(' ');
           if(parts.length >= 2)
             oddsRank[`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`] = idx;
@@ -388,24 +364,20 @@ export default function App(){
         const key  = p.name.toLowerCase().trim();
         const win  = oddsMap[key] ?? 0;
         const odds = win > 0.001 ? `+${Math.round((1/win)*100-100)}` : 'n/a';
-        // dgRank = explicit DG rank number from scraper (1=Scheffler, 2=McIlroy etc.)
-        // Falls back to scraper index i if dgRank not available
         const baseRank = (p.dgRank && p.dgRank < 9999) ? p.dgRank - 1 : i;
-        // Within 7 days of tee time, use odds rank if we have a match
         const rank = (useOdds && oddsRank[key] !== undefined) ? oddsRank[key] : baseRank;
         return {
           name:p.name, country:p.country||'USA',
           odds, tier:rank<TIER_CUTS[0]?1:rank<TIER_CUTS[1]?2:3,
+          rank, win,
           confirmed:p.confirmed,
           onTrack:p.onTrack||false,
           pos:'-',score:'E',today:'',thru:'',earnings:0,r1:null,r2:null,r3:null,r4:null,
         };
       });
 
-      // Always store in local fields cache for instant major-switching
       setFields(prev=>({...prev,[major]:enriched}));
 
-      // Only update visible field if this is the displayed major
       if(updateDisplay){
         setField(enriched);
         const confirmed = enriched.filter(p=>p.confirmed).length;
@@ -417,15 +389,11 @@ export default function App(){
     }catch(e){ console.warn(`fetchField(${major}) failed:`,e.message); }
   };
 
-  // ─── Fetch all 5 major fields staggered (background refresh every 60s) ──────
-  // Staggered by 8s each so Vercel never runs more than one Chromium at a time.
-  // Results cached in Redis for 5 min so most calls are instant Redis reads.
   const fetchAllFields=async()=>{
     const MAJORS=['players','masters','pga','usopen','open'];
     const active = activeMajorRef.current;
     for(const major of MAJORS){
       await fetchField(major, major===active);
-      // Wait between majors — gives previous scrape time to finish and release lock
       await new Promise(r=>setTimeout(r, 8000));
     }
   };
@@ -467,7 +435,6 @@ export default function App(){
       setField(updated);
       setLastUp(new Date().toLocaleTimeString());
       setStatus('');
-      // Auto-persist earnings to Redis so archive has them even if no manual save
       if(Object.keys(em).length>0){
         fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({poolId,action:'save-archive-earnings',password:adminPw||'auto',
@@ -479,7 +446,6 @@ export default function App(){
     setRefreshing(false);
   };
 
-  // ─── Hole scores from DataGolf ────────────────────────────────────────────
   const fetchHoleScores=async(playerName,roundNum)=>{
     if(holeData.round===roundNum&&!holeData.loading){
       setHoleData({round:null,holes:[],loading:false,error:null});return;
@@ -509,7 +475,6 @@ export default function App(){
       if(!holeScores||!holeScores.length)throw new Error('No hole data for R'+roundNum+' yet');
       const holes=holeScores.slice(0,18).map((score,i)=>{
         const s=typeof score==='string'?parseInt(score,10):Number(score);
-        // Use par from the API record if available, fall back to 4
         const par=record?.course_par?.[i]??record?.hole_pars?.[i]??record?.par?.[i]??4;
         return{hole:i+1,score:isNaN(s)?null:s,par,toPar:isNaN(s)?null:s-par};
       });
@@ -520,14 +485,10 @@ export default function App(){
   const closeScorecard=()=>{setSelectedPlayer(null);setHoleData({round:null,holes:[],loading:false,error:null});};
 
   useEffect(()=>{
-    // Fetch schedule first so eventName/courseName/purse/teeTime are up to date
     fetchSchedule();
-    // Load active major field immediately on mount
     Promise.all([loadEntries(),fetchField()]).then(()=>setReady(true));
     fetchScores(true);
-    // Prefetch all other 4 majors in background (after 3s so active major loads first)
     setTimeout(()=>fetchAllFields(), 3000);
-    // Every 60s: refresh scores + entries + all 5 major fields (Redis cached, fast)
     timer.current=setInterval(()=>{fetchScores(true);loadEntries();fetchAllFields();setNow(Date.now());},60000);
     const clock=setInterval(()=>setNow(Date.now()),30000);
     return()=>{clearInterval(timer.current);clearInterval(clock);};
@@ -568,7 +529,7 @@ export default function App(){
   const teamE=e=>e.picks.reduce((s,n)=>s+(field.find(f=>f.name===n)?.earnings||0),0);
   const ranked=[...entries].sort((a,b)=>teamE(b)-teamE(a));
   const owners=n=>entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
-  const sortF=[...field].sort((a,b)=>{const pa=parsePos(a.pos),pb=parsePos(b.pos);if(!pa&&!pb)return 0;if(!pa)return 1;if(!pb)return -1;return pa-pb;});
+  const sortF=[...field].sort((a,b)=>{const pa=parsePos(a.pos),pb=parsePos(b.pos);if(!pa&&!pb)return (a.rank??999)-(b.rank??999);if(!pa)return 1;if(!pb)return -1;return pa-pb;});
   const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>a.name.localeCompare(b.name));
   const filteredTier=tierField.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
   const fieldVis=sortF.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
@@ -593,20 +554,18 @@ export default function App(){
     if(d?.ok)msg(paid?`${eName} marked unpaid`:`${eName} marked paid ✓`);
   };
 
-  // Switch active major — saves to Redis, re-fetches field
   const switchMajor=async(major)=>{
     setActiveMajor(major);
-    activeMajorRef.current = major; // keep ref in sync immediately
-    setField([]);                   // clear old field right away
+    activeMajorRef.current = major;
+    setField([]);
     setFieldSource(`⏳ Loading ${THEMES[major]?.eventName} field...`);
     const d=await adminAction('set-major',{major});
     if(d?.ok){
       msg(`Switched to ${THEMES[major].eventName} ${THEMES[major].emoji}`);
-      fetchField(major, true); // fetch new major's field immediately
+      fetchField(major, true);
     }
   };
 
-  // Theme-aware styles
   const pri={background:T.primary,color:'#faf6ed',border:'none',padding:'8px 18px',borderRadius:7,fontWeight:600,fontSize:13,cursor:'pointer'};
   const dan={background:'#8b2020',color:'#fff',border:'none',padding:'8px 18px',borderRadius:7,fontWeight:600,fontSize:13,cursor:'pointer'};
   const inp={flex:1,padding:'9px 12px',borderRadius:7,border:`1px solid ${T.inputBorder}`,fontSize:14,fontFamily:"'DM Sans',sans-serif",background:'#fff'};
@@ -640,7 +599,6 @@ export default function App(){
 
       {toast&&<div style={{position:'fixed',top:12,left:'50%',transform:'translateX(-50%)',background:'#1a2e0a',color:'#faf6ed',padding:'8px 20px',borderRadius:9,fontSize:13,fontWeight:600,zIndex:200,animation:'sd .25s ease',boxShadow:'0 4px 14px rgba(0,0,0,.2)',maxWidth:'90%',textAlign:'center'}}>{toast}</div>}
 
-      {/* ─── SCORECARD MODAL ──────────────────────────────────────────── */}
       {selectedPlayer&&(()=>{
         const p=selectedPlayer;
         const t=TIERS.find(t=>t.id===p.tier);
@@ -671,7 +629,6 @@ export default function App(){
                     <div style={{fontSize:12,color:'#8a9580'}}>Pos <b style={{color:'#333'}}>{p.pos}</b></div>
                   </div>
                 </div>
-                {/* Round boxes */}
                 <div style={{marginBottom:4}}>
                   <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:1,marginBottom:8}}>ROUNDS{completedRounds.length>0?' — tap a round for hole scores':''}</div>
                   <div style={{display:'flex',gap:8}}>
@@ -687,10 +644,8 @@ export default function App(){
                     })}
                   </div>
                 </div>
-                {/* Holes loading/error */}
                 {holeData.loading&&<div style={{textAlign:'center',padding:'20px 0'}}><div style={{width:24,height:24,border:`3px solid ${T.primary}20`,borderTopColor:T.primary,borderRadius:'50%',animation:'sp .7s linear infinite',margin:'0 auto 8px'}}/><div style={{fontSize:12,color:'#aaa'}}>Loading hole scores...</div></div>}
                 {!holeData.loading&&holeData.error&&holeData.round&&<div style={{textAlign:'center',padding:'16px 0',fontSize:12,color:'#bbb'}}>{holeData.error}</div>}
-                {/* Hole grid */}
                 {!holeData.loading&&holeData.holes.length>0&&(()=>{
                   const HoleCell=({h})=>{const s=holeStyle(h.toPar);return(
                     <div style={{flex:1,textAlign:'center'}}>
@@ -717,7 +672,6 @@ export default function App(){
                     </div>
                   </div>);
                 })()}
-                {/* In-progress (no round data yet) */}
                 {!holeData.loading&&!holeData.round&&completedRounds.length===0&&p.thru&&(
                   <div style={{display:'flex',gap:8,marginTop:4,marginBottom:4}}>
                     <div style={{flex:2,textAlign:'center',background:`${T.primary}0a`,borderRadius:12,padding:'10px 8px',border:`2px solid ${T.primary}22`}}>
@@ -738,7 +692,6 @@ export default function App(){
         );
       })()}
 
-      {/* ─── HEADER ─────────────────────────────────────────────────────── */}
       <header style={{background:T.headerBg,padding:0,color:'#faf6ed',position:'relative',overflow:'hidden'}}>
         <svg viewBox="0 0 800 200" style={{width:'100%',display:'block'}} xmlns="http://www.w3.org/2000/svg">
           <defs>
@@ -780,9 +733,7 @@ export default function App(){
 
       <main style={{padding:'12px 12px 80px',maxWidth:660,margin:'0 auto',animation:'fu .35s ease'}}>
 
-        {/* ─── STANDINGS ─────────────────────────────────────────────── */}
         {tab==='Standings'&&(<>
-          {/* Unpaid banner — shown when pool needs payment for next major */}
           {poolMeta?.paid===false&&<div style={{
             background:`linear-gradient(135deg,${T.dark} 0%,${T.mid} 100%)`,
             borderRadius:14,marginBottom:12,padding:'16px 18px',
@@ -808,7 +759,6 @@ export default function App(){
               </button>
             </div>
           </div>}
-          {/* Countdown banner — shown when entries are open and tournament hasn't started */}
           {countdown&&!locked&&poolMeta?.paid!==false&&<div style={{
             background:`linear-gradient(135deg,${T.dark} 0%,${T.mid} 100%)`,
             borderRadius:14,marginBottom:12,padding:'16px 18px',
@@ -863,7 +813,6 @@ export default function App(){
           </>}
         </>)}
 
-        {/* ─── ENTER POOL ────────────────────────────────────────────── */}
         {tab==='Enter Pool'&&(locked
           ? poolMeta?.paid===false
             ?<div style={bx}>
@@ -920,10 +869,8 @@ export default function App(){
             </button>
           </>)}
 
-        {/* ─── FIELD ─────────────────────────────────────────────────── */}
         {tab==='Field'&&<>
           <input style={{...inp,marginBottom:6}} placeholder="Search players..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          {/* Field source + last updated */}
           <div style={{marginBottom:8,textAlign:'center'}}>
             {fieldSource&&<div style={{fontSize:10,color:T.primary,background:`${T.primary}0a`,padding:'4px 10px',borderRadius:20,display:'inline-block',marginBottom:4}}>{fieldSource}</div>}
             {fieldLastUpdated&&<div style={{fontSize:10,color:'#8a9580',marginTop:2}}>Field last updated: {fieldLastUpdated} · auto-refreshes every 60s</div>}
@@ -957,8 +904,6 @@ export default function App(){
           </div>
         </>}
 
-        {/* ─── ADMIN ─────────────────────────────────────────────────── */}
-        {/* ─── HISTORY ───────────────────────────────────────────────── */}
         {tab==='History'&&<>
           <div style={{textAlign:'center',marginBottom:16}}>
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800,color:T.primary,marginBottom:4}}>📚 Past Results</div>
@@ -1011,7 +956,6 @@ export default function App(){
             </div>
           </div>
           :<>
-            {/* ── ACTIVE MAJOR SWITCHER ── */}
             <div style={sec}>
               <h3 style={stl}>🏆 Active Major</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:12}}>Switch the active tournament for all users. Updates theme, tee time, course pars, and field.</p>
@@ -1029,7 +973,6 @@ export default function App(){
                   );
                 })}
               </div>
-              {/* Auto-schedule info */}
               <div style={{background:'#f8f9ff',borderRadius:8,padding:'10px 12px',border:'1px solid #e0e4f0'}}>
                 <div style={{fontSize:10,fontWeight:700,color:'#555',letterSpacing:.5,marginBottom:6}}>⏰ AUTO-MANAGEMENT SCHEDULE</div>
                 <div style={{fontSize:11,color:'#6b7c5e',lineHeight:1.7}}>
@@ -1069,7 +1012,6 @@ export default function App(){
                 <button type="button" style={{background:'transparent',border:'1px solid #c44',color:'#c44',padding:'3px 9px',borderRadius:5,fontSize:11,cursor:'pointer'}} onClick={async()=>{await adminAction('delete',{name:e.name});msg('Removed');}}>Remove</button>
               </div>)}
             </div>
-            {/* ── Archives ── */}
             <div style={sec}>
               <h3 style={stl}>📚 Past Results</h3>
               {entries.length>0&&<div style={{marginBottom:10}}>
