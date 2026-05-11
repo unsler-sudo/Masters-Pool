@@ -718,6 +718,18 @@ export default function App(){
           </div>
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
             <div style={{background:'#ffffff18',borderRadius:10,padding:'2px 8px',fontSize:10,fontWeight:600,backdropFilter:'blur(4px)',border:'1px solid #ffffff15',whiteSpace:'nowrap'}}>{entries.length} {entries.length===1?'entry':'entries'}</div>
+            {poolMeta?.entryFee>0&&entries.length>=3&&(()=>{
+              const fee=poolMeta.entryFee;
+              const pot=entries.length*fee;
+              const third=fee;
+              const second=fee*2;
+              const first=pot-third-second;
+              return <div style={{display:'flex',gap:6,fontSize:9,opacity:.85,whiteSpace:'nowrap'}}>
+                <span>🥇 ${first}</span>
+                <span>🥈 ${second}</span>
+                <span>🥉 ${third}</span>
+              </div>;
+            })()}
             {countdown&&<div style={{fontSize:10,opacity:.7}}>⏱ {countdown}</div>}
             {lastUp&&!countdown&&<div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#4ade80',animation:'glow 2s infinite'}}/><span style={{fontSize:9,opacity:.5}}>Live · {lastUp}</span></div>}
           </div>
@@ -992,6 +1004,31 @@ export default function App(){
             </div>
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
+            </div>
+            <div style={sec}>
+              <h3 style={stl}>💵 Entry Fee & Payouts</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Set entry fee to display payouts in header. 3rd = 1× fee, 2nd = 2× fee, 1st = rest.</p>
+              <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:10}}>
+                <span style={{fontSize:13,color:'#555'}}>$</span>
+                <input type="number" min="0" placeholder="20" defaultValue={poolMeta?.entryFee||''}
+                  id="entryFeeInput"
+                  style={{...inp,maxWidth:100}}/>
+                <button type="button" style={pri} onClick={async()=>{
+                  const val=parseFloat(document.getElementById('entryFeeInput').value)||0;
+                  const d=await adminAction('set-entry-fee',{entryFee:val});
+                  if(d?.ok){loadEntries();msg(val>0?`Entry fee set to $${val}`:'Entry fee cleared');}
+                }}>Save</button>
+              </div>
+              {poolMeta?.entryFee>0&&entries.length>=3&&(()=>{
+                const fee=poolMeta.entryFee;
+                const pot=entries.length*fee;
+                const first=pot-fee*3;
+                return <div style={{background:`${T.primary}0a`,borderRadius:8,padding:'10px 12px',fontSize:12,color:T.primary}}>
+                  <div style={{fontWeight:700,marginBottom:4}}>Current Pot: ${pot} ({entries.length} × ${fee})</div>
+                  <div>🥇 1st: <b>${first}</b> · 🥈 2nd: <b>${fee*2}</b> · 🥉 3rd: <b>${fee}</b></div>
+                </div>;
+              })()}
+              {poolMeta?.entryFee>0&&entries.length<3&&<div style={{fontSize:11,color:'#888'}}>Payouts will show once you have 3+ entries.</div>}
             </div>
             <div style={sec}>
               <h3 style={stl}>💰 Payment Tracking</h3>
