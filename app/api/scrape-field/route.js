@@ -62,7 +62,7 @@ export async function GET(request) {
     if (stale?.players?.length > 0) return Response.json({ ...stale, fromCache: true, note: 'lock-stale' });
     return Response.json({ players: [], major, error: 'Scrape in progress, retry in 30s' }, { status: 429 });
   }
-  await redisSet(lockKey, '1', 55);
+  await redisSet(lockKey, '1', 45);
 
   let browser;
   try {
@@ -84,15 +84,28 @@ export async function GET(request) {
     });
     await page.route('**/*', route => {
       const rt = route.request().resourceType();
-      if (['font', 'media'].includes(rt)) return route.abort();
+      // Block heavy resources to reduce memory: images, stylesheets, fonts, media
+      if (['image', 'stylesheet', 'font', 'media', 'websocket'].includes(rt)) return route.abort();
       route.continue();
     });
 
     // ── Scrape the SUMMARY page — all 5 majors in one browser launch ────────
-    await page.goto('https://datagolf.com/major-fields?major=summary', {
-      waitUntil: 'domcontentloaded', timeout: 30000,
-    });
-    await page.waitForSelector('.datarow', { timeout: 15000 });
+    // Retry up to 2 times on ERR_INSUFFICIENT_RESOURCES or timeout
+    let lastErr;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await page.goto('https://datagolf.com/major-fields?major=summary', {
+          waitUntil: 'domcontentloaded', timeout: 30000,
+        });
+        await page.waitForSelector('.datarow', { timeout: 15000 });
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < 2) await page.waitForTimeout(2000);
+      }
+    }
+    if (lastErr) throw lastErr;
 
     // Extract all 5 major fields at once
     const allFields = await page.evaluate(() => {
