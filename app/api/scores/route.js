@@ -1,7 +1,5 @@
 export const dynamic = 'force-dynamic';
-
 const DG_KEY = process.env.DATAGOLF_API_KEY || '';
-
 // DataGolf event IDs for the 4 majors + Players
 const MAJOR_EVENT_IDS = {
   players: 11,
@@ -10,22 +8,19 @@ const MAJOR_EVENT_IDS = {
   usopen:  26,
   open:    100,
 };
-
 export async function GET(request) {
   if (!DG_KEY) {
     return Response.json({ error: 'DATAGOLF_API_KEY not set' }, { status: 500 });
   }
-
   const { searchParams } = new URL(request.url);
   const endpoint = searchParams.get('endpoint') || 'in-play';
   const season   = searchParams.get('season') || new Date().getFullYear();
-
   // Standard documented DataGolf endpoints
   const urls = {
     'in-play':
       `https://feeds.datagolf.com/preds/in-play?tour=pga&odds_format=percent&file_format=json&key=${DG_KEY}`,
     'pre-tournament':
-      `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=american&file_format=json&key=${DG_KEY}`,
+      `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${DG_KEY}`,
     'field-updates':
       `https://feeds.datagolf.com/field-updates?tour=pga&file_format=json&key=${DG_KEY}`,
     'dg-rankings':
@@ -37,10 +32,8 @@ export async function GET(request) {
     'hole-scores':
       `https://feeds.datagolf.com/preds/live-hole-scores?tour=pga&file_format=json&key=${DG_KEY}`,
   };
-
   const url = urls[endpoint];
   if (!url) return Response.json({ error: 'Invalid endpoint' }, { status: 400 });
-
   try {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return Response.json({ error: `DataGolf ${res.status}` }, { status: res.status });
