@@ -746,6 +746,42 @@ export default function App(){
       <main style={{padding:'12px 12px 80px',maxWidth:660,margin:'0 auto',animation:'fu .35s ease'}}>
 
         {tab==='Standings'&&(<>
+          {!locked&&poolMeta?.paid!==false&&(()=>{
+            const shareLink=typeof window!=='undefined'?window.location.origin+'/pool/'+poolId:'';
+            const fee=poolMeta?.entryFee||0;
+            const pot=entries.length*fee;
+            const first=pot>0?pot-fee*3:0;
+            const payoutLine=fee>0&&entries.length>=3
+              ?`🏆 Pot: $${pot} ($${fee} entry × ${entries.length} entries)\n🥇 1st: $${first}  🥈 2nd: $${fee*2}  🥉 3rd: $${fee}\n\n`
+              :fee>0
+                ?`💵 Entry: $${fee} per person\n\n`
+                :'';
+            const countdownLine=countdown?`⏱ Entries close ${countdown.replace(' until entries lock','')}\n\n`:'';
+            const shareText=`Join my ${T.eventName} pool on Tuna Golf Pool!
+
+Pick 2 favorites, 4 contenders, 3 longshots — highest combined earnings wins.
+
+${payoutLine}${countdownLine}→ ${shareLink}`;
+            const handleShare=async()=>{
+              if(navigator.share){
+                try{await navigator.share({title:`Join ${poolMeta?.poolName||T.eventName}`,text:shareText});}catch{}
+              }else{
+                try{await navigator.clipboard.writeText(shareText);msg('Invite copied to clipboard!');}
+                catch{msg('Could not copy — try long-press on the link');}
+              }
+            };
+            return(
+              <button type="button" onClick={handleShare} style={{
+                width:'100%',background:'#fff',border:`2px dashed ${T.primary}55`,
+                borderRadius:11,padding:'10px 14px',marginBottom:10,
+                display:'flex',alignItems:'center',justifyContent:'center',gap:8,
+                fontSize:13,fontWeight:700,color:T.primary,cursor:'pointer',
+              }}>
+                <span style={{fontSize:16}}>🔗</span>
+                <span>Invite friends to join</span>
+              </button>
+            );
+          })()}
           {poolMeta?.paid===false&&<div style={{
             background:`linear-gradient(135deg,${T.dark} 0%,${T.mid} 100%)`,
             borderRadius:14,marginBottom:12,padding:'16px 18px',
