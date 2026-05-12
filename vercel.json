@@ -1,17 +1,7 @@
 {
   "functions": {
-    "app/api/cron-scrape/route.js": {
-      "maxDuration": 60,
-      "memory": 3008
-    },
     "app/api/stripe-webhook/route.js": {
       "maxDuration": 10
     }
-  },
-  "crons": [
-    {
-      "path": "/api/cron-scrape",
-      "schedule": "*/5 * * * *"
-    }
-  ]
+  }
 }
