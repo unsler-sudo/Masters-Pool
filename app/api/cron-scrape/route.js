@@ -72,7 +72,7 @@ export async function GET(request) {
         break;
       } catch (e) {
         lastErr = e;
-        if (attempt < 2) await page.waitForTimeout(2000);
+        if (attempt < 2) await new Promise(r => setTimeout(r, 2000));
       }
     }
     if (lastErr) throw lastErr;
