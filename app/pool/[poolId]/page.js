@@ -183,6 +183,7 @@ export default function App(){
   const [editMode,setEditMode]=useState(false);
   const [editCode,setEditCode]=useState('');
   const [showEditModal,setShowEditModal]=useState(null);
+  const [showClaimModal,setShowClaimModal]=useState(null);
   const [picks,setPicks]=useState({1:[],2:[],3:[]});
   const [search,setSearch]=useState('');
   const [toast,setToast]=useState('');
@@ -563,6 +564,18 @@ export default function App(){
     }catch{msg('Error');}
   };
 
+  const claimEntry=async(name,email)=>{
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'claim-entry',name,email})});
+      const d=await r.json();
+      if(d.error){msg(d.error);return false;}
+      loadEntries();
+      msg('Email added! Check inbox for edit code 📧');
+      return true;
+    }catch{msg('Error');return false;}
+  };
+
   const deleteOwnEntry=async(name)=>{
     if(!confirm(`Remove your entry "${name}"?`))return;
     try{
@@ -665,6 +678,31 @@ export default function App(){
               <button type="button" onClick={handleSubmit} style={{...pri,width:'100%',padding:12,borderRadius:9,marginBottom:8}}>Unlock Picks →</button>
               {entryToEdit?.email&&<button type="button" onClick={()=>{resendCode(showEditModal,entryToEdit.email);setShowEditModal(null);}} style={{background:'transparent',border:'none',color:T.primary,fontSize:12,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline'}}>Resend code to {entryToEdit.email}</button>}
               <button type="button" onClick={()=>setShowEditModal(null)} style={{background:'transparent',border:'none',color:'#888',fontSize:12,width:'100%',padding:8,cursor:'pointer'}}>Cancel</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {showClaimModal&&(()=>{
+        const handleSubmit=async()=>{
+          const email=document.getElementById('claimEmailInput').value.trim();
+          if(!email)return msg('Enter your email');
+          if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return msg('Invalid email format');
+          const ok=await claimEntry(showClaimModal,email);
+          if(ok)setShowClaimModal(null);
+        };
+        return(
+          <div onClick={()=>setShowClaimModal(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:150,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:24,maxWidth:380,width:'100%',animation:'su .25s ease'}}>
+              <div style={{textAlign:'center',marginBottom:16}}>
+                <div style={{fontSize:36,marginBottom:6}}>📧</div>
+                <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,marginBottom:4}}>Add email to {showClaimModal}'s Entry</h3>
+                <p style={{fontSize:12,color:'#888'}}>This entry was submitted without an email. Add yours to enable picks editing.</p>
+              </div>
+              <input id="claimEmailInput" autoFocus type="email" style={{...inp,fontSize:14,width:'100%',marginBottom:10}} placeholder="your@email.com" onKeyDown={e=>e.key==='Enter'&&handleSubmit()}/>
+              <button type="button" onClick={handleSubmit} style={{...pri,width:'100%',padding:12,borderRadius:9,marginBottom:8}}>Send Edit Code →</button>
+              <p style={{fontSize:10,color:'#aaa',textAlign:'center',marginBottom:8}}>⚠️ Only do this if this is YOUR entry. The pool commissioner can see all emails.</p>
+              <button type="button" onClick={()=>setShowClaimModal(null)} style={{background:'transparent',border:'none',color:'#888',fontSize:12,width:'100%',padding:8,cursor:'pointer'}}>Cancel</button>
             </div>
           </div>
         );
@@ -913,7 +951,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     </div>
                     <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Entry submitted — picks hidden until tee-off':'Tap to '+(op?'collapse':'expand')}</div>
                   </div>
-                  {!locked&&<button type="button" onClick={(ev)=>{ev.stopPropagation();setShowEditModal(e.name);}} style={{background:'transparent',border:`1px solid ${T.primary}30`,color:T.primary,padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>✏️ Edit</button>}
+                  {!locked&&(e.email?
+                    <button type="button" onClick={(ev)=>{ev.stopPropagation();setShowEditModal(e.name);}} style={{background:'transparent',border:`1px solid ${T.primary}30`,color:T.primary,padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>✏️ Edit</button>
+                    :<button type="button" onClick={(ev)=>{ev.stopPropagation();setShowClaimModal(e.name);}} style={{background:'transparent',border:`1px solid #c9a84c80`,color:'#7a5500',padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>📧 Add email</button>
+                  )}
                   {!picksHidden&&<div style={{fontWeight:800,fontSize:17,color:T.primary}}>{fmt(tot)}</div>}
                 </div>
                 {!picksHidden&&op&&<div style={{marginTop:8,borderTop:'1px solid #eee8dc',paddingTop:8,animation:'sd .2s ease'}}>
