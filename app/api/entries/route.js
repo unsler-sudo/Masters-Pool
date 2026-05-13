@@ -407,7 +407,53 @@ export async function POST(request) {
       return Response.json({ ok:true });
     }
 
-    if (body.action === 'delete-own') {
+    if (body.action === 'claim-entry') {
+      const locked = await getLocked(poolId);
+      if (locked) return Response.json({ error:'Entries are locked' }, { status:403 });
+      const { name, email } = body;
+      if (!name?.trim() || !email?.trim()) return Response.json({ error:'Name and email required' }, { status:400 });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return Response.json({ error:'Invalid email' }, { status:400 });
+      const entries = await getEntries(poolId);
+      const idx = entries.findIndex(e => e.name.toLowerCase() === name.trim().toLowerCase());
+      if (idx === -1) return Response.json({ error:'Entry not found' }, { status:404 });
+      if (entries[idx].email) return Response.json({ error:'This entry already has an email — use Edit instead' }, { status:409 });
+
+      const editCode = Math.random().toString(36).slice(2,8).toUpperCase();
+      entries[idx].email = email.trim().toLowerCase();
+      entries[idx].editCode = editCode;
+      await saveEntries(poolId, entries);
+
+      if (process.env.RESEND_API_KEY) {
+        const meta = await getPoolMeta(poolId);
+        const poolName = meta?.poolName || 'Golf Pool';
+        const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
+        try {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+              to: email.trim(),
+              subject: `Your edit code for ${poolName}`,
+              html: `
+                <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
+                  <h2 style="color:#1a2a5c;">Your edit code ⛳</h2>
+                  <p>Hey ${entries[idx].name},</p>
+                  <p>You've added your email to your existing entry in <b>${poolName}</b>.</p>
+                  <p>You can now edit your picks before entries lock using this code:</p>
+                  <div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0;">
+                    <div style="font-size:11px;color:#888;letter-spacing:1px;margin-bottom:6px;">YOUR EDIT CODE</div>
+                    <div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1a2a5c;">${editCode}</div>
+                  </div>
+                  <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
+                </div>
+              `,
+            }),
+          });
+        } catch (e) { console.error('email send failed:', e.message); }
+      }
+      return Response.json({ ok:true });
+    }
       const locked = await getLocked(poolId);
       if (locked) return Response.json({ error:'Cannot remove — tournament started!' }, { status:403 });
       const entries = await getEntries(poolId);
