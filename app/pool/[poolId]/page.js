@@ -179,6 +179,10 @@ export default function App(){
   const activeMajorRef=useRef('pga');
   const [refreshing,setRefreshing]=useState(false);
   const [entryName,setEntryName]=useState('');
+  const [entryEmail,setEntryEmail]=useState('');
+  const [editMode,setEditMode]=useState(false);
+  const [editCode,setEditCode]=useState('');
+  const [showEditModal,setShowEditModal]=useState(null);
   const [picks,setPicks]=useState({1:[],2:[],3:[]});
   const [search,setSearch]=useState('');
   const [toast,setToast]=useState('');
@@ -503,17 +507,60 @@ export default function App(){
 
   const submit=async()=>{
     if(!entryName.trim())return msg('Enter your name!');
+    if(!editMode){
+      if(!entryEmail.trim())return msg('Enter your email!');
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entryEmail.trim()))return msg('Invalid email format');
+    }
     for(const t of TIERS)if(picks[t.id].length!==t.picks)return msg(`Pick ${t.picks} from ${t.name}`);
     setSubmitting(true);
     try{
-      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'submit',name:entryName.trim(),picks:allPicks})});
+      const body=editMode
+        ?{poolId,action:'update-entry',name:entryName.trim(),code:editCode,picks:allPicks}
+        :{poolId,action:'submit',name:entryName.trim(),email:entryEmail.trim(),picks:allPicks};
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json();
       if(d.error){msg(d.error);setSubmitting(false);return;}
       if(d.entries)setEntries(d.entries);
-      setEntryName('');setPicks({1:[],2:[],3:[]});setSearch('');
-      msg('Entry submitted!');setTab('Standings');
+      setEntryName('');setEntryEmail('');setPicks({1:[],2:[],3:[]});setSearch('');
+      setEditMode(false);setEditCode('');
+      msg(editMode?'Picks updated!':'Entry submitted! Check email for edit code 📧');
+      setTab('Standings');
     }catch(e){msg('Error submitting — check connection');}
     setSubmitting(false);
+  };
+
+  const startEdit=async(name,code)=>{
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'edit-entry',name,code})});
+      const d=await r.json();
+      if(d.error){msg(d.error);return false;}
+      // Populate the form with existing picks
+      const newPicks={1:[],2:[],3:[]};
+      d.entry.picks.forEach(p=>{
+        const player=field.find(f=>f.name===p);
+        if(player&&player.tier)newPicks[player.tier].push(p);
+      });
+      setEntryName(d.entry.name);
+      setEntryEmail(d.entry.email||'');
+      setEditCode(code);
+      setEditMode(true);
+      setPicks(newPicks);
+      setShowEditModal(null);
+      setTab('Enter Pool');
+      msg('Edit your picks below, then submit');
+      return true;
+    }catch{msg('Error');return false;}
+  };
+
+  const resendCode=async(name,email)=>{
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'resend-code',name,email})});
+      const d=await r.json();
+      if(d.error){msg(d.error);return;}
+      msg('Code resent — check your email 📧');
+    }catch{msg('Error');}
   };
 
   const deleteOwnEntry=async(name)=>{
@@ -598,6 +645,30 @@ export default function App(){
       `}</style>
 
       {toast&&<div style={{position:'fixed',top:12,left:'50%',transform:'translateX(-50%)',background:'#1a2e0a',color:'#faf6ed',padding:'8px 20px',borderRadius:9,fontSize:13,fontWeight:600,zIndex:200,animation:'sd .25s ease',boxShadow:'0 4px 14px rgba(0,0,0,.2)',maxWidth:'90%',textAlign:'center'}}>{toast}</div>}
+
+      {showEditModal&&(()=>{
+        const entryToEdit=entries.find(e=>e.name===showEditModal);
+        const handleSubmit=async()=>{
+          const code=document.getElementById('editCodeInput').value.trim();
+          if(!code)return msg('Enter your edit code');
+          await startEdit(showEditModal,code);
+        };
+        return(
+          <div onClick={()=>setShowEditModal(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:150,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:24,maxWidth:380,width:'100%',animation:'su .25s ease'}}>
+              <div style={{textAlign:'center',marginBottom:16}}>
+                <div style={{fontSize:36,marginBottom:6}}>✏️</div>
+                <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,marginBottom:4}}>Edit {showEditModal}'s Picks</h3>
+                <p style={{fontSize:12,color:'#888'}}>Enter the edit code from your email</p>
+              </div>
+              <input id="editCodeInput" autoFocus style={{...inp,textAlign:'center',letterSpacing:6,fontSize:20,fontWeight:700,textTransform:'uppercase',width:'100%',marginBottom:10}} placeholder="XXXXXX" maxLength={6} onKeyDown={e=>e.key==='Enter'&&handleSubmit()}/>
+              <button type="button" onClick={handleSubmit} style={{...pri,width:'100%',padding:12,borderRadius:9,marginBottom:8}}>Unlock Picks →</button>
+              {entryToEdit?.email&&<button type="button" onClick={()=>{resendCode(showEditModal,entryToEdit.email);setShowEditModal(null);}} style={{background:'transparent',border:'none',color:T.primary,fontSize:12,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline'}}>Resend code to {entryToEdit.email}</button>}
+              <button type="button" onClick={()=>setShowEditModal(null)} style={{background:'transparent',border:'none',color:'#888',fontSize:12,width:'100%',padding:8,cursor:'pointer'}}>Cancel</button>
+            </div>
+          </div>
+        );
+      })()}
 
       {selectedPlayer&&(()=>{
         const p=selectedPlayer;
@@ -853,6 +924,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       <span style={{fontWeight:700,fontSize:13,color:T.primary}}>{fmt(p?.earnings)}</span>
                     </div>;})}
                   </div>;})}
+                  {!locked&&<button type="button" onClick={(ev)=>{ev.stopPropagation();setShowEditModal(e.name);}} style={{marginTop:6,background:'transparent',border:`1px solid ${T.primary}40`,color:T.primary,padding:'5px 12px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer'}}>✏️ Edit my picks</button>}
                 </div>}
                 {!picksHidden&&!op&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>
                   {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} style={{fontSize:10,background:T.navActive,padding:'2px 7px',borderRadius:4,border:`1px solid ${T.cardBorder}`,borderLeft:`3px solid ${t?.color||'#ccc'}`}}><Flag c={p?.country}/> {pn.split(', ')[0]} <b style={{color:T.primary}}>{fmt(p?.earnings)}</b></span>;})}
@@ -880,12 +952,17 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             :<div style={bx}><div style={{fontSize:44,marginBottom:10}}>🔒</div><p style={{color:'#6b7c5e'}}>Entries locked — tournament has started!</p></div>
           :<>
             {countdown&&<div style={{background:T.accentLight,padding:'8px 14px',borderRadius:9,marginBottom:10,fontSize:12,color:T.accent,textAlign:'center',border:`1px solid ${T.accent}30`}}>⏱ {countdown}</div>}
-            <div style={{display:'flex',gap:8,marginBottom:10}}>
-              <input style={inp} placeholder="Your Name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
+            {editMode&&<div style={{background:'#fff7e6',border:'1px solid #f5c14a',borderRadius:9,padding:'8px 12px',marginBottom:10,fontSize:12,color:'#7a5500',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <span>✏️ Editing <b>{entryName}</b>'s picks</span>
+              <button type="button" onClick={()=>{setEditMode(false);setEntryName('');setEntryEmail('');setEditCode('');setPicks({1:[],2:[],3:[]});}} style={{background:'transparent',border:'1px solid #7a550040',color:'#7a5500',padding:'2px 8px',borderRadius:5,fontSize:10,fontWeight:600,cursor:'pointer'}}>Cancel</button>
+            </div>}
+            <div style={{display:'flex',gap:8,marginBottom:8}}>
+              <input style={inp} placeholder="Your Name" value={entryName} disabled={editMode} onChange={e=>setEntryName(e.target.value)}/>
               <div style={{background:T.primary,color:'#faf6ed',minWidth:50,height:44,borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'0 6px'}}>
                 <span style={{fontSize:18,fontWeight:800}}>{totalPicked}</span><span style={{fontSize:9,opacity:.6}}>/{TOTAL_PICKS}</span>
               </div>
             </div>
+            {!editMode&&<input style={{...inp,marginBottom:10,width:'100%'}} type="email" placeholder="Your Email (for edit code)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>}
             {totalPicked>0&&<div style={{background:`${T.primary}10`,borderRadius:9,padding:10,marginBottom:10,border:`1px solid ${T.primary}1a`}}>
               <div style={{fontSize:10,fontWeight:700,color:T.primary,marginBottom:5,letterSpacing:1}}>YOUR PICKS</div>
               {TIERS.map(t=>{if(!picks[t.id].length)return null;return<div key={t.id} style={{marginBottom:4}}>
@@ -913,7 +990,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </button>);})}
             </div>
             <button type="button" disabled={submitting||totalPicked!==TOTAL_PICKS} style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:10,borderRadius:9,opacity:(submitting||totalPicked!==TOTAL_PICKS)?.4:1}} onClick={submit}>
-              {submitting?'Submitting...':'Submit Entry ('+totalPicked+'/'+TOTAL_PICKS+')'}
+              {submitting?(editMode?'Updating...':'Submitting...'):(editMode?'Update Picks ('+totalPicked+'/'+TOTAL_PICKS+')':'Submit Entry ('+totalPicked+'/'+TOTAL_PICKS+')')}
             </button>
           </>)}
 
