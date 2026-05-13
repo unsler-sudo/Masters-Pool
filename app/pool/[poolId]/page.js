@@ -225,7 +225,18 @@ export default function App(){
     if (mins > 0) return `${mins}m ${secs}s until entries lock`;
     return `${secs}s until entries lock`;
   };
+  const getCountdownShort = () => {
+    const diff = TEE_TIME - now;
+    if (diff <= 0) return null;
+    const days = Math.floor(diff / 86400000);
+    const hrs = Math.floor((diff % 86400000) / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    if (days > 0) return `${days}d ${hrs}h until lock`;
+    if (hrs > 0) return `${hrs}h ${mins}m until lock`;
+    return `${mins}m until lock`;
+  };
   const countdown = getCountdown();
+  const countdownShort = getCountdownShort();
   const allPicks=[...picks[1],...picks[2],...picks[3]];
   const totalPicked=allPicks.length;
   const msg=m=>{setToast(m);setTimeout(()=>setToast(''),3500);};
@@ -841,7 +852,7 @@ export default function App(){
                 <span style={{opacity:.55}}><span style={{opacity:.6,marginRight:3}}>3rd</span>${third}</span>
               </div>;
             })()}
-            {countdown&&<div style={{fontSize:10,opacity:.7}}>⏱ {countdown}</div>}
+            {countdown&&<div style={{fontSize:10,opacity:.7}}>⏱ {countdownShort}</div>}
             {lastUp&&!countdown&&<div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#4ade80',animation:'glow 2s infinite'}}/><span style={{fontSize:9,opacity:.5}}>Live · {lastUp}</span></div>}
           </div>
         </div>
