@@ -275,15 +275,136 @@ export async function POST(request) {
     if (body.action === 'submit') {
       const locked = await getLocked(poolId);
       if (locked) return Response.json({ error:'Entries are locked!' }, { status:403 });
-      const { name, picks } = body;
+      const { name, picks, email } = body;
       if (!name?.trim()) return Response.json({ error:'Name required' }, { status:400 });
+      if (!email?.trim()) return Response.json({ error:'Email required' }, { status:400 });
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return Response.json({ error:'Invalid email' }, { status:400 });
       if (!picks || picks.length !== 9) return Response.json({ error:'9 picks required' }, { status:400 });
       const entries = await getEntries(poolId);
       if (entries.find(e=>e.name.toLowerCase()===name.trim().toLowerCase()))
         return Response.json({ error:'Name already taken!' }, { status:409 });
-      entries.push({ name:name.trim(), picks, ts:Date.now() });
+
+      // Generate 6-char edit code
+      const editCode = Math.random().toString(36).slice(2,8).toUpperCase();
+
+      entries.push({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        editCode,
+        picks,
+        ts: Date.now(),
+      });
+      await saveEntries(poolId, entries);
+
+      // Send edit code email
+      if (process.env.RESEND_API_KEY) {
+        const meta = await getPoolMeta(poolId);
+        const poolName = meta?.poolName || 'Golf Pool';
+        const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
+        try {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+              to: email.trim(),
+              subject: `Your edit code for ${poolName}`,
+              html: `
+                <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
+                  <h2 style="color:#1a2a5c;">Entry confirmed ⛳</h2>
+                  <p>Hey ${name.trim()},</p>
+                  <p>Your picks for <b>${poolName}</b> have been submitted.</p>
+                  <p>If you want to change your picks before entries lock, use this code:</p>
+                  <div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0;">
+                    <div style="font-size:11px;color:#888;letter-spacing:1px;margin-bottom:6px;">YOUR EDIT CODE</div>
+                    <div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1a2a5c;">${editCode}</div>
+                  </div>
+                  <p>Visit your pool and tap "Edit my picks" on your entry to use it.</p>
+                  <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
+                  <p style="font-size:12px;color:#888;margin-top:30px;">Save this email — you'll need the code if you want to edit your picks before the tournament starts.</p>
+                </div>
+              `,
+            }),
+          });
+        } catch (e) { console.error('email send failed:', e.message); }
+      }
+
+      return Response.json({ ok:true, entries, codeSent:true });
+    }
+
+    if (body.action === 'edit-entry') {
+      const locked = await getLocked(poolId);
+      if (locked) return Response.json({ error:'Entries are locked — cannot edit' }, { status:403 });
+      const { name, code } = body;
+      if (!name || !code) return Response.json({ error:'Name and code required' }, { status:400 });
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e =>
+        e.name.toLowerCase() === name.toLowerCase() &&
+        e.editCode?.toUpperCase() === code.toUpperCase()
+      );
+      if (!entry) return Response.json({ error:'Invalid name or code' }, { status:404 });
+      return Response.json({ ok:true, entry:{ name:entry.name, email:entry.email, picks:entry.picks } });
+    }
+
+    if (body.action === 'update-entry') {
+      const locked = await getLocked(poolId);
+      if (locked) return Response.json({ error:'Entries are locked' }, { status:403 });
+      const { name, code, picks } = body;
+      if (!name || !code) return Response.json({ error:'Name and code required' }, { status:400 });
+      if (!picks || picks.length !== 9) return Response.json({ error:'9 picks required' }, { status:400 });
+      const entries = await getEntries(poolId);
+      const idx = entries.findIndex(e =>
+        e.name.toLowerCase() === name.toLowerCase() &&
+        e.editCode?.toUpperCase() === code.toUpperCase()
+      );
+      if (idx === -1) return Response.json({ error:'Invalid name or code' }, { status:404 });
+      entries[idx].picks = picks;
+      entries[idx].ts = Date.now();
       await saveEntries(poolId, entries);
       return Response.json({ ok:true, entries });
+    }
+
+    if (body.action === 'resend-code') {
+      const { name, email } = body;
+      if (!name?.trim() || !email?.trim()) return Response.json({ error:'Name and email required' }, { status:400 });
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e =>
+        e.name.toLowerCase() === name.trim().toLowerCase() &&
+        e.email?.toLowerCase() === email.trim().toLowerCase()
+      );
+      if (!entry) return Response.json({ error:'No entry found with that name and email' }, { status:404 });
+
+      if (process.env.RESEND_API_KEY) {
+        const meta = await getPoolMeta(poolId);
+        const poolName = meta?.poolName || 'Golf Pool';
+        const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
+        try {
+          await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+              to: entry.email,
+              subject: `Your edit code for ${poolName} (resent)`,
+              html: `
+                <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
+                  <h2 style="color:#1a2a5c;">Your edit code</h2>
+                  <p>Hey ${entry.name},</p>
+                  <p>Here's your edit code for <b>${poolName}</b>:</p>
+                  <div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0;">
+                    <div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1a2a5c;">${entry.editCode}</div>
+                  </div>
+                  <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
+                </div>
+              `,
+            }),
+          });
+        } catch (e) { console.error('email send failed:', e.message); }
+      }
+      return Response.json({ ok:true });
     }
 
     if (body.action === 'delete-own') {
