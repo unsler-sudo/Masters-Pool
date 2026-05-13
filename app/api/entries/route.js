@@ -454,6 +454,8 @@ export async function POST(request) {
       }
       return Response.json({ ok:true });
     }
+
+    if (body.action === 'delete-own') {
       const locked = await getLocked(poolId);
       if (locked) return Response.json({ error:'Cannot remove — tournament started!' }, { status:403 });
       const entries = await getEntries(poolId);
