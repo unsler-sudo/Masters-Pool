@@ -913,6 +913,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     </div>
                     <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Entry submitted — picks hidden until tee-off':'Tap to '+(op?'collapse':'expand')}</div>
                   </div>
+                  {!locked&&<button type="button" onClick={(ev)=>{ev.stopPropagation();setShowEditModal(e.name);}} style={{background:'transparent',border:`1px solid ${T.primary}30`,color:T.primary,padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>✏️ Edit</button>}
                   {!picksHidden&&<div style={{fontWeight:800,fontSize:17,color:T.primary}}>{fmt(tot)}</div>}
                 </div>
                 {!picksHidden&&op&&<div style={{marginTop:8,borderTop:'1px solid #eee8dc',paddingTop:8,animation:'sd .2s ease'}}>
@@ -924,7 +925,6 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       <span style={{fontWeight:700,fontSize:13,color:T.primary}}>{fmt(p?.earnings)}</span>
                     </div>;})}
                   </div>;})}
-                  {!locked&&<button type="button" onClick={(ev)=>{ev.stopPropagation();setShowEditModal(e.name);}} style={{marginTop:6,background:'transparent',border:`1px solid ${T.primary}40`,color:T.primary,padding:'5px 12px',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer'}}>✏️ Edit my picks</button>}
                 </div>}
                 {!picksHidden&&!op&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>
                   {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} style={{fontSize:10,background:T.navActive,padding:'2px 7px',borderRadius:4,border:`1px solid ${T.cardBorder}`,borderLeft:`3px solid ${t?.color||'#ccc'}`}}><Flag c={p?.country}/> {pn.split(', ')[0]} <b style={{color:T.primary}}>{fmt(p?.earnings)}</b></span>;})}
