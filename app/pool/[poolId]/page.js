@@ -219,9 +219,11 @@ export default function App(){
     const days = Math.floor(diff / 86400000);
     const hrs = Math.floor((diff % 86400000) / 3600000);
     const mins = Math.floor((diff % 3600000) / 60000);
-    if (days > 0) return `${days}d ${hrs}h until entries lock`;
-    if (hrs > 0) return `${hrs}h ${mins}m until entries lock`;
-    return `${mins}m until entries lock`;
+    const secs = Math.floor((diff % 60000) / 1000);
+    if (days > 0) return `${days}d ${hrs}h ${mins}m ${secs}s until entries lock`;
+    if (hrs > 0) return `${hrs}h ${mins}m ${secs}s until entries lock`;
+    if (mins > 0) return `${mins}m ${secs}s until entries lock`;
+    return `${secs}s until entries lock`;
   };
   const countdown = getCountdown();
   const allPicks=[...picks[1],...picks[2],...picks[3]];
@@ -495,7 +497,7 @@ export default function App(){
     fetchScores(true);
     setTimeout(()=>fetchAllFields(), 3000);
     timer.current=setInterval(()=>{fetchScores(true);loadEntries();fetchAllFields();setNow(Date.now());},60000);
-    const clock=setInterval(()=>setNow(Date.now()),30000);
+    const clock=setInterval(()=>setNow(Date.now()),1000);
     return()=>{clearInterval(timer.current);clearInterval(clock);};
   },[]);
 
