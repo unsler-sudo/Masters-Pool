@@ -192,6 +192,7 @@ export default function App(){
   const [serverLocked,setServerLocked]=useState(false);
   const [serverPicksHidden,setServerPicksHidden]=useState(true);
   const [lastUp,setLastUp]=useState(null);
+  const rawScoresRef=useRef(null);
   const [openCard,setOpenCard]=useState(null);
   const [activeTier,setActiveTier]=useState(1);
   const [submitting,setSubmitting]=useState(false);
@@ -445,13 +446,17 @@ export default function App(){
       setFields(prev=>({...prev,[major]:enriched}));
 
       if(updateDisplay){
-        // Merge with current field to preserve live scores if any exist
+        // Merge with current field to preserve live scores, OR apply cached raw scores
         setField(prev=>{
+          // If we have cached raw scores from API, apply them to the new field
+          if(rawScoresRef.current){
+            return mergeScoresIntoField(enriched, rawScoresRef.current);
+          }
+          // Otherwise preserve any existing live data
           if(!prev||prev.length===0)return enriched;
           return enriched.map(newP=>{
             const existing=prev.find(p=>p.name===newP.name);
             if(existing&&(existing.thru||existing.pos!=='-'||existing.earnings>0)){
-              // Player has live data - preserve it
               return{...newP,pos:existing.pos,score:existing.score,today:existing.today,
                 thru:existing.thru,earnings:existing.earnings,
                 r1:existing.r1,r2:existing.r2,r3:existing.r3,r4:existing.r4};
@@ -485,54 +490,59 @@ export default function App(){
       const data=await r.json();
       const raw=data.data||data.players||data||[];
       if(!Array.isArray(raw)||raw.length===0)throw new Error('No live scores yet');
+      rawScoresRef.current=raw; // Cache for re-merge when field updates
 
       setField(currentField=>{
         if(!currentField||currentField.length===0)return currentField;
-        const updated=currentField.map(f=>{
-          const fName=f.name.toLowerCase().trim();
-          // Build flipped version: "Ludvig Aberg" → "aberg, ludvig"
-          let fNameFlipped='';
-          if(fName.includes(',')){
-            const parts=fName.split(',').map(s=>s.trim());
-            if(parts.length===2)fNameFlipped=`${parts[1]} ${parts[0]}`;
-          } else {
-            const parts=fName.split(' ');
-            if(parts.length>=2)fNameFlipped=`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`;
-          }
-          const match=raw.find(p=>{
-            const pName=(p.player_name||p.dg_player_name||'').toLowerCase().trim();
-            return pName===fName||pName===fNameFlipped;
-          });
-          if(match){
-            const total=match.current_score??match.total_to_par??match.total??null;
-            const todayScore=match.today??null;
-            const thruHoles=match.thru??null;
-            return{...f,
-              pos:match.current_pos!=null&&match.current_pos!=='--'?String(match.current_pos):(match.position||f.pos),
-              score:total!=null?(total===0?'E':(total>0?`+${total}`:String(total))):f.score,
-              today:todayScore!=null?(todayScore===0?'E':(todayScore>0?`+${todayScore}`:String(todayScore))):'',
-              thru:thruHoles!=null&&thruHoles>0?String(thruHoles):'',
-              r1:match.R1??match.round1??null,r2:match.R2??match.round2??null,
-              r3:match.R3??match.round3??null,r4:match.R4??match.round4??null,
-            };
-          }
-          return f;
-        });
-        const em=calcEarnings(updated, TOURNAMENT.purse);
-        updated.forEach(p=>{p.earnings=em[p.name]||0;});
-        if(Object.keys(em).length>0){
-          fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({poolId,action:'save-archive-earnings',password:adminPw||'auto',
-              major:activeMajor,year:new Date().getFullYear(),earnings:em})
-          }).catch(()=>{});
-        }
-        return updated;
+        return mergeScoresIntoField(currentField, raw);
       });
       setLastUp(new Date().toLocaleTimeString());
       setStatus('');
       if(!quiet)msg('Scores updated');
     }catch(e){if(!quiet)setStatus(e.message);}
     setRefreshing(false);
+  };
+
+  // Pure function to merge live scores into field array
+  const mergeScoresIntoField=(currentField, raw)=>{
+    const updated=currentField.map(f=>{
+      const fName=f.name.toLowerCase().trim();
+      let fNameFlipped='';
+      if(fName.includes(',')){
+        const parts=fName.split(',').map(s=>s.trim());
+        if(parts.length===2)fNameFlipped=`${parts[1]} ${parts[0]}`;
+      } else {
+        const parts=fName.split(' ');
+        if(parts.length>=2)fNameFlipped=`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`;
+      }
+      const match=raw.find(p=>{
+        const pName=(p.player_name||p.dg_player_name||'').toLowerCase().trim();
+        return pName===fName||pName===fNameFlipped;
+      });
+      if(match){
+        const total=match.current_score??match.total_to_par??match.total??null;
+        const todayScore=match.today??null;
+        const thruHoles=match.thru??null;
+        return{...f,
+          pos:match.current_pos!=null&&match.current_pos!=='--'?String(match.current_pos):(match.position||f.pos),
+          score:total!=null?(total===0?'E':(total>0?`+${total}`:String(total))):f.score,
+          today:todayScore!=null?(todayScore===0?'E':(todayScore>0?`+${todayScore}`:String(todayScore))):'',
+          thru:thruHoles!=null&&thruHoles>0?String(thruHoles):'',
+          r1:match.R1??match.round1??null,r2:match.R2??match.round2??null,
+          r3:match.R3??match.round3??null,r4:match.R4??match.round4??null,
+        };
+      }
+      return f;
+    });
+    const em=calcEarnings(updated, TOURNAMENT.purse);
+    updated.forEach(p=>{p.earnings=em[p.name]||0;});
+    if(Object.keys(em).length>0){
+      fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'save-archive-earnings',password:adminPw||'auto',
+          major:activeMajor,year:new Date().getFullYear(),earnings:em})
+      }).catch(()=>{});
+    }
+    return updated;
   };
 
   const fetchHoleScores=async(playerName,roundNum)=>{
@@ -575,11 +585,11 @@ export default function App(){
 
   useEffect(()=>{
     fetchSchedule();
-    // Load entries and field first, THEN fetch scores (needs field populated to merge in)
-    Promise.all([loadEntries(),fetchField()]).then(()=>{
-      setReady(true);
-      fetchScores(true); // Now safe to fetch scores - field is ready
-    });
+    // Fire field and scores in PARALLEL - whichever arrives first triggers merge
+    // fetchScores caches raw data in rawScoresRef; fetchField applies it when field loads
+    loadEntries();
+    fetchField().then(()=>setReady(true));
+    fetchScores(true);
     setTimeout(()=>fetchAllFields(), 3000);
     // During tournament: only refresh scores and entries. Don't refetch field (it's locked).
     // Before tournament: refresh everything since field is still being assembled.
