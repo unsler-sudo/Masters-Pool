@@ -575,8 +575,11 @@ export default function App(){
 
   useEffect(()=>{
     fetchSchedule();
-    Promise.all([loadEntries(),fetchField()]).then(()=>setReady(true));
-    fetchScores(true);
+    // Load entries and field first, THEN fetch scores (needs field populated to merge in)
+    Promise.all([loadEntries(),fetchField()]).then(()=>{
+      setReady(true);
+      fetchScores(true); // Now safe to fetch scores - field is ready
+    });
     setTimeout(()=>fetchAllFields(), 3000);
     // During tournament: only refresh scores and entries. Don't refetch field (it's locked).
     // Before tournament: refresh everything since field is still being assembled.
