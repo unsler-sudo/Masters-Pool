@@ -333,6 +333,7 @@ export default function App(){
       // Build odds map — DataGolf returns names as "Last, First", scraper returns "First Last"
       // Store BOTH formats so lookups work regardless of which side queries
       const oddsMap = {};
+      const teeTimeMap = {};
       if(updateDisplay){
         let preds = [];
         const preRes = await fetch('/api/scores?endpoint=pre-tournament');
@@ -347,6 +348,32 @@ export default function App(){
             preds = (rd.rankings||rd.players||[]).map((p,idx)=>({player_name:p.player_name,win:1/(idx+1)}));
           }
         }
+
+        // Fetch tee times from field-updates endpoint
+        try {
+          const fuRes = await fetch('/api/scores?endpoint=field-updates');
+          if(fuRes.ok){
+            const fd = await fuRes.json();
+            const fieldPlayers = fd.field || fd.players || [];
+            fieldPlayers.forEach(p=>{
+              const pname = (p.player_name||'').toLowerCase().trim();
+              if(!pname) return;
+              const teeTime = p.r1_teetime || p.teetime || p.early_late || null;
+              const startHole = p.start_hole || null;
+              if(teeTime){
+                teeTimeMap[pname] = { teeTime, startHole };
+                if(pname.includes(',')){
+                  const parts = pname.split(',').map(s=>s.trim());
+                  if(parts.length===2) teeTimeMap[`${parts[1]} ${parts[0]}`] = { teeTime, startHole };
+                } else {
+                  const pts = pname.split(' ');
+                  if(pts.length>=2) teeTimeMap[`${pts[pts.length-1]}, ${pts.slice(0,-1).join(' ')}`] = { teeTime, startHole };
+                }
+              }
+            });
+          }
+        } catch(e){ console.warn('tee times unavailable:', e.message); }
+
         preds.forEach(p=>{
           if(!p.player_name) return;
           const w = p.win||0;
@@ -392,12 +419,15 @@ export default function App(){
         const odds = win > 0.001 ? `+${Math.round((1/win)*100-100)}` : 'n/a';
         const baseRank = (p.dgRank && p.dgRank < 9999) ? p.dgRank - 1 : i;
         const rank = (useOdds && oddsRank[key] !== undefined) ? oddsRank[key] : baseRank;
+        const teeInfo = teeTimeMap[key] || null;
         return {
           name:p.name, country:p.country||'USA',
           odds, tier:rank<TIER_CUTS[0]?1:rank<TIER_CUTS[1]?2:3,
           rank, win,
           confirmed:p.confirmed,
           onTrack:p.onTrack||false,
+          teeTime: teeInfo?.teeTime || null,
+          startHole: teeInfo?.startHole || null,
           pos:'-',score:'E',today:'',thru:'',earnings:0,r1:null,r2:null,r3:null,r4:null,
         };
       });
@@ -901,6 +931,7 @@ export default function App(){
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800}}>{flip(p.name)}</div>
                     <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
+                    {p.teeTime&&!p.thru&&p.pos==='-'&&<div style={{fontSize:11,color:T.primary,marginTop:3,fontWeight:600}}>⏰ R1 Tee: {p.teeTime}{p.startHole?` · Hole ${p.startHole}`:''}</div>}
                   </div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontSize:26,fontWeight:800,color:T.primary}}>{p.score}</div>
@@ -1219,9 +1250,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           </div>
           <div style={{borderRadius:9,overflow:'hidden',border:`1px solid ${T.cardBorder}`}}>
             <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5}}>
-              <span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:38,textAlign:'center'}}>Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span>
+              <span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee / Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span>
             </div>
-            {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);return(
+            {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);
+            // Show tee time per player until they have actual thru/position data (not just defaults)
+            const hasLiveData=(p.thru&&p.thru!=='')||(p.pos&&p.pos!=='-');
+            const showTeeTime=p.teeTime&&!hasLiveData&&!isCut;
+            return(
               <div key={p.name} onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',background:isCut?'#fafafa':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut?.6:1}}>
                 <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut?'#999':T.primary,fontSize:12}}>{isCut?'✂️':p.pos}</span>
                 <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis'}}>
@@ -1232,7 +1267,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   {!picksHidden&&ow.length>0&&<span style={{fontSize:9,color:'#8b6914',marginLeft:4}}>({ow.join(',')})</span>}
                 </span>
                 <span style={{width:30,textAlign:'center'}}><span style={{fontSize:9,fontWeight:700,color:t?.color,background:t?.color+'18',padding:'1px 5px',borderRadius:3}}>{String.fromCharCode(64+p.tier)}</span></span>
-                <span style={{width:38,textAlign:'center',fontSize:11,color:'#888'}}>{p.thru||'-'}</span>
+                <span style={{width:50,textAlign:'center',fontSize:showTeeTime?9:11,color:showTeeTime?T.primary:'#888',fontWeight:showTeeTime?600:400}}>{showTeeTime?p.teeTime:(p.thru||'-')}</span>
                 <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{isCut?'CUT':p.score}</span>
                 <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmt(p.earnings)}</span>
               </div>);})}
