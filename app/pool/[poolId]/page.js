@@ -191,6 +191,7 @@ export default function App(){
   const [adminOk,setAdminOk]=useState(false);
   const [serverLocked,setServerLocked]=useState(false);
   const [serverPicksHidden,setServerPicksHidden]=useState(true);
+  const [paymentsHidden,setPaymentsHidden]=useState(false);
   const [lastUp,setLastUp]=useState(null);
   const rawScoresRef=useRef(null);
   const [openCard,setOpenCard]=useState(null);
@@ -257,6 +258,7 @@ export default function App(){
       if(d.entries)setEntries(d.entries);
       if(d.locked!==undefined)setServerLocked(d.locked);
       if(d.picksHidden!==undefined)setServerPicksHidden(d.picksHidden);
+      if(d.paymentsHidden!==undefined)setPaymentsHidden(d.paymentsHidden);
       if(d.payments)setPayments(d.payments);
       if(d.meta)setPoolMeta(d.meta);
       if(d.major&&THEMES[d.major]){
@@ -822,6 +824,7 @@ export default function App(){
       if(d.entries!==undefined)setEntries(d.entries||[]);
       if(d.locked!==undefined)setServerLocked(d.locked);
       if(d.picksHidden!==undefined)setServerPicksHidden(d.picksHidden);
+      if(d.paymentsHidden!==undefined)setPaymentsHidden(d.paymentsHidden);
       if(d.payments!==undefined)setPayments(d.payments||{});
       if(d.major!==undefined)setActiveMajor(d.major);
       return d;
@@ -1216,7 +1219,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <div style={{flex:1}}>
                     <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                       <span style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700}}>{e.name}</span>
-                      <span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,background:paid?'#e8f5e8':'#f5f5f5',color:paid?'#2d7a1e':'#aaa',border:`1px solid ${paid?'#2d7a1e30':'#ddd'}`}}>{paid?'✓ Paid':'Unpaid'}</span>
+                      {!paymentsHidden&&<span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,background:paid?'#e8f5e8':'#f5f5f5',color:paid?'#2d7a1e':'#aaa',border:`1px solid ${paid?'#2d7a1e30':'#ddd'}`}}>{paid?'✓ Paid':'Unpaid'}</span>}
                     </div>
                     <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Entry submitted — picks hidden until tee-off':'Tap to '+(op?'collapse':'expand')}</div>
                   </div>
@@ -1585,6 +1588,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
+            </div>
+            <div style={sec}><h3 style={stl}>💰 Show/Hide Payment Status</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Paid/Unpaid badges are currently <b>{paymentsHidden?'hidden':'visible'}</b>. Useful to hide during the tournament when payment status is no longer relevant.</p>
+              <button type="button" style={paymentsHidden?pri:dan} onClick={async()=>{const d=await adminAction(paymentsHidden?'show-payments':'hide-payments');if(d?.ok){setPaymentsHidden(!paymentsHidden);msg(paymentsHidden?'Payment badges visible':'Payment badges hidden');}}}>{paymentsHidden?'👀 Show Payment Badges':'🙈 Hide Payment Badges'}</button>
             </div>
             <div style={sec}>
               <h3 style={stl}>💵 Entry Fee & Payouts</h3>
