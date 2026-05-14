@@ -556,27 +556,31 @@ export default function App(){
       const data=await r.json();
       const all=data.data||data.players||data.scores||[];
       if(!all.length)throw new Error('No hole score data available yet');
-      const flipped=flip(playerName).toLowerCase();
-      const lastName=flipped.split(' ').pop();
-      const record=all.find(s=>{
-        const n=(s.player_name||'').toLowerCase();
-        const roundMatch=(s.round_num??s.round??0)===roundNum;
-        return roundMatch&&(n.includes(lastName)||lastName.includes(n.split(' ').pop()));
+
+      // Match player by name (DataGolf returns "Last, First")
+      const flipped=flip(playerName).toLowerCase(); // "alex fitzpatrick"
+      const lastName=flipped.split(' ').pop(); // "fitzpatrick"
+      const player=all.find(p=>{
+        const n=(p.player_name||'').toLowerCase();
+        // n is like "fitzpatrick, alex"
+        return n.startsWith(lastName+',')||n.includes(', '+flipped.split(' ').slice(0,-1).join(' '));
       });
-      let holeScores=null;
-      if(record){
-        holeScores=record.hole_scores||record.scores||record.strokes||null;
-        if(!Array.isArray(holeScores)&&holeScores&&typeof holeScores==='object')holeScores=Object.values(holeScores);
-      }else{
-        const playerObj=all.find(s=>{const n=(s.player_name||'').toLowerCase();return n.includes(lastName)||lastName.includes(n.split(' ').pop());});
-        if(playerObj){const key=`R${roundNum}`;const alt=playerObj[key]||playerObj[`round${roundNum}`]||playerObj[`round_${roundNum}`];if(Array.isArray(alt))holeScores=alt;}
-      }
-      if(!holeScores||!holeScores.length)throw new Error('No hole data for R'+roundNum+' yet');
-      const holes=holeScores.slice(0,18).map((score,i)=>{
-        const s=typeof score==='string'?parseInt(score,10):Number(score);
-        const par=record?.course_par?.[i]??record?.hole_pars?.[i]??record?.par?.[i]??4;
-        return{hole:i+1,score:isNaN(s)?null:s,par,toPar:isNaN(s)?null:s-par};
-      });
+      if(!player)throw new Error('Player not found in hole data');
+
+      // Find the requested round in the rounds array
+      const round=(player.rounds||[]).find(rd=>(rd.round_num??rd.round)===roundNum);
+      if(!round||!round.scores)throw new Error('No hole data for R'+roundNum+' yet');
+
+      // Each score is { hole, par, score } — score may be null if not played yet
+      const holes=round.scores.slice(0,18).map(s=>({
+        hole: s.hole,
+        score: (s.score==null||s.score===0)?null:s.score,
+        par: s.par||4,
+        toPar: (s.score==null||s.score===0)?null:(s.score-(s.par||4)),
+      }));
+
+      if(holes.every(h=>h.score===null))throw new Error('No completed holes yet for R'+roundNum);
+
       setHoleData({round:roundNum,holes,loading:false,error:null});
     }catch(e){setHoleData({round:roundNum,holes:[],loading:false,error:e.message});}
   };
