@@ -568,12 +568,15 @@ export default function App(){
       if(!all.length)throw new Error('No hole score data available yet');
 
       // Match player by name (DataGolf returns "Last, First")
-      const flipped=flip(playerName).toLowerCase(); // "alex fitzpatrick"
-      const lastName=flipped.split(' ').pop(); // "fitzpatrick"
+      const flipped=flip(playerName).toLowerCase().trim(); // "alex smalley"
+      const parts=flipped.split(' ');
+      const lastName=parts[parts.length-1]; // "smalley"
+      const firstName=parts.slice(0,-1).join(' '); // "alex"
+      const expectedFormat=`${lastName}, ${firstName}`; // "smalley, alex"
       const player=all.find(p=>{
-        const n=(p.player_name||'').toLowerCase();
-        // n is like "fitzpatrick, alex"
-        return n.startsWith(lastName+',')||n.includes(', '+flipped.split(' ').slice(0,-1).join(' '));
+        const n=(p.player_name||'').toLowerCase().trim();
+        // Must match the exact "lastname, firstname" format
+        return n===expectedFormat || n===flipped;
       });
       if(!player)throw new Error('Player not found in hole data');
 
