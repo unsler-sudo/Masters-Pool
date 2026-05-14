@@ -577,6 +577,75 @@ export async function POST(request) {
       return Response.json({ ok:true, messages:[] });
     }
 
+    // ─── FIELD EDITS (Platform admin only) ─────────────────────────
+    if (body.action === 'field-remove-player') {
+      if (body.password !== process.env.PLATFORM_ADMIN_PASSWORD) {
+        return Response.json({ error:'Platform admin only' }, { status:401 });
+      }
+      const { major, playerName } = body;
+      if (!major || !playerName) return Response.json({ error:'major and playerName required' }, { status:400 });
+      const cacheKey = `pool:scraped_field:${major}`;
+      const raw = await redis('GET', cacheKey);
+      if (!raw) return Response.json({ error:'No field cache found' }, { status:404 });
+      const data = JSON.parse(raw);
+      const target = playerName.toLowerCase().trim();
+      const before = data.players.length;
+      data.players = data.players.filter(p => p.name.toLowerCase().trim() !== target);
+      if (data.players.length === before) {
+        return Response.json({ error:`Player "${playerName}" not found` }, { status:404 });
+      }
+      data.debug = data.debug || {};
+      data.debug.playerCount = data.players.length;
+      await redis('SET', cacheKey, JSON.stringify(data));
+      return Response.json({ ok:true, removed:playerName, fieldSize:data.players.length });
+    }
+
+    if (body.action === 'field-add-player') {
+      if (body.password !== process.env.PLATFORM_ADMIN_PASSWORD) {
+        return Response.json({ error:'Platform admin only' }, { status:401 });
+      }
+      const { major, playerName, country, dgRank } = body;
+      if (!major || !playerName) return Response.json({ error:'major and playerName required' }, { status:400 });
+      const cacheKey = `pool:scraped_field:${major}`;
+      const raw = await redis('GET', cacheKey);
+      if (!raw) return Response.json({ error:'No field cache found' }, { status:404 });
+      const data = JSON.parse(raw);
+      // Check if player already exists
+      const target = playerName.toLowerCase().trim();
+      if (data.players.find(p => p.name.toLowerCase().trim() === target)) {
+        return Response.json({ error:`Player "${playerName}" already in field` }, { status:409 });
+      }
+      data.players.push({
+        name: playerName,
+        country: country || 'USA',
+        confirmed: true,
+        onTrack: false,
+        dgRank: dgRank || null,
+      });
+      data.debug = data.debug || {};
+      data.debug.playerCount = data.players.length;
+      await redis('SET', cacheKey, JSON.stringify(data));
+      return Response.json({ ok:true, added:playerName, fieldSize:data.players.length });
+    }
+
+    if (body.action === 'field-rename-player') {
+      if (body.password !== process.env.PLATFORM_ADMIN_PASSWORD) {
+        return Response.json({ error:'Platform admin only' }, { status:401 });
+      }
+      const { major, oldName, newName } = body;
+      if (!major || !oldName || !newName) return Response.json({ error:'major, oldName, newName required' }, { status:400 });
+      const cacheKey = `pool:scraped_field:${major}`;
+      const raw = await redis('GET', cacheKey);
+      if (!raw) return Response.json({ error:'No field cache found' }, { status:404 });
+      const data = JSON.parse(raw);
+      const target = oldName.toLowerCase().trim();
+      const player = data.players.find(p => p.name.toLowerCase().trim() === target);
+      if (!player) return Response.json({ error:`Player "${oldName}" not found` }, { status:404 });
+      player.name = newName;
+      await redis('SET', cacheKey, JSON.stringify(data));
+      return Response.json({ ok:true, renamed:`${oldName} → ${newName}` });
+    }
+
     if (body.action==='lock'||body.action==='unlock') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       await redis('SET', k(poolId,'locked'), body.action==='lock'?'true':'false');
