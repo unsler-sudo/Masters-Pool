@@ -1217,9 +1217,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     Lost your code? Resend to {entry.email}
                   </button>;
                 }
-                return <p style={{fontSize:10,color:'#aa6644',marginTop:8,textAlign:'center'}}>
-                  No email on file for this entry. Ask the commissioner to delete it so you can re-submit with email.
-                </p>;
+                return <button type="button" onClick={()=>setShowClaimModal(chatName)}
+                  style={{background:'transparent',border:'none',color:'#7a5500',fontSize:11,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline',marginTop:4}}>
+                  📧 No email on file? Add yours to get a code
+                </button>;
               })()}
               <p style={{fontSize:10,color:'#aaa',marginTop:10}}>Your code was emailed to you when you submitted your entry.</p>
             </div>
