@@ -465,7 +465,6 @@ export default function App(){
   };
 
   const fetchScores=async(quiet)=>{
-    if(quiet&&picksHidden)return;
     setRefreshing(true);
     try{
       const r=await fetch('/api/scores?endpoint=in-play');
@@ -474,22 +473,29 @@ export default function App(){
       const raw=data.data||data.players||data||[];
       if(!Array.isArray(raw)||raw.length===0)throw new Error('No live scores yet');
       const updated=field.map(f=>{
+        const fName=f.name.toLowerCase().trim();
+        // Build flipped version: "Ludvig Aberg" → "aberg, ludvig"
+        let fNameFlipped='';
+        if(fName.includes(',')){
+          const parts=fName.split(',').map(s=>s.trim());
+          if(parts.length===2)fNameFlipped=`${parts[1]} ${parts[0]}`;
+        } else {
+          const parts=fName.split(' ');
+          if(parts.length>=2)fNameFlipped=`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`;
+        }
         const match=raw.find(p=>{
-          const pName=(p.player_name||p.dg_player_name||'').toLowerCase();
-          const fName=f.name.toLowerCase();
-          const ln=(p.last_name||'').toLowerCase();
-          const fn=(p.first_name||'').toLowerCase();
-          return pName===fName||fName===`${ln}, ${fn}`;
+          const pName=(p.player_name||p.dg_player_name||'').toLowerCase().trim();
+          return pName===fName||pName===fNameFlipped;
         });
         if(match){
           const total=match.current_score??match.total_to_par??match.total??null;
           const todayScore=match.today??null;
           const thruHoles=match.thru??null;
           return{...f,
-            pos:match.current_pos!=null?String(match.current_pos):(match.position||f.pos),
+            pos:match.current_pos!=null&&match.current_pos!=='--'?String(match.current_pos):(match.position||f.pos),
             score:total!=null?(total===0?'E':(total>0?`+${total}`:String(total))):f.score,
             today:todayScore!=null?(todayScore===0?'E':(todayScore>0?`+${todayScore}`:String(todayScore))):'',
-            thru:thruHoles!=null?String(thruHoles):'',
+            thru:thruHoles!=null&&thruHoles>0?String(thruHoles):'',
             r1:match.R1??match.round1??null,r2:match.R2??match.round2??null,
             r3:match.R3??match.round3??null,r4:match.R4??match.round4??null,
           };
