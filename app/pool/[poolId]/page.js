@@ -940,7 +940,7 @@ export default function App(){
                   <div style={{fontSize:38,lineHeight:1}}><Flag c={p.country}/></div>
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800}}>{flip(p.name)}</div>
-                    <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
+                    <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
                     {p.teeTime&&!pastTeeTime&&<div style={{fontSize:11,color:T.primary,marginTop:3,fontWeight:600}}>⏰ R1 Tee: {p.teeTime}{p.startHole?` · Hole ${p.startHole}`:''}</div>}
                   </div>
                   <div style={{textAlign:'right'}}>
@@ -1231,7 +1231,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   style={{display:'flex',alignItems:'center',padding:'8px 12px',border:'none',borderBottom:'1px solid #f0ebe0',width:'100%',background:sel?`${T.primary}0e`:'#fff',textAlign:'left',opacity:full?.3:1,cursor:full?'not-allowed':'pointer'}}>
                   <div style={{flex:1}}>
                     <div style={{fontWeight:600,fontSize:13}}><Flag c={p.country}/> {flip(p.name)}
-                      {p.confirmed&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8}}>✓</span>}
+                      {p.confirmed&&!pastTeeTime&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8}}>✓</span>}
                       {p.onTrack&&!p.confirmed&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 5px',borderRadius:8}}>– On Track</span>}
                     </div>
                     <div style={{fontSize:11,color:'#8a9580'}}>{p.country} · {p.odds}</div>
@@ -1252,23 +1252,29 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             {fieldLastUpdated&&<div style={{fontSize:10,color:'#8a9580',marginTop:2}}>Field last updated: {fieldLastUpdated} · auto-refreshes every 60s</div>}
           </div>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,fontSize:10,color:'#8a9580',justifyContent:'center'}}>
-            <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#e8f5e8',color:'#2d7a1e',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>✓</span> Confirmed</span>
-            <span>·</span>
-            <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#fff0d6',color:'#7a4a00',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>–</span> On Track</span>
-            <span>·</span>
+            {!pastTeeTime&&<>
+              <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#e8f5e8',color:'#2d7a1e',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>✓</span> Confirmed</span>
+              <span>·</span>
+              <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#fff0d6',color:'#7a4a00',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>–</span> On Track</span>
+              <span>·</span>
+            </>}
             <span>Tap player for scorecard</span>
           </div>
           <div style={{borderRadius:9,overflow:'hidden',border:`1px solid ${T.cardBorder}`}}>
             <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5}}>
-              <span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>{pastTeeTime?'Thru':'Tee'}</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span>
+              <span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee/Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span>
             </div>
-            {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);const showTeeTime=!pastTeeTime&&p.teeTime&&!p.thru;return(
+            {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);
+            // Show tee time per player until they have actual thru data (meaning they've teed off)
+            const hasTeedOff = (p.thru && p.thru !== '' && p.thru !== '-') || (p.pos && p.pos !== '-');
+            const showTeeTime = p.teeTime && !hasTeedOff && !isCut;
+            return(
               <div key={p.name} onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',background:isCut?'#fafafa':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut?.6:1}}>
                 <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut?'#999':T.primary,fontSize:12}}>{isCut?'✂️':p.pos}</span>
                 <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis'}}>
                   <span style={{marginRight:3}}><Flag c={p.country}/></span>
                   <span style={{fontWeight:600,fontSize:12,textDecoration:isCut?'line-through':'none',color:isCut?'#999':'inherit'}}>{flip(p.name)}</span>
-                  {p.confirmed&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8,border:'1px solid #2d7a1e40'}}>✓</span>}
+                  {p.confirmed&&!pastTeeTime&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8,border:'1px solid #2d7a1e40'}}>✓</span>}
                   {p.onTrack&&!p.confirmed&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 5px',borderRadius:8,border:'1px solid #c8840040'}}>–</span>}
                   {!picksHidden&&ow.length>0&&<span style={{fontSize:9,color:'#8b6914',marginLeft:4}}>({ow.join(',')})</span>}
                 </span>
