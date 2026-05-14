@@ -465,6 +465,78 @@ export async function POST(request) {
       return Response.json({ ok:true, entries:filtered });
     }
 
+    // ─── CHAT ───────────────────────────────────────────────────────────
+    if (body.action === 'chat-verify') {
+      const { name, code } = body;
+      if (!name || !code) return Response.json({ error:'Name and code required' }, { status:400 });
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e =>
+        e.name.toLowerCase() === name.toLowerCase() &&
+        e.editCode?.toUpperCase() === code.toUpperCase()
+      );
+      if (!entry) return Response.json({ error:'Invalid name or code' }, { status:404 });
+      return Response.json({ ok:true, verifiedName:entry.name });
+    }
+
+    if (body.action === 'chat-fetch') {
+      const raw = await redis('GET', k(poolId, 'chat'));
+      const messages = raw ? JSON.parse(raw) : [];
+      return Response.json({ ok:true, messages });
+    }
+
+    if (body.action === 'chat-post') {
+      const { name, code, message } = body;
+      if (!name || !code) return Response.json({ error:'Verification required' }, { status:401 });
+      if (!message?.trim()) return Response.json({ error:'Empty message' }, { status:400 });
+      if (message.length > 300) return Response.json({ error:'Message too long (300 max)' }, { status:400 });
+
+      // Verify entry/code
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e =>
+        e.name.toLowerCase() === name.toLowerCase() &&
+        e.editCode?.toUpperCase() === code.toUpperCase()
+      );
+      if (!entry) return Response.json({ error:'Invalid credentials' }, { status:401 });
+
+      // Rate limit: 1 message per 3 seconds per user
+      const rateKey = k(poolId, `chat_rate:${entry.name.toLowerCase()}`);
+      const lastPost = await redis('GET', rateKey);
+      if (lastPost) return Response.json({ error:'Slow down — wait a moment' }, { status:429 });
+      await redis('SETEX', rateKey, 3, '1');
+
+      // Load + append + trim to last 100
+      const raw = await redis('GET', k(poolId, 'chat'));
+      const messages = raw ? JSON.parse(raw) : [];
+      // Strip HTML
+      const cleaned = message.trim().replace(/<[^>]*>/g, '');
+      messages.push({
+        id: Math.random().toString(36).slice(2, 10),
+        name: entry.name,
+        message: cleaned,
+        ts: Date.now(),
+      });
+      while (messages.length > 100) messages.shift();
+      // Store with 30-day TTL (auto-clear between tournaments)
+      await redis('SETEX', k(poolId, 'chat'), 2592000, JSON.stringify(messages));
+      return Response.json({ ok:true, messages });
+    }
+
+    if (body.action === 'chat-delete') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const { messageId } = body;
+      const raw = await redis('GET', k(poolId, 'chat'));
+      if (!raw) return Response.json({ ok:true, messages:[] });
+      const messages = JSON.parse(raw).filter(m => m.id !== messageId);
+      await redis('SETEX', k(poolId, 'chat'), 2592000, JSON.stringify(messages));
+      return Response.json({ ok:true, messages });
+    }
+
+    if (body.action === 'chat-clear-all') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      await redis('DEL', k(poolId, 'chat'));
+      return Response.json({ ok:true, messages:[] });
+    }
+
     if (body.action==='lock'||body.action==='unlock') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       await redis('SET', k(poolId,'locked'), body.action==='lock'?'true':'false');
