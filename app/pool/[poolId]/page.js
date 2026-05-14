@@ -106,7 +106,7 @@ function calcEarnings(players, purse){
   return m;
 }
 
-const TABS=['Standings','Enter Pool','Field','History','Admin'];
+const TABS=['Standings','Enter Pool','Field','Chat','History','Admin'];
 
 export default function App(){
   const params       = useParams();
@@ -202,6 +202,14 @@ export default function App(){
   const [showArchives,setShowArchives]=useState(false);
   const [publicArchives,setPublicArchives]=useState([]);
   const [historyLoaded,setHistoryLoaded]=useState(false);
+  const [chatMessages,setChatMessages]=useState([]);
+  const [chatName,setChatName]=useState('');
+  const [chatCode,setChatCode]=useState('');
+  const [chatVerified,setChatVerified]=useState(false);
+  const [chatInput,setChatInput]=useState('');
+  const [chatSending,setChatSending]=useState(false);
+  const [chatVerifying,setChatVerifying]=useState(false);
+  const chatScrollRef=useRef(null);
   const timer=useRef(null);
 
   const T = { ...THEMES[activeMajor]||THEMES.pga, ...scheduleData[activeMajor] };
@@ -604,6 +612,89 @@ export default function App(){
       return true;
     }catch{msg('Error');return false;}
   };
+
+  // ─── CHAT ─────────────────────────────────────────────────────────────
+  const fetchChat=async()=>{
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'chat-fetch'})});
+      const d=await r.json();
+      if(d.messages){
+        setChatMessages(d.messages);
+        // Auto-scroll to bottom
+        setTimeout(()=>{if(chatScrollRef.current)chatScrollRef.current.scrollTop=chatScrollRef.current.scrollHeight;},50);
+      }
+    }catch{}
+  };
+
+  const verifyChat=async()=>{
+    if(!chatName||!chatCode)return msg('Enter your name and code');
+    setChatVerifying(true);
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'chat-verify',name:chatName,code:chatCode})});
+      const d=await r.json();
+      if(d.error){msg(d.error);setChatVerifying(false);return;}
+      // Save verification to localStorage
+      if(typeof window!=='undefined'){
+        localStorage.setItem(`chat_${poolId}_name`,d.verifiedName);
+        localStorage.setItem(`chat_${poolId}_code`,chatCode.toUpperCase());
+      }
+      setChatName(d.verifiedName);
+      setChatCode(chatCode.toUpperCase());
+      setChatVerified(true);
+      msg('Verified! You can chat now ✓');
+      fetchChat();
+    }catch{msg('Error verifying');}
+    setChatVerifying(false);
+  };
+
+  const sendChatMessage=async()=>{
+    if(!chatInput.trim())return;
+    if(chatInput.length>300)return msg('Message too long (300 max)');
+    setChatSending(true);
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'chat-post',name:chatName,code:chatCode,message:chatInput.trim()})});
+      const d=await r.json();
+      if(d.error){msg(d.error);setChatSending(false);return;}
+      if(d.messages)setChatMessages(d.messages);
+      setChatInput('');
+      setTimeout(()=>{if(chatScrollRef.current)chatScrollRef.current.scrollTop=chatScrollRef.current.scrollHeight;},50);
+    }catch{msg('Error sending');}
+    setChatSending(false);
+  };
+
+  const deleteChatMessage=async(messageId)=>{
+    if(!confirm('Delete this message?'))return;
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'chat-delete',password:adminPw,messageId})});
+      const d=await r.json();
+      if(d.error){msg(d.error);return;}
+      if(d.messages)setChatMessages(d.messages);
+    }catch{msg('Error');}
+  };
+
+  // Restore chat verification from localStorage
+  useEffect(()=>{
+    if(typeof window==='undefined')return;
+    const savedName=localStorage.getItem(`chat_${poolId}_name`);
+    const savedCode=localStorage.getItem(`chat_${poolId}_code`);
+    if(savedName&&savedCode){
+      setChatName(savedName);
+      setChatCode(savedCode);
+      setChatVerified(true);
+    }
+  },[poolId]);
+
+  // Poll chat every 15 seconds when Chat tab is active
+  useEffect(()=>{
+    if(tab!=='Chat')return;
+    fetchChat();
+    const interval=setInterval(fetchChat,15000);
+    return()=>clearInterval(interval);
+  },[tab]);
 
   const deleteOwnEntry=async(name)=>{
     if(!confirm(`Remove your entry "${name}"?`))return;
@@ -1099,6 +1190,101 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           </div>
         </>}
 
+        {tab==='Chat'&&<>
+          {!chatVerified
+            ?<div style={{background:'#fff',borderRadius:11,padding:24,border:`1px solid ${T.cardBorder}`,textAlign:'center'}}>
+              <div style={{fontSize:36,marginBottom:10}}>💬</div>
+              <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,marginBottom:6}}>Join the chat</h3>
+              <p style={{fontSize:12,color:'#888',marginBottom:16}}>Verify with your edit code to start the trash talk.</p>
+              <select value={chatName} onChange={e=>setChatName(e.target.value)}
+                style={{...inp,width:'100%',marginBottom:8,cursor:'pointer'}}>
+                <option value="">Select your name...</option>
+                {entries.map(e=><option key={e.name} value={e.name}>{e.name}</option>)}
+              </select>
+              <input type="text" placeholder="Edit code (XXXXXX)" maxLength={6} value={chatCode}
+                onChange={e=>setChatCode(e.target.value.toUpperCase())}
+                onKeyDown={e=>e.key==='Enter'&&verifyChat()}
+                style={{...inp,width:'100%',marginBottom:10,textAlign:'center',letterSpacing:6,fontSize:16,fontWeight:700,textTransform:'uppercase'}}/>
+              <button type="button" onClick={verifyChat} disabled={chatVerifying}
+                style={{...pri,width:'100%',padding:12,borderRadius:9,opacity:chatVerifying?.5:1}}>
+                {chatVerifying?'Verifying...':'Join Chat →'}
+              </button>
+              <p style={{fontSize:10,color:'#aaa',marginTop:10}}>Code is in the email you got when you submitted your entry. Lost it? Use "Resend code" on your standings entry.</p>
+            </div>
+            :<div>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,padding:'8px 14px',background:`${T.primary}0a`,borderRadius:9}}>
+                <span style={{fontSize:12,color:T.primary,fontWeight:600}}>💬 Chatting as <b>{chatName} ✓</b></span>
+                <button type="button" onClick={()=>{
+                  if(typeof window!=='undefined'){
+                    localStorage.removeItem(`chat_${poolId}_name`);
+                    localStorage.removeItem(`chat_${poolId}_code`);
+                  }
+                  setChatName('');setChatCode('');setChatVerified(false);
+                }} style={{background:'transparent',border:'none',color:T.primary,fontSize:10,cursor:'pointer',textDecoration:'underline'}}>Sign out</button>
+              </div>
+              <div ref={chatScrollRef} style={{
+                background:'#fff',borderRadius:11,border:`1px solid ${T.cardBorder}`,
+                height:380,overflowY:'auto',padding:12,marginBottom:10,
+              }}>
+                {chatMessages.length===0
+                  ?<div style={{textAlign:'center',color:'#aaa',fontSize:13,padding:'40px 0'}}>
+                    <div style={{fontSize:32,marginBottom:8}}>🗣️</div>
+                    No messages yet — start the trash talk!
+                  </div>
+                  :chatMessages.map(m=>{
+                    const isMe=m.name===chatName;
+                    const timeAgo=(()=>{
+                      const diff=Date.now()-m.ts;
+                      if(diff<60000)return 'just now';
+                      if(diff<3600000)return Math.floor(diff/60000)+'m ago';
+                      if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
+                      return Math.floor(diff/86400000)+'d ago';
+                    })();
+                    return(
+                      <div key={m.id} style={{
+                        marginBottom:10,
+                        display:'flex',
+                        flexDirection:isMe?'row-reverse':'row',
+                        gap:8,
+                      }}>
+                        <div style={{
+                          maxWidth:'75%',
+                          background:isMe?T.primary:'#f1f1f1',
+                          color:isMe?'#fff':'#222',
+                          borderRadius:14,
+                          padding:'8px 12px',
+                          borderTopLeftRadius:isMe?14:4,
+                          borderTopRightRadius:isMe?4:14,
+                        }}>
+                          <div style={{fontSize:10,fontWeight:700,opacity:.7,marginBottom:2}}>
+                            {m.name} ✓ <span style={{fontWeight:400,marginLeft:4}}>{timeAgo}</span>
+                          </div>
+                          <div style={{fontSize:14,lineHeight:1.4,wordBreak:'break-word'}}>{m.message}</div>
+                        </div>
+                        {adminOk&&<button type="button" onClick={()=>deleteChatMessage(m.id)}
+                          style={{background:'transparent',border:'none',color:'#c44',cursor:'pointer',fontSize:10,padding:'4px 6px',alignSelf:'flex-end'}}>✕</button>}
+                      </div>
+                    );
+                  })
+                }
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <input type="text" placeholder="Say something..." value={chatInput} maxLength={300}
+                  onChange={e=>setChatInput(e.target.value)}
+                  onKeyDown={e=>e.key==='Enter'&&!chatSending&&sendChatMessage()}
+                  style={{...inp,flex:1}}/>
+                <button type="button" onClick={sendChatMessage} disabled={chatSending||!chatInput.trim()}
+                  style={{...pri,padding:'10px 18px',opacity:(chatSending||!chatInput.trim())?.4:1}}>
+                  {chatSending?'...':'Send'}
+                </button>
+              </div>
+              <div style={{fontSize:10,color:'#aaa',textAlign:'center',marginTop:6}}>
+                {chatInput.length}/300 · Auto-refreshes every 15s
+              </div>
+            </div>
+          }
+        </>}
+
         {tab==='History'&&<>
           <div style={{textAlign:'center',marginBottom:16}}>
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800,color:T.primary,marginBottom:4}}>📚 Past Results</div>
@@ -1282,6 +1468,19 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     </div>;
                   })}
               </div>}
+            </div>
+
+            <div style={sec}>
+              <h3 style={stl}>💬 Chat Moderation</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>{chatMessages.length} messages in pool chat. Use the X button next to messages to delete individual ones.</p>
+              <button type="button" style={dan} onClick={async()=>{
+                if(!confirm('Clear ALL chat messages? This cannot be undone.'))return;
+                const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({poolId,action:'chat-clear-all',password:adminPw})});
+                const d=await r.json();
+                if(d.error){msg(d.error);return;}
+                setChatMessages([]);msg('Chat cleared');
+              }}>🗑 Clear All Chat Messages</button>
             </div>
 
             <div style={{...sec,borderColor:'#d4444460'}}><h3 style={{...stl,color:'#a03030'}}>⚠ Danger</h3><button type="button" style={dan} onClick={async()=>{if(!confirm('Reset everything?'))return;await adminAction('reset');setEntries([]);setPayments({});msg('Reset done');}}>Reset All</button></div>
