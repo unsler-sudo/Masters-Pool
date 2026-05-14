@@ -83,6 +83,7 @@ async function getEntries(pid)     { try { const r=await redis('GET',k(pid,'entr
 async function saveEntries(pid,e)  { await redis('SET',k(pid,'entries'),JSON.stringify(e)); }
 async function getLocked(pid)      { try { return (await redis('GET',k(pid,'locked')))==='true'; } catch { return false; } }
 async function getPicksHidden(pid) { try { const r=await redis('GET',k(pid,'picks_hidden')); return r===null?true:r==='true'; } catch { return true; } }
+async function getPaymentsHidden(pid) { try { return (await redis('GET',k(pid,'payments_hidden')))==='true'; } catch { return false; } }
 async function getPayments(pid)    { try { const r=await redis('GET',k(pid,'payments')); return r?JSON.parse(r):{}; } catch { return {}; } }
 async function savePayments(pid,p) { await redis('SET',k(pid,'payments'),JSON.stringify(p)); }
 async function getMajor(pid)       { try { const r=await redis('GET',k(pid,'major')); return VALID_MAJORS.includes(r)?r:'pga'; } catch { return 'pga'; } }
@@ -249,13 +250,13 @@ export async function GET(request) {
   const poolId = new URL(request.url).searchParams.get('poolId') || 'default';
   try {
     await autoManage(poolId);
-    const [entries, locked, picksHidden, payments, major, meta] = await Promise.all([
-      getEntries(poolId), getLocked(poolId), getPicksHidden(poolId),
+    const [entries, locked, picksHidden, paymentsHidden, payments, major, meta] = await Promise.all([
+      getEntries(poolId), getLocked(poolId), getPicksHidden(poolId), getPaymentsHidden(poolId),
       getPayments(poolId), getMajor(poolId), getPoolMeta(poolId),
     ]);
-    return Response.json({ entries, locked, picksHidden, payments, major, meta });
+    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta });
   } catch (err) {
-    return Response.json({ entries:[], locked:false, picksHidden:true, payments:{}, major:'pga', error:err.message });
+    return Response.json({ entries:[], locked:false, picksHidden:true, paymentsHidden:false, payments:{}, major:'pga', error:err.message });
   }
 }
 
@@ -656,6 +657,12 @@ export async function POST(request) {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       await redis('SET', k(poolId,'picks_hidden'), body.action==='hide-picks'?'true':'false');
       return Response.json({ ok:true, picksHidden:body.action==='hide-picks' });
+    }
+
+    if (body.action==='show-payments'||body.action==='hide-payments') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      await redis('SET', k(poolId,'payments_hidden'), body.action==='hide-payments'?'true':'false');
+      return Response.json({ ok:true, paymentsHidden:body.action==='hide-payments' });
     }
 
     if (body.action==='delete') {
