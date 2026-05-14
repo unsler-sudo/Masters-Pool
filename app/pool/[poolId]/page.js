@@ -931,7 +931,7 @@ export default function App(){
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800}}>{flip(p.name)}</div>
                     <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
-                    {p.teeTime&&!p.thru&&p.pos==='-'&&<div style={{fontSize:11,color:T.primary,marginTop:3,fontWeight:600}}>⏰ R1 Tee: {p.teeTime}{p.startHole?` · Hole ${p.startHole}`:''}</div>}
+                    {p.teeTime&&!pastTeeTime&&<div style={{fontSize:11,color:T.primary,marginTop:3,fontWeight:600}}>⏰ R1 Tee: {p.teeTime}{p.startHole?` · Hole ${p.startHole}`:''}</div>}
                   </div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontSize:26,fontWeight:800,color:T.primary}}>{p.score}</div>
@@ -1250,13 +1250,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           </div>
           <div style={{borderRadius:9,overflow:'hidden',border:`1px solid ${T.cardBorder}`}}>
             <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5}}>
-              <span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee / Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span>
+              <span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>{pastTeeTime?'Thru':'Tee'}</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span>
             </div>
-            {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);
-            // Show tee time per player until they have actual thru/position data (not just defaults)
-            const hasLiveData=(p.thru&&p.thru!=='')||(p.pos&&p.pos!=='-');
-            const showTeeTime=p.teeTime&&!hasLiveData&&!isCut;
-            return(
+            {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);const showTeeTime=!pastTeeTime&&p.teeTime&&!p.thru;return(
               <div key={p.name} onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',background:isCut?'#fafafa':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut?.6:1}}>
                 <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut?'#999':T.primary,fontSize:12}}>{isCut?'✂️':p.pos}</span>
                 <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis'}}>
