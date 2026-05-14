@@ -358,17 +358,27 @@ export default function App(){
             fieldPlayers.forEach(p=>{
               const pname = (p.player_name||'').toLowerCase().trim();
               if(!pname) return;
-              const teeTime = p.r1_teetime || p.teetime || p.early_late || null;
-              const startHole = p.start_hole || null;
-              if(teeTime){
-                teeTimeMap[pname] = { teeTime, startHole };
-                if(pname.includes(',')){
-                  const parts = pname.split(',').map(s=>s.trim());
-                  if(parts.length===2) teeTimeMap[`${parts[1]} ${parts[0]}`] = { teeTime, startHole };
-                } else {
-                  const pts = pname.split(' ');
-                  if(pts.length>=2) teeTimeMap[`${pts[pts.length-1]}, ${pts.slice(0,-1).join(' ')}`] = { teeTime, startHole };
-                }
+              // Find Round 1 tee time from teetimes array
+              const r1 = (p.teetimes||[]).find(t=>t.round_num===1);
+              if(!r1?.teetime) return;
+              // Parse "2026-05-14 08:18" and format to "8:18 AM"
+              const tt = r1.teetime;
+              const timePart = tt.split(' ')[1] || ''; // "08:18"
+              const [hStr,mStr] = timePart.split(':');
+              const h = parseInt(hStr,10);
+              const m = mStr || '00';
+              const ampm = h >= 12 ? 'PM' : 'AM';
+              const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+              const teeTime = `${h12}:${m} ${ampm}`;
+              const startHole = r1.start_hole;
+              const data = { teeTime, startHole };
+              teeTimeMap[pname] = data;
+              if(pname.includes(',')){
+                const parts = pname.split(',').map(s=>s.trim());
+                if(parts.length===2) teeTimeMap[`${parts[1]} ${parts[0]}`] = data;
+              } else {
+                const pts = pname.split(' ');
+                if(pts.length>=2) teeTimeMap[`${pts[pts.length-1]}, ${pts.slice(0,-1).join(' ')}`] = data;
               }
             });
           }
