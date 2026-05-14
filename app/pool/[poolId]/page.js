@@ -982,7 +982,14 @@ export default function App(){
         const p=selectedPlayer;
         const t=TIERS.find(t=>t.id===p.tier);
         const ow=owners(p.name);
-        const rounds=[{label:'R1',val:p.r1,num:1},{label:'R2',val:p.r2,num:2},{label:'R3',val:p.r3,num:3},{label:'R4',val:p.r4,num:4}];
+        const coursePar = 70; // Aronimink par
+        const toPar = (v) => v == null ? null : v - coursePar;
+        const rounds=[
+          {label:'R1',val:toPar(p.r1),raw:p.r1,num:1},
+          {label:'R2',val:toPar(p.r2),raw:p.r2,num:2},
+          {label:'R3',val:toPar(p.r3),raw:p.r3,num:3},
+          {label:'R4',val:toPar(p.r4),raw:p.r4,num:4},
+        ];
         const completedRounds=rounds.filter(r=>r.val!=null);
         const front=holeData.holes.slice(0,9);
         const back=holeData.holes.slice(9,18);
@@ -1026,11 +1033,11 @@ export default function App(){
                       })();
                       const isInProgress = r.num === playerCurrentRound;
                       const clickable = done || isInProgress;
-                      const col=done?(r.val<0?'#1a6b1a':r.val===0?'#555':'#b02020'):'#ccc';
+                      const col=done?(r.val<0?'#1a6b1a':r.val===0?'#000':'#b02020'):'#ccc';
                       return(<button key={r.label} type="button" onClick={()=>clickable&&fetchHoleScores(p.name,r.num)} disabled={!clickable||holeData.loading}
                         style={{flex:1,textAlign:'center',background:active?T.primary:done?'#f5f5f5':clickable?'#fafafa':'#fafafa',borderRadius:12,padding:'10px 4px',border:`2px solid ${active?T.primary:done?col+'44':clickable?'#ccc':'#eee'}`,cursor:clickable?'pointer':'default',transition:'all .15s'}}>
                         <div style={{fontSize:10,color:active?'#fff99a':'#888',fontWeight:600,marginBottom:4}}>{r.label}</div>
-                        {done?<div style={{fontSize:22,fontWeight:800,color:active?'#fff':col}}>{fmtScore(r.val)}</div>:<div style={{fontSize:20,fontWeight:800,color:clickable?'#666':'#ddd'}}>{clickable?'•••':'-'}</div>}
+                        {done?<div style={{fontSize:22,fontWeight:800,color:active?'#fff':col}}>{r.raw}</div>:<div style={{fontSize:20,fontWeight:800,color:clickable?'#666':'#ddd'}}>{clickable?'•••':'-'}</div>}
                         {(done||clickable)&&<div style={{fontSize:9,color:active?'#ffffff99':'#aaa',marginTop:2}}>{active?'▲ hide':isInProgress?'live':'tap'}</div>}
                       </button>);
                     })}
