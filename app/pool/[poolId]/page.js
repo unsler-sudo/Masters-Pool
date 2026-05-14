@@ -676,6 +676,18 @@ export default function App(){
     }catch{msg('Error');}
   };
 
+  const reactToMessage=async(messageId,emoji)=>{
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'chat-react',name:chatName,code:chatCode,messageId,emoji})});
+      const d=await r.json();
+      if(d.error){msg(d.error);return;}
+      if(d.messages)setChatMessages(d.messages);
+    }catch{}
+  };
+
+  const [reactionPickerFor,setReactionPickerFor]=useState(null);
+
   // Restore chat verification from localStorage
   useEffect(()=>{
     if(typeof window==='undefined')return;
@@ -1253,26 +1265,62 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       if(diff<86400000)return Math.floor(diff/3600000)+'h ago';
                       return Math.floor(diff/86400000)+'d ago';
                     })();
+                    const reactions=m.reactions||{};
+                    const reactionEntries=Object.entries(reactions);
+                    const QUICK_REACTIONS=['👍','😂','🔥','💀','🤡','🦅','🐦','💯'];
                     return(
                       <div key={m.id} style={{
-                        marginBottom:10,
+                        marginBottom:14,
                         display:'flex',
                         flexDirection:isMe?'row-reverse':'row',
                         gap:8,
                       }}>
-                        <div style={{
-                          maxWidth:'75%',
-                          background:isMe?T.primary:'#f1f1f1',
-                          color:isMe?'#fff':'#222',
-                          borderRadius:14,
-                          padding:'8px 12px',
-                          borderTopLeftRadius:isMe?14:4,
-                          borderTopRightRadius:isMe?4:14,
-                        }}>
-                          <div style={{fontSize:10,fontWeight:700,opacity:.7,marginBottom:2}}>
-                            {m.name} ✓ <span style={{fontWeight:400,marginLeft:4}}>{timeAgo}</span>
+                        <div style={{maxWidth:'75%',position:'relative'}}>
+                          <div onClick={()=>setReactionPickerFor(reactionPickerFor===m.id?null:m.id)} style={{
+                            background:isMe?T.primary:'#f1f1f1',
+                            color:isMe?'#fff':'#222',
+                            borderRadius:14,
+                            padding:'8px 12px',
+                            borderTopLeftRadius:isMe?14:4,
+                            borderTopRightRadius:isMe?4:14,
+                            cursor:'pointer',
+                          }}>
+                            <div style={{fontSize:10,fontWeight:700,opacity:.7,marginBottom:2}}>
+                              {m.name} ✓ <span style={{fontWeight:400,marginLeft:4}}>{timeAgo}</span>
+                            </div>
+                            <div style={{fontSize:14,lineHeight:1.4,wordBreak:'break-word'}}>{m.message}</div>
                           </div>
-                          <div style={{fontSize:14,lineHeight:1.4,wordBreak:'break-word'}}>{m.message}</div>
+                          {reactionEntries.length>0&&<div style={{display:'flex',gap:3,marginTop:4,flexWrap:'wrap',justifyContent:isMe?'flex-end':'flex-start'}}>
+                            {reactionEntries.map(([emoji,users])=>{
+                              const userReacted=users.includes(chatName);
+                              return <button key={emoji} type="button" onClick={()=>reactToMessage(m.id,emoji)}
+                                title={users.join(', ')}
+                                style={{background:userReacted?`${T.primary}25`:'#fff',border:`1px solid ${userReacted?T.primary:'#ddd'}`,borderRadius:12,padding:'2px 7px',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:3}}>
+                                <span>{emoji}</span>
+                                <span style={{fontSize:10,fontWeight:700,color:userReacted?T.primary:'#666'}}>{users.length}</span>
+                              </button>;
+                            })}
+                          </div>}
+                          {reactionPickerFor===m.id&&<div style={{
+                            position:'absolute',
+                            bottom:'100%',
+                            [isMe?'right':'left']:0,
+                            marginBottom:6,
+                            background:'#fff',
+                            borderRadius:20,
+                            padding:'6px 8px',
+                            boxShadow:'0 4px 16px rgba(0,0,0,.15)',
+                            display:'flex',
+                            gap:2,
+                            zIndex:5,
+                          }} onClick={e=>e.stopPropagation()}>
+                            {QUICK_REACTIONS.map(emoji=>(
+                              <button key={emoji} type="button" onClick={()=>{reactToMessage(m.id,emoji);setReactionPickerFor(null);}}
+                                style={{background:'transparent',border:'none',fontSize:20,cursor:'pointer',padding:'2px 4px',borderRadius:6,lineHeight:1}}>
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>}
                         </div>
                         {adminOk&&<button type="button" onClick={()=>deleteChatMessage(m.id)}
                           style={{background:'transparent',border:'none',color:'#c44',cursor:'pointer',fontSize:10,padding:'4px 6px',alignSelf:'flex-end'}}>✕</button>}
@@ -1292,7 +1340,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </button>
               </div>
               <div style={{fontSize:10,color:'#aaa',textAlign:'center',marginTop:6}}>
-                {chatInput.length}/300 · Live updates
+                {chatInput.length}/300 · Live updates · Tap a message to react
               </div>
             </div>
           }
