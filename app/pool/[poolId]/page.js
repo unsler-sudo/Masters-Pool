@@ -358,14 +358,20 @@ export default function App(){
           if(fuRes.ok){
             const fd = await fuRes.json();
             const fieldPlayers = fd.field || fd.players || [];
+            // Determine current tournament round (default to 1 if not specified)
+            const currentRound = fd.current_round || 1;
             fieldPlayers.forEach(p=>{
               const pname = (p.player_name||'').toLowerCase().trim();
               if(!pname) return;
-              // Find Round 1 tee time from teetimes array
-              const r1 = (p.teetimes||[]).find(t=>t.round_num===1);
-              if(!r1?.teetime) return;
+              // Find the tee time for the current round (or next upcoming round)
+              const teetimes = p.teetimes || [];
+              // Try current round first, then next round, then any future round
+              const nextRound = teetimes
+                .filter(t => t.round_num >= currentRound)
+                .sort((a,b) => a.round_num - b.round_num)[0];
+              if(!nextRound?.teetime) return;
               // Parse "2026-05-14 08:18" and format to "8:18 AM"
-              const tt = r1.teetime;
+              const tt = nextRound.teetime;
               const timePart = tt.split(' ')[1] || ''; // "08:18"
               const [hStr,mStr] = timePart.split(':');
               const h = parseInt(hStr,10);
@@ -373,8 +379,9 @@ export default function App(){
               const ampm = h >= 12 ? 'PM' : 'AM';
               const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
               const teeTime = `${h12}:${m} ${ampm}`;
-              const startHole = r1.start_hole;
-              const data = { teeTime, startHole };
+              const startHole = nextRound.start_hole;
+              const roundNum = nextRound.round_num;
+              const data = { teeTime, startHole, roundNum };
               teeTimeMap[pname] = data;
               if(pname.includes(',')){
                 const parts = pname.split(',').map(s=>s.trim());
@@ -441,6 +448,7 @@ export default function App(){
           onTrack:p.onTrack||false,
           teeTime: teeInfo?.teeTime || null,
           startHole: teeInfo?.startHole || null,
+          teeRoundNum: teeInfo?.roundNum || null,
           pos:'-',score:'E',today:'',thru:'',earnings:0,r1:null,r2:null,r3:null,r4:null,
         };
       });
@@ -991,7 +999,7 @@ export default function App(){
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800}}>{flip(p.name)}</div>
                     <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
-                    {p.teeTime&&!pastTeeTime&&<div style={{fontSize:11,color:T.primary,marginTop:3,fontWeight:600}}>⏰ R1 Tee: {p.teeTime}{p.startHole?` · Hole ${p.startHole}`:''}</div>}
+                    {p.teeTime&&<div style={{fontSize:11,color:T.primary,marginTop:3,fontWeight:600}}>⏰ R{p.teeRoundNum||1} Tee: {p.teeTime}{p.startHole?` · Hole ${p.startHole}`:''}</div>}
                   </div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontSize:26,fontWeight:800,color:T.primary}}>{p.score}</div>
