@@ -445,7 +445,20 @@ export default function App(){
       setFields(prev=>({...prev,[major]:enriched}));
 
       if(updateDisplay){
-        setField(enriched);
+        // Merge with current field to preserve live scores if any exist
+        setField(prev=>{
+          if(!prev||prev.length===0)return enriched;
+          return enriched.map(newP=>{
+            const existing=prev.find(p=>p.name===newP.name);
+            if(existing&&(existing.thru||existing.pos!=='-'||existing.earnings>0)){
+              // Player has live data - preserve it
+              return{...newP,pos:existing.pos,score:existing.score,today:existing.today,
+                thru:existing.thru,earnings:existing.earnings,
+                r1:existing.r1,r2:existing.r2,r3:existing.r3,r4:existing.r4};
+            }
+            return newP;
+          });
+        });
         const confirmed = enriched.filter(p=>p.confirmed).length;
         const onTrack   = enriched.filter(p=>p.onTrack&&!p.confirmed).length;
         const cached = scrapeData.fromCache ? ' · cached' : '';
@@ -561,7 +574,14 @@ export default function App(){
     Promise.all([loadEntries(),fetchField()]).then(()=>setReady(true));
     fetchScores(true);
     setTimeout(()=>fetchAllFields(), 3000);
-    timer.current=setInterval(()=>{fetchScores(true);loadEntries();fetchAllFields();setNow(Date.now());},60000);
+    // During tournament: only refresh scores and entries. Don't refetch field (it's locked).
+    // Before tournament: refresh everything since field is still being assembled.
+    timer.current=setInterval(()=>{
+      fetchScores(true);
+      loadEntries();
+      if(!pastTeeTime)fetchAllFields();
+      setNow(Date.now());
+    },60000);
     const clock=setInterval(()=>setNow(Date.now()),1000);
 
     // Refresh immediately when user returns to the page after backgrounding it
@@ -569,7 +589,7 @@ export default function App(){
       if(document.visibilityState==='visible'){
         fetchScores(true);
         loadEntries();
-        fetchAllFields();
+        if(!pastTeeTime)fetchAllFields();
         setNow(Date.now());
       }
     };
