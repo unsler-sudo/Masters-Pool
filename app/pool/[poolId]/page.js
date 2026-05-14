@@ -687,6 +687,7 @@ export default function App(){
   };
 
   const [reactionPickerFor,setReactionPickerFor]=useState(null);
+  const [customEmojiFor,setCustomEmojiFor]=useState(null);
 
   // Restore chat verification from localStorage
   useEffect(()=>{
@@ -810,6 +811,42 @@ export default function App(){
               <button type="button" onClick={handleSubmit} style={{...pri,width:'100%',padding:12,borderRadius:9,marginBottom:8}}>Unlock Picks →</button>
               {entryToEdit?.email&&<button type="button" onClick={()=>{resendCode(showEditModal,entryToEdit.email);setShowEditModal(null);}} style={{background:'transparent',border:'none',color:T.primary,fontSize:12,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline'}}>Resend code to {entryToEdit.email}</button>}
               <button type="button" onClick={()=>setShowEditModal(null)} style={{background:'transparent',border:'none',color:'#888',fontSize:12,width:'100%',padding:8,cursor:'pointer'}}>Cancel</button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {customEmojiFor&&(()=>{
+        const handleEmojiSubmit=()=>{
+          const input=document.getElementById('customEmojiInput');
+          const val=input.value.trim();
+          if(!val)return;
+          // Extract first emoji-like character (handles multi-codepoint emojis)
+          const match=val.match(/\p{Emoji_Presentation}|\p{Emoji}\uFE0F/u);
+          const emoji=match?match[0]:val;
+          if(emoji.length>10)return msg('Please pick a single emoji');
+          reactToMessage(customEmojiFor,emoji);
+          setCustomEmojiFor(null);
+        };
+        return(
+          <div onClick={()=>setCustomEmojiFor(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:160,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:24,maxWidth:340,width:'100%',animation:'su .25s ease'}}>
+              <div style={{textAlign:'center',marginBottom:16}}>
+                <div style={{fontSize:36,marginBottom:6}}>😀</div>
+                <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,marginBottom:4}}>Pick any emoji</h3>
+                <p style={{fontSize:12,color:'#888'}}>Tap below and use your emoji keyboard</p>
+              </div>
+              <input
+                id="customEmojiInput"
+                autoFocus
+                type="text"
+                inputMode="text"
+                style={{...inp,width:'100%',fontSize:32,textAlign:'center',padding:'14px 12px',marginBottom:10}}
+                placeholder="Tap here & open emoji keyboard"
+                onKeyDown={e=>e.key==='Enter'&&handleEmojiSubmit()}
+              />
+              <button type="button" onClick={handleEmojiSubmit} style={{...pri,width:'100%',padding:12,borderRadius:9,marginBottom:8}}>Add Reaction →</button>
+              <button type="button" onClick={()=>setCustomEmojiFor(null)} style={{background:'transparent',border:'none',color:'#888',fontSize:12,width:'100%',padding:8,cursor:'pointer'}}>Cancel</button>
             </div>
           </div>
         );
@@ -1314,6 +1351,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                             display:'flex',
                             gap:2,
                             zIndex:5,
+                            alignItems:'center',
                           }} onClick={e=>e.stopPropagation()}>
                             {QUICK_REACTIONS.map(emoji=>(
                               <button key={emoji} type="button" onClick={()=>{reactToMessage(m.id,emoji);setReactionPickerFor(null);}}
@@ -1321,6 +1359,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                                 {emoji}
                               </button>
                             ))}
+                            <div style={{width:1,height:20,background:'#ddd',margin:'0 2px'}}/>
+                            <button type="button" onClick={()=>{setReactionPickerFor(null);setCustomEmojiFor(m.id);}}
+                              title="Add any emoji"
+                              style={{background:'#f0f0f0',border:'none',fontSize:14,cursor:'pointer',padding:'4px 8px',borderRadius:6,lineHeight:1,color:'#666',fontWeight:700}}>
+                              +
+                            </button>
                           </div>}
                         </div>
                         {adminOk&&<button type="button" onClick={()=>deleteChatMessage(m.id)}
