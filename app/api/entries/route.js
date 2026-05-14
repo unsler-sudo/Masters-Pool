@@ -514,9 +514,49 @@ export async function POST(request) {
         name: entry.name,
         message: cleaned,
         ts: Date.now(),
+        reactions: {},
       });
       while (messages.length > 100) messages.shift();
       // Store with 30-day TTL (auto-clear between tournaments)
+      await redis('SETEX', k(poolId, 'chat'), 2592000, JSON.stringify(messages));
+      return Response.json({ ok:true, messages });
+    }
+
+    if (body.action === 'chat-react') {
+      const { name, code, messageId, emoji } = body;
+      if (!name || !code) return Response.json({ error:'Verification required' }, { status:401 });
+      if (!messageId || !emoji) return Response.json({ error:'Message ID and emoji required' }, { status:400 });
+
+      // Verify entry/code
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e =>
+        e.name.toLowerCase() === name.toLowerCase() &&
+        e.editCode?.toUpperCase() === code.toUpperCase()
+      );
+      if (!entry) return Response.json({ error:'Invalid credentials' }, { status:401 });
+
+      // Load messages
+      const raw = await redis('GET', k(poolId, 'chat'));
+      if (!raw) return Response.json({ error:'Message not found' }, { status:404 });
+      const messages = JSON.parse(raw);
+      const msgIdx = messages.findIndex(m => m.id === messageId);
+      if (msgIdx === -1) return Response.json({ error:'Message not found' }, { status:404 });
+
+      // Toggle reaction
+      if (!messages[msgIdx].reactions) messages[msgIdx].reactions = {};
+      const existing = messages[msgIdx].reactions[emoji] || [];
+      const userIdx = existing.indexOf(entry.name);
+      if (userIdx === -1) {
+        existing.push(entry.name);
+      } else {
+        existing.splice(userIdx, 1);
+      }
+      if (existing.length > 0) {
+        messages[msgIdx].reactions[emoji] = existing;
+      } else {
+        delete messages[msgIdx].reactions[emoji];
+      }
+
       await redis('SETEX', k(poolId, 'chat'), 2592000, JSON.stringify(messages));
       return Response.json({ ok:true, messages });
     }
