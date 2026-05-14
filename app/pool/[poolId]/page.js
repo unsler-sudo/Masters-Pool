@@ -1209,7 +1209,19 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 style={{...pri,width:'100%',padding:12,borderRadius:9,opacity:chatVerifying?.5:1}}>
                 {chatVerifying?'Verifying...':'Join Chat →'}
               </button>
-              <p style={{fontSize:10,color:'#aaa',marginTop:10}}>Code is in the email you got when you submitted your entry. Lost it? Use "Resend code" on your standings entry.</p>
+              {chatName&&(()=>{
+                const entry=entries.find(e=>e.name===chatName);
+                if(entry?.email){
+                  return <button type="button" onClick={()=>{resendCode(chatName,entry.email);}}
+                    style={{background:'transparent',border:'none',color:T.primary,fontSize:11,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline',marginTop:4}}>
+                    Lost your code? Resend to {entry.email}
+                  </button>;
+                }
+                return <p style={{fontSize:10,color:'#aa6644',marginTop:8,textAlign:'center'}}>
+                  No email on file for this entry. Ask the commissioner to delete it so you can re-submit with email.
+                </p>;
+              })()}
+              <p style={{fontSize:10,color:'#aaa',marginTop:10}}>Your code was emailed to you when you submitted your entry.</p>
             </div>
             :<div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,padding:'8px 14px',background:`${T.primary}0a`,borderRadius:9}}>
