@@ -688,11 +688,11 @@ export default function App(){
     }
   },[poolId]);
 
-  // Poll chat every 15 seconds when Chat tab is active
+  // Poll chat every 1 second when Chat tab is active (only active when tab is open)
   useEffect(()=>{
     if(tab!=='Chat')return;
     fetchChat();
-    const interval=setInterval(fetchChat,15000);
+    const interval=setInterval(fetchChat,1000);
     return()=>clearInterval(interval);
   },[tab]);
 
@@ -1279,7 +1279,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </button>
               </div>
               <div style={{fontSize:10,color:'#aaa',textAlign:'center',marginTop:6}}>
-                {chatInput.length}/300 · Auto-refreshes every 15s
+                {chatInput.length}/300 · Live updates
               </div>
             </div>
           }
