@@ -1025,10 +1025,15 @@ export default function App(){
                       // A round is "in progress" if player has thru data > 0 but no completed round score
                       // Find the lowest round number that's not done — that's the current round
                       const playerCurrentRound = (()=>{
-                        if(p.r1==null && (p.thru||p.pos!=='-'))return 1;
-                        if(p.r1!=null && p.r2==null && (p.thru||p.pos!=='-'))return 2;
-                        if(p.r2!=null && p.r3==null && (p.thru||p.pos!=='-'))return 3;
-                        if(p.r3!=null && p.r4==null && (p.thru||p.pos!=='-'))return 4;
+                        // Player is "in progress" only if they have an active thru count between 1-17
+                        // (0 = haven't started, 18 = finished, then waiting for next round)
+                        const thruNum = parseInt(p.thru, 10);
+                        const isActivelyPlaying = thruNum > 0 && thruNum < 18;
+                        if(!isActivelyPlaying)return null;
+                        if(p.r1==null)return 1;
+                        if(p.r2==null)return 2;
+                        if(p.r3==null)return 3;
+                        if(p.r4==null)return 4;
                         return null;
                       })();
                       const isInProgress = r.num === playerCurrentRound;
