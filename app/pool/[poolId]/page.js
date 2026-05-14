@@ -996,16 +996,28 @@ export default function App(){
                   </div>
                 </div>
                 <div style={{marginBottom:4}}>
-                  <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:1,marginBottom:8}}>ROUNDS{completedRounds.length>0?' — tap a round for hole scores':''}</div>
+                  <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:1,marginBottom:8}}>ROUNDS — tap any started round for hole scores</div>
                   <div style={{display:'flex',gap:8}}>
                     {rounds.map(r=>{
-                      const active=holeData.round===r.num;const done=r.val!=null;
+                      const active=holeData.round===r.num;
+                      const done=r.val!=null;
+                      // A round is "in progress" if player has thru data > 0 but no completed round score
+                      // Find the lowest round number that's not done — that's the current round
+                      const playerCurrentRound = (()=>{
+                        if(p.r1==null && (p.thru||p.pos!=='-'))return 1;
+                        if(p.r1!=null && p.r2==null && (p.thru||p.pos!=='-'))return 2;
+                        if(p.r2!=null && p.r3==null && (p.thru||p.pos!=='-'))return 3;
+                        if(p.r3!=null && p.r4==null && (p.thru||p.pos!=='-'))return 4;
+                        return null;
+                      })();
+                      const isInProgress = r.num === playerCurrentRound;
+                      const clickable = done || isInProgress;
                       const col=done?(r.val<0?'#1a6b1a':r.val===0?'#555':'#b02020'):'#ccc';
-                      return(<button key={r.label} type="button" onClick={()=>done&&fetchHoleScores(p.name,r.num)} disabled={!done||holeData.loading}
-                        style={{flex:1,textAlign:'center',background:active?T.primary:done?'#f5f5f5':'#fafafa',borderRadius:12,padding:'10px 4px',border:`2px solid ${active?T.primary:done?col+'44':'#eee'}`,cursor:done?'pointer':'default',transition:'all .15s'}}>
+                      return(<button key={r.label} type="button" onClick={()=>clickable&&fetchHoleScores(p.name,r.num)} disabled={!clickable||holeData.loading}
+                        style={{flex:1,textAlign:'center',background:active?T.primary:done?'#f5f5f5':clickable?'#fafafa':'#fafafa',borderRadius:12,padding:'10px 4px',border:`2px solid ${active?T.primary:done?col+'44':clickable?'#ccc':'#eee'}`,cursor:clickable?'pointer':'default',transition:'all .15s'}}>
                         <div style={{fontSize:10,color:active?'#fff99a':'#888',fontWeight:600,marginBottom:4}}>{r.label}</div>
-                        {done?<div style={{fontSize:22,fontWeight:800,color:active?'#fff':col}}>{fmtScore(r.val)}</div>:<div style={{fontSize:20,fontWeight:800,color:'#ddd'}}>-</div>}
-                        {done&&<div style={{fontSize:9,color:active?'#ffffff99':'#aaa',marginTop:2}}>{active?'▲ hide':'tap'}</div>}
+                        {done?<div style={{fontSize:22,fontWeight:800,color:active?'#fff':col}}>{fmtScore(r.val)}</div>:<div style={{fontSize:20,fontWeight:800,color:clickable?'#666':'#ddd'}}>{clickable?'•••':'-'}</div>}
+                        {(done||clickable)&&<div style={{fontSize:9,color:active?'#ffffff99':'#aaa',marginTop:2}}>{active?'▲ hide':isInProgress?'live':'tap'}</div>}
                       </button>);
                     })}
                   </div>
