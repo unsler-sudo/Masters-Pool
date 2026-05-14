@@ -408,15 +408,15 @@ export async function POST(request) {
     }
 
     if (body.action === 'claim-entry') {
-      const locked = await getLocked(poolId);
-      if (locked) return Response.json({ error:'Entries are locked' }, { status:403 });
+      // Note: This works even when entries are locked since adding an email
+      // doesn't change picks — it's just to enable chat verification
       const { name, email } = body;
       if (!name?.trim() || !email?.trim()) return Response.json({ error:'Name and email required' }, { status:400 });
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return Response.json({ error:'Invalid email' }, { status:400 });
       const entries = await getEntries(poolId);
       const idx = entries.findIndex(e => e.name.toLowerCase() === name.trim().toLowerCase());
       if (idx === -1) return Response.json({ error:'Entry not found' }, { status:404 });
-      if (entries[idx].email) return Response.json({ error:'This entry already has an email — use Edit instead' }, { status:409 });
+      if (entries[idx].email) return Response.json({ error:'This entry already has an email — use Resend Code instead' }, { status:409 });
 
       const editCode = Math.random().toString(36).slice(2,8).toUpperCase();
       entries[idx].email = email.trim().toLowerCase();
