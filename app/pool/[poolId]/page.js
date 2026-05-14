@@ -485,47 +485,51 @@ export default function App(){
       const data=await r.json();
       const raw=data.data||data.players||data||[];
       if(!Array.isArray(raw)||raw.length===0)throw new Error('No live scores yet');
-      const updated=field.map(f=>{
-        const fName=f.name.toLowerCase().trim();
-        // Build flipped version: "Ludvig Aberg" → "aberg, ludvig"
-        let fNameFlipped='';
-        if(fName.includes(',')){
-          const parts=fName.split(',').map(s=>s.trim());
-          if(parts.length===2)fNameFlipped=`${parts[1]} ${parts[0]}`;
-        } else {
-          const parts=fName.split(' ');
-          if(parts.length>=2)fNameFlipped=`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`;
-        }
-        const match=raw.find(p=>{
-          const pName=(p.player_name||p.dg_player_name||'').toLowerCase().trim();
-          return pName===fName||pName===fNameFlipped;
+
+      setField(currentField=>{
+        if(!currentField||currentField.length===0)return currentField;
+        const updated=currentField.map(f=>{
+          const fName=f.name.toLowerCase().trim();
+          // Build flipped version: "Ludvig Aberg" → "aberg, ludvig"
+          let fNameFlipped='';
+          if(fName.includes(',')){
+            const parts=fName.split(',').map(s=>s.trim());
+            if(parts.length===2)fNameFlipped=`${parts[1]} ${parts[0]}`;
+          } else {
+            const parts=fName.split(' ');
+            if(parts.length>=2)fNameFlipped=`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`;
+          }
+          const match=raw.find(p=>{
+            const pName=(p.player_name||p.dg_player_name||'').toLowerCase().trim();
+            return pName===fName||pName===fNameFlipped;
+          });
+          if(match){
+            const total=match.current_score??match.total_to_par??match.total??null;
+            const todayScore=match.today??null;
+            const thruHoles=match.thru??null;
+            return{...f,
+              pos:match.current_pos!=null&&match.current_pos!=='--'?String(match.current_pos):(match.position||f.pos),
+              score:total!=null?(total===0?'E':(total>0?`+${total}`:String(total))):f.score,
+              today:todayScore!=null?(todayScore===0?'E':(todayScore>0?`+${todayScore}`:String(todayScore))):'',
+              thru:thruHoles!=null&&thruHoles>0?String(thruHoles):'',
+              r1:match.R1??match.round1??null,r2:match.R2??match.round2??null,
+              r3:match.R3??match.round3??null,r4:match.R4??match.round4??null,
+            };
+          }
+          return f;
         });
-        if(match){
-          const total=match.current_score??match.total_to_par??match.total??null;
-          const todayScore=match.today??null;
-          const thruHoles=match.thru??null;
-          return{...f,
-            pos:match.current_pos!=null&&match.current_pos!=='--'?String(match.current_pos):(match.position||f.pos),
-            score:total!=null?(total===0?'E':(total>0?`+${total}`:String(total))):f.score,
-            today:todayScore!=null?(todayScore===0?'E':(todayScore>0?`+${todayScore}`:String(todayScore))):'',
-            thru:thruHoles!=null&&thruHoles>0?String(thruHoles):'',
-            r1:match.R1??match.round1??null,r2:match.R2??match.round2??null,
-            r3:match.R3??match.round3??null,r4:match.R4??match.round4??null,
-          };
+        const em=calcEarnings(updated, TOURNAMENT.purse);
+        updated.forEach(p=>{p.earnings=em[p.name]||0;});
+        if(Object.keys(em).length>0){
+          fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({poolId,action:'save-archive-earnings',password:adminPw||'auto',
+              major:activeMajor,year:new Date().getFullYear(),earnings:em})
+          }).catch(()=>{});
         }
-        return f;
+        return updated;
       });
-      const em=calcEarnings(updated, TOURNAMENT.purse);
-      updated.forEach(p=>{p.earnings=em[p.name]||0;});
-      setField(updated);
       setLastUp(new Date().toLocaleTimeString());
       setStatus('');
-      if(Object.keys(em).length>0){
-        fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({poolId,action:'save-archive-earnings',password:adminPw||'auto',
-            major:activeMajor,year:new Date().getFullYear(),earnings:em})
-        }).catch(()=>{});
-      }
       if(!quiet)msg('Scores updated');
     }catch(e){if(!quiet)setStatus(e.message);}
     setRefreshing(false);
