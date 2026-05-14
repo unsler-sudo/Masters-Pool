@@ -509,7 +509,23 @@ export default function App(){
     setTimeout(()=>fetchAllFields(), 3000);
     timer.current=setInterval(()=>{fetchScores(true);loadEntries();fetchAllFields();setNow(Date.now());},60000);
     const clock=setInterval(()=>setNow(Date.now()),1000);
-    return()=>{clearInterval(timer.current);clearInterval(clock);};
+
+    // Refresh immediately when user returns to the page after backgrounding it
+    const handleVisibility=()=>{
+      if(document.visibilityState==='visible'){
+        fetchScores(true);
+        loadEntries();
+        fetchAllFields();
+        setNow(Date.now());
+      }
+    };
+    document.addEventListener('visibilitychange',handleVisibility);
+
+    return()=>{
+      clearInterval(timer.current);
+      clearInterval(clock);
+      document.removeEventListener('visibilitychange',handleVisibility);
+    };
   },[]);
 
   const togglePick=(name,tier)=>{
