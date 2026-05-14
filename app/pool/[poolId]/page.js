@@ -1256,8 +1256,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <div style={{fontSize:32,marginBottom:8}}>🗣️</div>
                     No messages yet — start the trash talk!
                   </div>
-                  :chatMessages.map(m=>{
+                  :chatMessages.map((m,mIdx)=>{
                     const isMe=m.name===chatName;
+                    const isFirstMessage=mIdx===0;
                     const timeAgo=(()=>{
                       const diff=Date.now()-m.ts;
                       if(diff<60000)return 'just now';
@@ -1303,9 +1304,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                           </div>}
                           {reactionPickerFor===m.id&&<div style={{
                             position:'absolute',
-                            bottom:'100%',
+                            [isFirstMessage?'top':'bottom']:'100%',
                             [isMe?'right':'left']:0,
-                            marginBottom:6,
+                            [isFirstMessage?'marginTop':'marginBottom']:6,
                             background:'#fff',
                             borderRadius:20,
                             padding:'6px 8px',
