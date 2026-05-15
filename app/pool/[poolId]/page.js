@@ -477,7 +477,11 @@ export default function App(){
         const confirmed = enriched.filter(p=>p.confirmed).length;
         const onTrack   = enriched.filter(p=>p.onTrack&&!p.confirmed).length;
         const cached = scrapeData.fromCache ? ' · cached' : '';
-        setFieldSource(`📡 datagolf.com/major-fields · ${confirmed} confirmed ✓  ${onTrack} on track –${cached}`);
+        if(pastTeeTime){
+          setFieldSource(`📡 ${confirmed} players in field${cached}`);
+        } else {
+          setFieldSource(`📡 datagolf.com/major-fields · ${confirmed} confirmed ✓  ${onTrack} on track –${cached}`);
+        }
         setFieldLastUpdated(new Date().toLocaleTimeString());
       }
     }catch(e){ console.warn(`fetchField(${major}) failed:`,e.message); }
@@ -1334,7 +1338,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           <input style={{...inp,marginBottom:6}} placeholder="Search players..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <div style={{marginBottom:8,textAlign:'center'}}>
             {fieldSource&&<div style={{fontSize:10,color:T.primary,background:`${T.primary}0a`,padding:'4px 10px',borderRadius:20,display:'inline-block',marginBottom:4}}>{fieldSource}</div>}
-            {fieldLastUpdated&&<div style={{fontSize:10,color:'#8a9580',marginTop:2}}>Field last updated: {fieldLastUpdated} · auto-refreshes every 60s</div>}
+            {fieldLastUpdated&&<div style={{fontSize:10,color:'#8a9580',marginTop:2}}>{pastTeeTime?'Scores update every 60s':`Field last updated: ${fieldLastUpdated} · auto-refreshes every 60s`}</div>}
           </div>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,fontSize:10,color:'#8a9580',justifyContent:'center'}}>
             {!pastTeeTime&&<>
