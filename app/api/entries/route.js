@@ -114,8 +114,16 @@ async function autoManage(poolId) {
 
     const current = MAJOR_SCHEDULE[idx];
     const teeTime = new Date(current.teeTime).getTime();
-    const endTime  = new Date(current.endDate).getTime();
+    let endTime  = new Date(current.endDate).getTime();
     const unlockTime = teeTime - UNLOCK_DAYS_BEFORE * 24 * 60 * 60 * 1000;
+
+    // SAFEGUARD: Tournament can NEVER be considered over within 4 days of tee-off
+    // Prevents auto-rotation from firing mid-tournament due to bad endDate data
+    const minimumEndTime = teeTime + 4 * 24 * 60 * 60 * 1000;
+    if (endTime < minimumEndTime) {
+      console.warn(`[autoManage] endDate ${current.endDate} is too close to teeTime ${current.teeTime} - using safeguard minimum`);
+      endTime = minimumEndTime;
+    }
 
     if (now >= endTime) {
       const nextKey = MAJOR_SCHEDULE[(idx + 1) % MAJOR_SCHEDULE.length].key;
