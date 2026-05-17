@@ -1292,10 +1292,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           <div style={bx}><div style={{fontSize:44,marginBottom:10}}>🏌️</div><p style={{color:T.primary,fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:16,marginBottom:14}}>The field awaits your picks.</p><button type="button" style={pri} onClick={()=>setTab('Enter Pool')}>Enter the Pool</button></div>
           :<>
             {picksHidden&&<div style={{background:T.accentLight,padding:'12px 16px',borderRadius:9,marginBottom:10,fontSize:13,color:T.accent,textAlign:'center',border:`1px solid ${T.accent}30`}}>🏆 Picks hidden until first tee.{countdown?' '+countdown+'.':' Revealing soon!'}</div>}
-            {ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name,paid=!!payments[e.name];return(
+            {ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name,paid=!!payments[e.name];const isLast=i===ranked.length-1&&ranked.length>1&&!picksHidden;return(
               <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:`1px solid ${T.cardBorder}`,animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
                 <div style={{display:'flex',alignItems:'center',gap:10,cursor:picksHidden?'default':'pointer'}} onClick={()=>!picksHidden&&setOpenCard(op?null:e.name)}>
-                  {!picksHidden&&<div style={{fontSize:i<3?18:14,fontWeight:800,width:32,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</div>}
+                  {!picksHidden&&<div style={{fontSize:i<3||isLast?18:14,fontWeight:800,width:32,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:isLast?'💩':i+1}</div>}
                   {picksHidden&&<div style={{width:32,textAlign:'center',fontSize:16}}>✅</div>}
                   <div style={{flex:1}}>
                     <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
