@@ -106,7 +106,7 @@ function calcEarnings(players, purse){
   return m;
 }
 
-const TABS=['Standings','Enter Pool','Field','Chat','History','Admin'];
+const TABS=['Standings','Enter Pool','Field','Chat','History'];
 
 export default function App(){
   const params       = useParams();
@@ -814,6 +814,11 @@ export default function App(){
     return()=>clearInterval(interval);
   },[tab]);
 
+  // Auto-redirect away from Enter Pool tab when tournament starts (tab gets hidden)
+  useEffect(()=>{
+    if(pastTeeTime&&tab==='Enter Pool')setTab('Standings');
+  },[pastTeeTime,tab]);
+
   const deleteOwnEntry=async(name)=>{
     if(!confirm(`Remove your entry "${name}"?`))return;
     try{
@@ -1170,8 +1175,11 @@ export default function App(){
             <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
             <div style={{fontSize:11,opacity:.55,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
           </div>
-          <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
-            <div style={{background:'#ffffff18',borderRadius:10,padding:'2px 8px',fontSize:10,fontWeight:600,backdropFilter:'blur(4px)',border:'1px solid #ffffff15',whiteSpace:'nowrap'}}>{entries.length} {entries.length===1?'entry':'entries'}</div>
+          <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
+            <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
+              <span style={{fontSize:14,filter:'grayscale(.3)'}}>⚙</span>
+            </button>
+            <div style={{background:'#ffffff18',borderRadius:10,padding:'2px 8px',fontSize:10,fontWeight:600,backdropFilter:'blur(4px)',border:'1px solid #ffffff15',whiteSpace:'nowrap',marginTop:24}}>{entries.length} {entries.length===1?'entry':'entries'}</div>
             {poolMeta?.entryFee>0&&entries.length>=3&&(()=>{
               const fee=poolMeta.entryFee;
               const pot=entries.length*fee;
@@ -1191,7 +1199,7 @@ export default function App(){
       </header>
 
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)'}}>
-        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3}}>{t==='Admin'?'⚙ ':''}{t}</button>)}
+        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3}}>{t}</button>)}
       </nav>
       {lastUp&&!picksHidden&&<div style={{padding:'4px 14px',background:T.navActive,borderBottom:`1px solid ${T.cardBorder}`,textAlign:'center'}}><span style={{fontSize:10,color:'#8a9580'}}>Scores update automatically · Last: {lastUp}</span></div>}
       {justActivated&&<div style={{background:'#d1fae5',padding:'10px 16px',fontSize:13,color:'#065f46',textAlign:'center',fontWeight:600}}>🎉 Your pool is live! Share this link with your friends to start entering picks.</div>}
