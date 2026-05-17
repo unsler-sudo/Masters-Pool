@@ -1176,12 +1176,11 @@ export default function App(){
         </svg>
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
           <div>
-            {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:600,opacity:.9,letterSpacing:1.5,marginBottom:1}}>{poolMeta.poolName}</div>}
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:10,fontWeight:400,fontStyle:'italic',opacity:.7,letterSpacing:1.5,marginBottom:2}}>{T.tagline}</div>
-            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
-            <div style={{fontSize:11,opacity:.6,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
+            {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:13,fontWeight:700,opacity:.95,letterSpacing:1,marginBottom:2}}>{poolMeta.poolName}</div>}
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:400,fontStyle:'italic',opacity:.75,letterSpacing:1.5,marginBottom:3}}>{T.tagline}</div>
+            <div style={{fontSize:11,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
           </div>
-          {T.logoUrl&&<div style={{position:'absolute',top:4,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'4px 8px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={T.logoUrl} alt={T.eventName+' logo'} style={{height:48,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';}}/></div>}
+          {T.logoUrl&&<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={T.logoUrl} alt={T.eventName+' logo'} style={{height:72,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';}}/></div>}
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
             <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
               <span style={{fontSize:14,filter:'grayscale(.3)'}}>⚙</span>
