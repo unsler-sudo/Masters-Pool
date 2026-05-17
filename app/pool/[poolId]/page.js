@@ -1221,27 +1221,22 @@ export default function App(){
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:9,fontWeight:400,fontStyle:'italic',opacity:.75,letterSpacing:.8,marginBottom:3,lineHeight:1.2}}>{T.tagline}</div>
             <div style={{fontSize:10,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
           </div>
-          {T.logoUrl&&(T.logoNoBg
-            ?<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',height:T.logoHeight||72,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>
-            :<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={T.logoUrl} alt={T.eventName+' logo'} style={{height:T.logoHeight||72,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';}}/></div>
-          )}
+          {(()=>{
+            const customLogo = poolMeta?.customLogoUrl;
+            const useCustom = !!customLogo;
+            const logoSrc = customLogo || T.logoUrl;
+            const noBg = useCustom ? poolMeta?.customLogoNoBg : T.logoNoBg;
+            const logoHeight = useCustom ? (poolMeta?.customLogoHeight || 72) : (T.logoHeight || 72);
+            if(!logoSrc) return null;
+            return noBg
+              ?<img src={logoSrc} alt="Pool logo" style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',height:logoHeight,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>
+              :<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={logoSrc} alt="Pool logo" style={{height:logoHeight,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';}}/></div>;
+          })()}
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
             <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
               <span style={{fontSize:14,filter:'grayscale(.3)'}}>⚙</span>
             </button>
             <div style={{background:'#ffffff18',borderRadius:10,padding:'2px 8px',fontSize:10,fontWeight:600,backdropFilter:'blur(4px)',border:'1px solid #ffffff15',whiteSpace:'nowrap',marginTop:24}}>{entries.length} {entries.length===1?'entry':'entries'}</div>
-            {poolMeta?.entryFee>0&&entries.length>=3&&(()=>{
-              const fee=poolMeta.entryFee;
-              const pot=entries.length*fee;
-              const third=fee;
-              const second=fee*2;
-              const first=pot-third-second;
-              return <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,fontSize:10,whiteSpace:'nowrap',lineHeight:1.1,marginTop:2}}>
-                <span style={{opacity:.9}}><span style={{opacity:.6,marginRight:3}}>1st</span><b>${first}</b></span>
-                <span style={{opacity:.7}}><span style={{opacity:.6,marginRight:3}}>2nd</span>${second}</span>
-                <span style={{opacity:.55}}><span style={{opacity:.6,marginRight:3}}>3rd</span>${third}</span>
-              </div>;
-            })()}
             {countdown&&<div style={{fontSize:10,opacity:.7}}>⏱ {countdownShort}</div>}
             {lastUp&&!countdown&&<div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#4ade80',animation:'glow 2s infinite'}}/><span style={{fontSize:9,opacity:.5}}>Live · {lastUp}</span></div>}
           </div>
@@ -1258,7 +1253,31 @@ export default function App(){
       <main style={{padding:'12px 12px 80px',maxWidth:660,margin:'0 auto',animation:'fu .35s ease'}}>
 
         {tab==='Standings'&&(<>
-          {!locked&&poolMeta?.paid!==false&&(()=>{
+          {!pastTeeTime&&poolMeta?.entryFee>0&&entries.length>=3&&(()=>{
+            const fee=poolMeta.entryFee;
+            const pot=entries.length*fee;
+            const third=fee;
+            const second=fee*2;
+            const first=pot-third-second;
+            return <div style={{background:'#fff',border:`1px solid ${T.cardBorder}`,borderRadius:11,padding:'10px 14px',marginBottom:10,display:'flex',alignItems:'center',gap:10,justifyContent:'space-around'}}>
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:18,fontWeight:800,color:T.primary}}>🥇 ${first}</div>
+                <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>1st place</div>
+              </div>
+              <div style={{textAlign:'center',opacity:.7}}>
+                <div style={{fontSize:14,fontWeight:700,color:T.primary}}>🥈 ${second}</div>
+                <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>2nd</div>
+              </div>
+              <div style={{textAlign:'center',opacity:.55}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.primary}}>🥉 ${third}</div>
+                <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>3rd</div>
+              </div>
+              <div style={{textAlign:'center',marginLeft:'auto',borderLeft:`1px solid ${T.cardBorder}`,paddingLeft:10}}>
+                <div style={{fontSize:13,fontWeight:700,color:'#555'}}>${pot}</div>
+                <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>total pot</div>
+              </div>
+            </div>;
+          })()}          {!locked&&poolMeta?.paid!==false&&(()=>{
             const shareLink=typeof window!=='undefined'?window.location.origin+'/pool/'+poolId:'';
             const fee=poolMeta?.entryFee||0;
             const pot=entries.length*fee;
@@ -1342,7 +1361,14 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           <div style={bx}><div style={{fontSize:44,marginBottom:10}}>🏌️</div><p style={{color:T.primary,fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:16,marginBottom:14}}>The field awaits your picks.</p><button type="button" style={pri} onClick={()=>setTab('Enter Pool')}>Enter the Pool</button></div>
           :<>
             {picksHidden&&<div style={{background:T.accentLight,padding:'12px 16px',borderRadius:9,marginBottom:10,fontSize:13,color:T.accent,textAlign:'center',border:`1px solid ${T.accent}30`}}>🏆 Picks hidden until first tee.{countdown?' '+countdown+'.':' Revealing soon!'}</div>}
-            {ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name,paid=!!payments[e.name];const isLast=i===ranked.length-1&&ranked.length>1&&!picksHidden;return(
+            {ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name,paid=!!payments[e.name];const isLast=i===ranked.length-1&&ranked.length>1&&!picksHidden;
+            // Compute prize amounts for top 3
+            const fee=poolMeta?.entryFee||0;
+            const showPrizes=!picksHidden&&fee>0&&ranked.length>=3;
+            const pot=ranked.length*fee;
+            const prizes=[pot-fee*3, fee*2, fee];
+            const prize=showPrizes&&i<3?prizes[i]:0;
+            return(
               <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:`1px solid ${T.cardBorder}`,animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
                 <div style={{display:'flex',alignItems:'center',gap:10,cursor:picksHidden?'default':'pointer'}} onClick={()=>!picksHidden&&setOpenCard(op?null:e.name)}>
                   {!picksHidden&&<div style={{fontSize:i<3||isLast?18:14,fontWeight:800,width:32,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:isLast?'💩':i+1}</div>}
@@ -1350,6 +1376,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <div style={{flex:1}}>
                     <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                       <span style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700}}>{e.name}</span>
+                      {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${prize}</span>}
                       {!paymentsHidden&&<span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,background:paid?'#e8f5e8':'#f5f5f5',color:paid?'#2d7a1e':'#aaa',border:`1px solid ${paid?'#2d7a1e30':'#ddd'}`}}>{paid?'✓ Paid':'Unpaid'}</span>}
                     </div>
                     <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Entry submitted — picks hidden until tee-off':'Tap to '+(op?'collapse':'expand')}</div>
@@ -1749,6 +1776,36 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
             </div>
+            <div style={sec}><h3 style={stl}>🎨 Custom Pool Logo</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Override the major's default logo with your own. Paste a public image URL (PNG/JPG). Leave blank to use the default major logo.</p>
+              <input style={{...inp,marginBottom:6}} type="url" placeholder="https://example.com/my-logo.png" id="customLogoInput" defaultValue={poolMeta?.customLogoUrl||''}/>
+              <div style={{display:'flex',gap:8,marginBottom:8,alignItems:'center'}}>
+                <label style={{fontSize:11,display:'flex',alignItems:'center',gap:4,cursor:'pointer'}}>
+                  <input type="checkbox" id="customLogoNoBgInput" defaultChecked={poolMeta?.customLogoNoBg!==false}/>
+                  Transparent (no white box)
+                </label>
+                <label style={{fontSize:11,display:'flex',alignItems:'center',gap:4,marginLeft:'auto'}}>
+                  Height:
+                  <input type="number" min="40" max="120" id="customLogoHeightInput" defaultValue={poolMeta?.customLogoHeight||72} style={{width:60,padding:'4px 6px',border:'1px solid #ccc',borderRadius:4,fontSize:12}}/>
+                  px
+                </label>
+              </div>
+              <div style={{display:'flex',gap:6}}>
+                <button type="button" style={pri} onClick={async()=>{
+                  const url=document.getElementById('customLogoInput').value.trim();
+                  const noBg=document.getElementById('customLogoNoBgInput').checked;
+                  const height=parseInt(document.getElementById('customLogoHeightInput').value,10)||72;
+                  const d=await adminAction('set-custom-logo',{customLogoUrl:url,customLogoNoBg:noBg,customLogoHeight:height});
+                  if(d?.ok){msg('Logo updated');setPoolMeta(prev=>({...prev,customLogoUrl:url,customLogoNoBg:noBg,customLogoHeight:height}));}
+                }}>💾 Save Logo</button>
+                <button type="button" style={dan} onClick={async()=>{
+                  if(!confirm('Reset to default major logo?'))return;
+                  const d=await adminAction('set-custom-logo',{customLogoUrl:'',customLogoNoBg:true,customLogoHeight:72});
+                  if(d?.ok){msg('Reset to default');document.getElementById('customLogoInput').value='';setPoolMeta(prev=>({...prev,customLogoUrl:'',customLogoNoBg:true,customLogoHeight:72}));}
+                }}>↺ Reset</button>
+              </div>
+            </div>
+
             <div style={sec}><h3 style={stl}>💰 Show/Hide Payment Status</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Paid/Unpaid badges are currently <b>{paymentsHidden?'hidden':'visible'}</b>. Useful to hide during the tournament when payment status is no longer relevant.</p>
               <button type="button" style={paymentsHidden?pri:dan} onClick={async()=>{const d=await adminAction(paymentsHidden?'show-payments':'hide-payments');if(d?.ok){setPaymentsHidden(!paymentsHidden);msg(paymentsHidden?'Payment badges visible':'Payment badges hidden');}}}>{paymentsHidden?'👀 Show Payment Badges':'🙈 Hide Payment Badges'}</button>
             </div>
