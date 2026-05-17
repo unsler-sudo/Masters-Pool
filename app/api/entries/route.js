@@ -126,6 +126,18 @@ async function autoManage(poolId) {
     }
 
     if (now >= endTime) {
+      // STRICT WINDOW: Only fire rotation on Tuesday mornings (6 AM - 11 AM ET)
+      // This prevents accidental rotations and gives commissioners a predictable schedule
+      const nowDate = new Date(now);
+      // Get ET hour (UTC offset is -4 in EDT, -5 in EST — May/June/July are EDT so use -4)
+      const etHour = (nowDate.getUTCHours() - 4 + 24) % 24;
+      const isTuesday = nowDate.getUTCDay() === 2; // 0=Sun, 1=Mon, 2=Tue
+      const isMorning = etHour >= 6 && etHour < 12; // 6 AM - 11:59 AM ET
+      if (!isTuesday || !isMorning) {
+        // Not Tuesday morning yet — do nothing, wait for next eligible window
+        return currentMajor;
+      }
+
       const nextKey = MAJOR_SCHEDULE[(idx + 1) % MAJOR_SCHEDULE.length].key;
       const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
       if (entries.length > 0) {
