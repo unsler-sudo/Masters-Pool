@@ -1669,9 +1669,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               <div style={{background:'#f8f9ff',borderRadius:8,padding:'10px 12px',border:'1px solid #e0e4f0'}}>
                 <div style={{fontSize:10,fontWeight:700,color:'#555',letterSpacing:.5,marginBottom:6}}>⏰ AUTO-MANAGEMENT SCHEDULE</div>
                 <div style={{fontSize:11,color:'#6b7c5e',lineHeight:1.7}}>
-                  <div>🔓 <b>7 days before tee-off</b> — entries auto-unlock</div>
-                  <div>🔒 <b>At tee time</b> — entries auto-lock (client-side)</div>
-                  <div>🔄 <b>Tuesday after final round</b> — auto-rotates to next major, clears all entries</div>
+                  <div>🔓 <b>7 days before tee-off</b> — entries auto-unlock for next major</div>
+                  <div>🔒 <b>At tee time</b> — entries lock for the tournament</div>
+                  <div>🔄 <b>Tuesday morning (6 AM – 12 PM ET)</b> — auto-rotates to next major, archives current results</div>
                 </div>
               </div>
             </div>
@@ -1717,8 +1717,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={sec}>
               <h3 style={stl}>💰 Payment Tracking</h3>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                <p style={{fontSize:12,color:'#6b7c5e',flex:1}}>{Object.values(payments).filter(Boolean).length} of {entries.length} paid</p>
-                <span style={{background:'#e8f5e8',color:'#2d7a1e',borderRadius:8,padding:'2px 10px',fontSize:11,fontWeight:700}}>{entries.length>0?Math.round(Object.values(payments).filter(Boolean).length/entries.length*100):0}% collected</span>
+                {(()=>{
+                  const paidCount = entries.filter(e=>!!payments[e.name]).length;
+                  const total = entries.length;
+                  const pct = total>0?Math.round(paidCount/total*100):0;
+                  return(<>
+                    <p style={{fontSize:12,color:'#6b7c5e',flex:1}}>{paidCount} of {total} paid</p>
+                    <span style={{background:'#e8f5e8',color:'#2d7a1e',borderRadius:8,padding:'2px 10px',fontSize:11,fontWeight:700}}>{pct}% collected</span>
+                  </>);
+                })()}
               </div>
               {entries.length===0?<p style={{color:'#8a9580',fontSize:12}}>No entries yet</p>:
                 entries.map(e=>{const paid=!!payments[e.name];return(
