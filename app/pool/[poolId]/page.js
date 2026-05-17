@@ -1715,30 +1715,32 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               {poolMeta?.entryFee>0&&entries.length<3&&<div style={{fontSize:11,color:'#888'}}>Payouts will show once you have 3+ entries.</div>}
             </div>
             <div style={sec}>
-              <h3 style={stl}>💰 Payment Tracking</h3>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                <h3 style={{...stl,marginBottom:0,flex:1}}>👥 Entries & Payments ({entries.length})</h3>
                 {(()=>{
                   const paidCount = entries.filter(e=>!!payments[e.name]).length;
                   const total = entries.length;
                   const pct = total>0?Math.round(paidCount/total*100):0;
-                  return(<>
-                    <p style={{fontSize:12,color:'#6b7c5e',flex:1}}>{paidCount} of {total} paid</p>
-                    <span style={{background:'#e8f5e8',color:'#2d7a1e',borderRadius:8,padding:'2px 10px',fontSize:11,fontWeight:700}}>{pct}% collected</span>
-                  </>);
+                  return <span style={{background:'#e8f5e8',color:'#2d7a1e',borderRadius:8,padding:'2px 10px',fontSize:11,fontWeight:700}}>{paidCount}/{total} paid · {pct}%</span>;
                 })()}
               </div>
               {entries.length===0?<p style={{color:'#8a9580',fontSize:12}}>No entries yet</p>:
-                entries.map(e=>{const paid=!!payments[e.name];return(
-                  <div key={e.name} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid #f0ebe0',alignItems:'center'}}>
-                    <span style={{fontWeight:600,fontSize:13}}>{e.name}</span>
-                    <button type="button" onClick={()=>togglePayment(e.name)} style={{background:paid?'#e8f5e8':'#f5f5f5',border:`1px solid ${paid?'#2d7a1e':'#ccc'}`,color:paid?'#2d7a1e':'#888',padding:'5px 14px',borderRadius:7,fontSize:12,fontWeight:600,minWidth:90,cursor:'pointer'}}>{paid?'✓ Paid':'Mark Paid'}</button>
-                  </div>);})}
-            </div>
-            <div style={sec}><h3 style={stl}>👥 Entries ({entries.length})</h3>
-              {entries.length===0?<p style={{color:'#8a9580',fontSize:12}}>No entries yet</p>:entries.map(e=><div key={e.name} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f0ebe0',fontSize:13,alignItems:'center'}}>
-                <span><b>{e.name}</b> <span style={{fontSize:10,color:'#8a9580'}}>{e.picks.length} picks</span>{!!payments[e.name]&&<span style={{fontSize:10,color:'#2d7a1e',fontWeight:700,marginLeft:4}}>✓ paid</span>}</span>
-                <button type="button" style={{background:'transparent',border:'1px solid #c44',color:'#c44',padding:'3px 9px',borderRadius:5,fontSize:11,cursor:'pointer'}} onClick={async()=>{await adminAction('delete',{name:e.name});msg('Removed');}}>Remove</button>
-              </div>)}
+                <div style={{border:'1px solid #f0ebe0',borderRadius:8,overflow:'hidden'}}>
+                  <div style={{display:'flex',padding:'8px 10px',background:'#fafaf6',borderBottom:'1px solid #f0ebe0',fontSize:10,fontWeight:700,color:'#888',letterSpacing:.5}}>
+                    <span style={{flex:1}}>NAME</span>
+                    <span style={{width:50,textAlign:'center'}}>PICKS</span>
+                    <span style={{width:80,textAlign:'center'}}>PAYMENT</span>
+                    <span style={{width:60,textAlign:'right'}}>ACTION</span>
+                  </div>
+                  {entries.map(e=>{const paid=!!payments[e.name];return(
+                    <div key={e.name} style={{display:'flex',alignItems:'center',padding:'8px 10px',borderBottom:'1px solid #f5f0e8',fontSize:13}}>
+                      <span style={{flex:1,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</span>
+                      <span style={{width:50,textAlign:'center',fontSize:11,color:'#8a9580'}}>{e.picks.length}</span>
+                      <button type="button" onClick={()=>togglePayment(e.name)} style={{width:74,marginLeft:3,marginRight:3,background:paid?'#e8f5e8':'#f5f5f5',border:`1px solid ${paid?'#2d7a1e':'#ccc'}`,color:paid?'#2d7a1e':'#888',padding:'4px 0',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer'}}>{paid?'✓ Paid':'Mark Paid'}</button>
+                      <button type="button" style={{width:54,marginLeft:3,background:'transparent',border:'1px solid #c44',color:'#c44',padding:'4px 0',borderRadius:5,fontSize:11,cursor:'pointer'}} onClick={async()=>{if(!confirm(`Remove ${e.name}'s entry?`))return;await adminAction('delete',{name:e.name});msg('Removed');}}>Remove</button>
+                    </div>);})}
+                </div>
+              }
             </div>
             <div style={sec}>
               <h3 style={stl}>📚 Past Results</h3>
