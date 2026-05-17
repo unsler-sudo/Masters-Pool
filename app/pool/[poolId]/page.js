@@ -201,6 +201,7 @@ export default function App(){
   const [selectedPlayer,setSelectedPlayer]=useState(null);
   const [holeData,setHoleData]=useState({round:null,holes:[],loading:false,error:null});
   const [archives,setArchives]=useState([]);
+  const [expandedArchive,setExpandedArchive]=useState(null);
   const [showArchives,setShowArchives]=useState(false);
   const [publicArchives,setPublicArchives]=useState([]);
   const [historyLoaded,setHistoryLoaded]=useState(false);
@@ -1548,25 +1549,41 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const THEME={...THEMES[a.major]||THEMES.pga};
                 const earnings=a.earnings||{};
                 const hasEarnings=Object.keys(earnings).length>0;
+                const archiveId=a.major+'_'+a.year;
+                const isExpanded=expandedArchive===archiveId;
                 const ranked=[...a.entries].map(e=>({
                   ...e,
                   total:e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
                 })).sort((x,y)=>y.total-x.total);
-                return<div key={a.major+'_'+a.year} style={{marginBottom:16,borderRadius:12,overflow:'hidden',border:`1px solid ${THEME.cardBorder}`}}>
-                  <div style={{background:THEME.headerBg,padding:'12px 16px',display:'flex',alignItems:'center',gap:10}}>
+                return<div key={archiveId} style={{marginBottom:16,borderRadius:12,overflow:'hidden',border:`1px solid ${THEME.cardBorder}`}}>
+                  <div onClick={()=>setExpandedArchive(isExpanded?null:archiveId)} style={{background:THEME.headerBg,padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
                     <span style={{fontSize:24}}>{THEME.emoji}</span>
-                    <div>
+                    <div style={{flex:1}}>
                       <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:'#fff'}}>{THEME.eventName}</div>
                       <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{new Date(a.archivedAt).toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries</div>
                     </div>
+                    <span style={{fontSize:18,color:'rgba(255,255,255,0.6)'}}>{isExpanded?'▲':'▼'}</span>
                   </div>
-                  <div style={{background:'#fff'}}>
-                    {ranked.map((e,i)=><div key={e.name} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderBottom:`1px solid ${THEME.cardBorder}`,background:i===0?`${THEME.primary}08`:'#fff'}}>
-                      <span style={{fontSize:i<3?18:13,fontWeight:800,width:28,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</span>
-                      <span style={{flex:1,fontWeight:600,fontSize:14}}>{e.name}</span>
-                      {hasEarnings&&<span style={{fontWeight:800,color:THEME.primary,fontSize:14}}>{fmt(e.total)}</span>}
-                    </div>)}
-                  </div>
+                  {isExpanded&&<div style={{background:'#fff',animation:'sd .2s ease'}}>
+                    {ranked.map((e,i)=>{
+                      const picksWithEarnings=e.picks.map(pn=>({name:pn,earned:earnings[pn]||0})).sort((x,y)=>y.earned-x.earned);
+                      return<div key={e.name} style={{borderBottom:`1px solid ${THEME.cardBorder}`}}>
+                        <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:i===0?`${THEME.primary}08`:'#fff'}}>
+                          <span style={{fontSize:i<3?18:13,fontWeight:800,width:28,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</span>
+                          <span style={{flex:1,fontWeight:600,fontSize:14}}>{e.name}</span>
+                          {hasEarnings&&<span style={{fontWeight:800,color:THEME.primary,fontSize:14}}>{fmt(e.total)}</span>}
+                        </div>
+                        {hasEarnings&&<div style={{padding:'4px 14px 10px 50px',display:'flex',flexWrap:'wrap',gap:6,fontSize:11}}>
+                          {picksWithEarnings.map(pk=><span key={pk.name} style={{background:`${THEME.primary}10`,padding:'2px 6px',borderRadius:4,color:THEME.primary}}>
+                            {pk.name.split(', ')[0]} <b>{fmt(pk.earned)}</b>
+                          </span>)}
+                        </div>}
+                      </div>;
+                    })}
+                  </div>}
+                  {!isExpanded&&<div style={{padding:'10px 14px',background:'#fafafa',fontSize:11,color:'#888',textAlign:'center'}}>
+                    Tap to see picks & earnings — Top 3: {ranked.slice(0,3).map(r=>r.name).join(' · ')}
+                  </div>}
                 </div>;
               })
           }
