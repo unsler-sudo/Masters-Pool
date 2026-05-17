@@ -445,7 +445,16 @@ export default function App(){
         });
       }
 
-      const enriched = scrapedPlayers.filter(p=>p.confirmed||p.onTrack).map((p,i)=>{
+      // For non-active majors (pre-tournament), show ALL scraped players regardless of confirmed status
+      // For the active major, only show confirmed/onTrack players
+      const teeT = new Date(THEMES[major]?.teeTime || 0).getTime();
+      const cutoff = teeT + 6 * 24 * 60 * 60 * 1000;
+      const nowMs = Date.now();
+      const isThisMajorInWindow = nowMs >= teeT && nowMs <= cutoff;
+      const playersToShow = isThisMajorInWindow
+        ? scrapedPlayers.filter(p=>p.confirmed||p.onTrack)
+        : scrapedPlayers;
+      const enriched = playersToShow.map((p,i)=>{
         const key  = p.name.toLowerCase().trim();
         const win  = oddsMap[key] ?? 0;
         const odds = win > 0.001 ? `+${Math.round((1/win)*100-100)}` : 'n/a';
