@@ -24,9 +24,9 @@ const THEMES = {
     logoNoBg:true,
     eventName:'The Masters', courseName:'Augusta National Golf Club',
     teeTime:'2026-04-09T11:00:00Z', purse:21000000,
-    primary:'#2d5016', dark:'#3a7020', mid:'#4a8a2a', accent:'#d94878', accentLight:'#f9e8ef',
+    primary:'#2d5016', dark:'#5a9030', mid:'#6ba83a', accent:'#d94878', accentLight:'#f9e8ef',
     navBg:'#fff', navActive:'#f5f0e8', navBorder:'#1e5010',
-    headerBg:'linear-gradient(170deg,#3a7020 0%,#4a8a2a 35%,#5fa838 65%,#74c046 100%)',
+    headerBg:'linear-gradient(170deg,#5a9030 0%,#6ba83a 35%,#7cbc46 65%,#90d058 100%)',
     bg:'linear-gradient(180deg,#d8d3c4 0%,#f3efe6 300px)',
     bodyBg:'#f3efe6', cardBorder:'#cdc8b8', inputBorder:'#c8c3b5', stripeBg:'#faf8f3', rowHl:'#f0ebd6',
   },
@@ -506,6 +506,13 @@ export default function App(){
   };
 
   const fetchScores=async(quiet)=>{
+    // Only fetch live scores if the major being viewed is in its tournament window
+    // Otherwise scores from the in-play feed (current PGA) would incorrectly attach to other majors
+    if(!pastTeeTime){
+      // Clear any stale score data and exit
+      rawScoresRef.current=null;
+      return;
+    }
     setRefreshing(true);
     try{
       const r=await fetch('/api/scores?endpoint=in-play');
@@ -1416,34 +1423,40 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           {pastTeeTime&&<div style={{fontSize:10,color:'#8a9580',textAlign:'center',marginBottom:8}}>Tap player for scorecard</div>}
           <div style={{borderRadius:9,overflow:'hidden',border:`1px solid ${T.cardBorder}`}}>
             <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5}}>
-              <span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee/Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span>
+              {pastTeeTime
+                ?<><span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee/Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span></>
+                :<><span style={{width:40,textAlign:'center'}}>#</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>DG Rank</span></>
+              }
             </div>
             {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);
-            // Show tee time per player until they have actual thru data (meaning they've teed off)
             const thruNum = parseInt(p.thru, 10);
             const isActivelyPlaying = thruNum > 0 && thruNum < 18;
             const justFinished = thruNum === 18;
-            // Show tee time if: player hasn't started yet (no thru, no pos) OR they finished a round and have next tee scheduled
             const showTeeTime = p.teeTime && !isActivelyPlaying && !isCut && (
-              (!p.thru && p.pos === '-') ||  // hasn't started any round
-              justFinished                     // finished a round, next tee available
+              (!p.thru && p.pos === '-') ||
+              justFinished
             );
             return(
-              <div key={p.name} onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',background:isCut?'#fafafa':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut?.6:1}}>
-                <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut?'#999':T.primary,fontSize:12}}>{isCut?'✂️':p.pos}</span>
+              <div key={p.name} onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',background:isCut&&pastTeeTime?'#fafafa':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&pastTeeTime?.6:1}}>
+                <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&pastTeeTime?'#999':T.primary,fontSize:12}}>{pastTeeTime?(isCut?'✂️':p.pos):(i+1)}</span>
                 <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
                   <div style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
                     <span style={{marginRight:3}}><Flag c={p.country}/></span>
-                    <span style={{fontWeight:600,fontSize:12,textDecoration:isCut?'line-through':'none',color:isCut?'#999':'inherit'}}>{flip(p.name)}</span>
+                    <span style={{fontWeight:600,fontSize:12,textDecoration:isCut&&pastTeeTime?'line-through':'none',color:isCut&&pastTeeTime?'#999':'inherit'}}>{flip(p.name)}</span>
                     {p.confirmed&&!pastTeeTime&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8,border:'1px solid #2d7a1e40'}}>✓</span>}
                     {p.onTrack&&!p.confirmed&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 5px',borderRadius:8,border:'1px solid #c8840040'}}>–</span>}
                   </div>
                   {!picksHidden&&ow.length>0&&<div style={{fontSize:9,color:'#8b6914',marginTop:1,whiteSpace:'normal',wordBreak:'break-word',lineHeight:1.3}}>({ow.join(', ')})</div>}
                 </div>
                 <span style={{width:30,textAlign:'center'}}><span style={{fontSize:9,fontWeight:700,color:t?.color,background:t?.color+'18',padding:'1px 5px',borderRadius:3}}>{String.fromCharCode(64+p.tier)}</span></span>
-                <span style={{width:50,textAlign:'center',fontSize:showTeeTime?9:11,color:showTeeTime?T.primary:'#888',fontWeight:showTeeTime?600:400}}>{showTeeTime?p.teeTime:(p.thru||'-')}</span>
-                <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{isCut?'CUT':p.score}</span>
-                <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmt(p.earnings)}</span>
+                {pastTeeTime
+                  ?<>
+                    <span style={{width:50,textAlign:'center',fontSize:showTeeTime?9:11,color:showTeeTime?T.primary:'#888',fontWeight:showTeeTime?600:400}}>{showTeeTime?p.teeTime:(p.thru||'-')}</span>
+                    <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{isCut?'CUT':p.score}</span>
+                    <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmt(p.earnings)}</span>
+                  </>
+                  :<span style={{width:50,textAlign:'center',fontSize:11,color:'#888'}}>{p.rank||'-'}</span>
+                }
               </div>);})}
           </div>
         </>}
