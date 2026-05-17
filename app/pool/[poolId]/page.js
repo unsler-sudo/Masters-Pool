@@ -11,9 +11,9 @@ const THEMES = {
     logoUrl:'https://upload.wikimedia.org/wikipedia/en/5/5d/ThePlayersChampionshipLogo.png',
     eventName:'The Players Championship', courseName:'TPC Sawgrass · Ponte Vedra Beach, FL',
     teeTime:'2027-03-11T12:00:00Z', purse:25000000,
-    primary:'#0f3d5c', dark:'#061e2e', mid:'#1a5a7a', accent:'#c8a84b', accentLight:'#faf3e0',
+    primary:'#0f3d5c', dark:'#1e7090', mid:'#3290b0', accent:'#c8a84b', accentLight:'#faf3e0',
     navBg:'#fff', navActive:'#edf4f8', navBorder:'#0f3d5c',
-    headerBg:'linear-gradient(170deg,#061e2e 0%,#0f3d5c 40%,#1a5a7a 70%,#1e7090 100%)',
+    headerBg:'linear-gradient(170deg,#1e7090 0%,#3290b0 35%,#4ca8c8 65%,#68bcd8 100%)',
     bg:'linear-gradient(180deg,#bfcfd8 0%,#edf4f8 300px)',
     bodyBg:'#edf4f8', cardBorder:'#c4d4dc', inputBorder:'#b4c8d4', stripeBg:'#f4f9fc', rowHl:'#e0eef6',
   },
@@ -22,9 +22,9 @@ const THEMES = {
     logoUrl:'https://upload.wikimedia.org/wikipedia/en/2/23/Masters_Logo.png',
     eventName:'The Masters', courseName:'Augusta National Golf Club',
     teeTime:'2026-04-09T11:00:00Z', purse:21000000,
-    primary:'#2d5016', dark:'#0a1f04', mid:'#1e5010', accent:'#d94878', accentLight:'#f9e8ef',
+    primary:'#2d5016', dark:'#3a7020', mid:'#4a8a2a', accent:'#d94878', accentLight:'#f9e8ef',
     navBg:'#fff', navActive:'#f5f0e8', navBorder:'#1e5010',
-    headerBg:'linear-gradient(170deg,#0a1f04 0%,#163a0a 30%,#1e5010 60%,#2a6818 100%)',
+    headerBg:'linear-gradient(170deg,#3a7020 0%,#4a8a2a 35%,#5fa838 65%,#74c046 100%)',
     bg:'linear-gradient(180deg,#d8d3c4 0%,#f3efe6 300px)',
     bodyBg:'#f3efe6', cardBorder:'#cdc8b8', inputBorder:'#c8c3b5', stripeBg:'#faf8f3', rowHl:'#f0ebd6',
   },
@@ -33,9 +33,9 @@ const THEMES = {
     logoUrl:'https://www.aronimink.org/documents/20124/815283/26CH_ARON_4C.png/7528f96a-a7b1-b752-bf2c-ed0f3bf59c16?t=1706303048615',
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
     teeTime:'2026-05-14T11:00:00Z', purse:20000000,
-    primary:'#1a2a5c', dark:'#050d1a', mid:'#243475', accent:'#c9a84c', accentLight:'#faf3e0',
+    primary:'#1a2a5c', dark:'#3a4a8c', mid:'#5060a0', accent:'#c9a84c', accentLight:'#faf3e0',
     navBg:'#fff', navActive:'#eef0f8', navBorder:'#1a2a5c',
-    headerBg:'linear-gradient(170deg,#050d1a 0%,#0d1a2e 35%,#1a2a5c 65%,#243475 100%)',
+    headerBg:'linear-gradient(170deg,#3a4a8c 0%,#5060a0 35%,#6878b8 65%,#7c8cc8 100%)',
     bg:'linear-gradient(180deg,#c4c8d8 0%,#eef0f8 300px)',
     bodyBg:'#eef0f8', cardBorder:'#c8ccdc', inputBorder:'#b8bcd0', stripeBg:'#f5f7fc', rowHl:'#e8ecf8',
   },
@@ -44,9 +44,9 @@ const THEMES = {
     logoUrl:'https://upload.wikimedia.org/wikipedia/en/7/76/US_Open_%28Golf%29_Logo.png',
     eventName:'U.S. Open', courseName:'Shinnecock Hills Golf Club · Southampton, NY',
     teeTime:'2026-06-18T11:00:00Z', purse:21500000,
-    primary:'#1a2a5c', dark:'#0d1a2e', mid:'#8a1818', accent:'#b02020', accentLight:'#fdeaea',
+    primary:'#1a2a5c', dark:'#3a4a8c', mid:'#a82828', accent:'#c83030', accentLight:'#fdeaea',
     navBg:'#fff', navActive:'#eceff6', navBorder:'#1a2a5c',
-    headerBg:'linear-gradient(170deg,#0d1a2e 0%,#1a2a5c 40%,#8a1818 65%,#b02020 100%)',
+    headerBg:'linear-gradient(170deg,#3a4a8c 0%,#5060a0 30%,#a82828 65%,#c83030 100%)',
     bg:'linear-gradient(180deg,#c8cbd6 0%,#eceff6 300px)',
     bodyBg:'#eceff6', cardBorder:'#c4c8d8', inputBorder:'#b4b8cc', stripeBg:'#f4f6fb', rowHl:'#e8eaf5',
   },
@@ -55,9 +55,9 @@ const THEMES = {
     logoUrl:'https://upload.wikimedia.org/wikipedia/en/d/d0/The_Open_Championship_logo.png',
     eventName:'The Open Championship', courseName:'Royal Birkdale · Southport, England',
     teeTime:'2026-07-16T05:35:00Z', purse:17000000,
-    primary:'#5a3e28', dark:'#1a0f08', mid:'#7a5a3c', accent:'#8a6a9a', accentLight:'#f0ecf5',
+    primary:'#5a3e28', dark:'#7a5a3c', mid:'#9a7a58', accent:'#8a6a9a', accentLight:'#f0ecf5',
     navBg:'#fff', navActive:'#f5f1ec', navBorder:'#5a3e28',
-    headerBg:'linear-gradient(170deg,#1a0f08 0%,#2e1e0f 30%,#5a3e28 65%,#7a5a3c 100%)',
+    headerBg:'linear-gradient(170deg,#7a5a3c 0%,#9a7a58 35%,#b89a78 65%,#ccb898 100%)',
     bg:'linear-gradient(180deg,#cec8bc 0%,#f0ece2 300px)',
     bodyBg:'#f0ece2', cardBorder:'#d0c8bc', inputBorder:'#c4bdb0', stripeBg:'#f7f3ee', rowHl:'#ede5d8',
   },
@@ -1177,11 +1177,11 @@ export default function App(){
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
           <div>
             {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:600,opacity:.9,letterSpacing:1.5,marginBottom:1}}>{poolMeta.poolName}</div>}
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:10,fontWeight:400,fontStyle:'italic',opacity:.6,letterSpacing:1.5,marginBottom:2}}>{T.tagline}</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:10,fontWeight:400,fontStyle:'italic',opacity:.7,letterSpacing:1.5,marginBottom:2}}>{T.tagline}</div>
             <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
-            <div style={{fontSize:11,opacity:.55,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
+            <div style={{fontSize:11,opacity:.6,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
           </div>
-          {T.logoUrl&&<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',height:110,width:'auto',filter:'drop-shadow(0 3px 10px rgba(0,0,0,.5))',pointerEvents:'none',opacity:.95}} onError={(ev)=>{ev.target.style.display='none';}}/>}
+          {T.logoUrl&&<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',height:60,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>}
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
             <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
               <span style={{fontSize:14,filter:'grayscale(.3)'}}>⚙</span>
