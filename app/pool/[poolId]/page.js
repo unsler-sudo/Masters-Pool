@@ -846,6 +846,11 @@ export default function App(){
   });
   const sortF = aRoundIsLive
     ? [...field].sort((a,b)=>{
+        // Cut players always at bottom
+        const aCut = /CUT|WD|DQ|MC/i.test(a.pos);
+        const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
+        if (aCut && !bCut) return 1;
+        if (bCut && !aCut) return -1;
         // Live mode: sort by position
         const pa=parsePos(a.pos),pb=parsePos(b.pos);
         if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
@@ -854,6 +859,11 @@ export default function App(){
         return pa-pb;
       })
     : [...field].sort((a,b)=>{
+        // Cut players always at bottom
+        const aCut = /CUT|WD|DQ|MC/i.test(a.pos);
+        const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
+        if (aCut && !bCut) return 1;
+        if (bCut && !aCut) return -1;
         // Between rounds: sort by tee time DESCENDING (latest at top, earliest at bottom)
         const ta = parseTeeTime(a.teeTime);
         const tb = parseTeeTime(b.teeTime);
