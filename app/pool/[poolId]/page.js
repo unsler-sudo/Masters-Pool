@@ -890,9 +890,11 @@ export default function App(){
   const sortF = !isActiveMajor
     ? [...field].sort((a,b)=>{
         // Not in tournament window — sort by DG rank
-        const ra = a.dgRank ?? a.rank ?? 999;
-        const rb = b.dgRank ?? b.rank ?? 999;
-        return ra - rb;
+        // Players without dgRank go to the bottom
+        const ra = a.dgRank && a.dgRank < 9999 ? a.dgRank : 99999;
+        const rb = b.dgRank && b.dgRank < 9999 ? b.dgRank : 99999;
+        if (ra !== rb) return ra - rb;
+        return a.name.localeCompare(b.name);
       })
     : aRoundIsLive
     ? [...field].sort((a,b)=>{
@@ -1485,7 +1487,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{isCut?'CUT':p.score}</span>
                     <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmt(p.earnings)}</span>
                   </>
-                  :<span style={{width:50,textAlign:'center',fontSize:11,color:'#888'}}>{p.rank||'-'}</span>
+                  :<span style={{width:50,textAlign:'center',fontSize:11,color:'#888'}}>{p.dgRank||'-'}</span>
                 }
               </div>);})}
           </div>
