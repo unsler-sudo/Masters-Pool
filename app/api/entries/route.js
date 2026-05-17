@@ -763,6 +763,17 @@ export async function POST(request) {
       return Response.json({ ok:true, paymentsHidden:body.action==='hide-payments' });
     }
 
+    if (body.action==='set-custom-logo') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId);
+      if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
+      meta.customLogoUrl = body.customLogoUrl || '';
+      meta.customLogoNoBg = body.customLogoNoBg !== false;
+      meta.customLogoHeight = parseInt(body.customLogoHeight,10) || 72;
+      await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
+      return Response.json({ ok:true, meta });
+    }
+
     if (body.action==='delete') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const entries = await getEntries(poolId);
