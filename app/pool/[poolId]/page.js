@@ -1165,8 +1165,8 @@ export default function App(){
           <path d="M0,160 Q150,140 300,155 Q450,170 600,150 Q700,140 800,155 L800,200 L0,200 Z" fill={T.mid} opacity=".7"/>
           <line x1="580" y1="72" x2="580" y2="120" stroke="#ddd" strokeWidth="1.5"/>
           <path d="M580,72 L608,80 L580,88 Z" fill={T.accent} style={{animation:'flagWave 3s ease-in-out infinite'}}/>
-          <circle cx="80" cy="155" r="12" fill={T.accent} opacity=".8"/><circle cx="95" cy="150" r="10" fill={T.accent} opacity=".7"/>
-          <circle cx="700" cy="148" r="11" fill={T.accent} opacity=".75"/><circle cx="715" cy="144" r="9" fill={T.accent} opacity=".65"/>
+          <circle cx="80" cy="155" r="12" fill={T.accent} opacity=".25"/><circle cx="95" cy="150" r="10" fill={T.accent} opacity=".2"/>
+          <circle cx="700" cy="148" r="11" fill={T.accent} opacity=".25"/><circle cx="715" cy="144" r="9" fill={T.accent} opacity=".2"/>
           <ellipse cx="370" cy="175" rx="50" ry="12" fill={T.dark} opacity=".3"/>
         </svg>
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
@@ -1807,10 +1807,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>{chatMessages.length} messages in pool chat. Use the X button next to messages to delete individual ones.</p>
               <button type="button" style={dan} onClick={async()=>{
                 if(!confirm('Clear ALL chat messages? This cannot be undone.'))return;
+                console.log('Clearing chat with adminPw:', adminPw?.length, 'chars');
                 const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({poolId,action:'chat-clear-all',password:adminPw})});
                 const d=await r.json();
-                if(d.error){msg(d.error);return;}
+                console.log('Clear chat response:', d);
+                if(d.error){msg('Error: '+d.error);return;}
                 setChatMessages([]);msg('Chat cleared');
               }}>🗑 Clear All Chat Messages</button>
             </div>
