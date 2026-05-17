@@ -827,7 +827,42 @@ export default function App(){
   const teamE=e=>e.picks.reduce((s,n)=>s+(field.find(f=>f.name===n)?.earnings||0),0);
   const ranked=[...entries].sort((a,b)=>teamE(b)-teamE(a));
   const owners=n=>entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
-  const sortF=[...field].sort((a,b)=>{const pa=parsePos(a.pos),pb=parsePos(b.pos);if(!pa&&!pb)return (a.rank??999)-(b.rank??999);if(!pa)return 1;if(!pb)return -1;return pa-pb;});
+  // Parse "8:18 AM" → 818, "1:43 PM" → 1343 for sorting
+  const parseTeeTime = (tt) => {
+    if (!tt) return 9999;
+    const m = tt.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!m) return 9999;
+    let h = parseInt(m[1], 10);
+    const min = parseInt(m[2], 10);
+    const isPM = m[3].toUpperCase() === 'PM';
+    if (isPM && h !== 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 100 + min;
+  };
+  // Detect if a round is currently in progress (anyone with thru 1-17)
+  const aRoundIsLive = field.some(p => {
+    const t = parseInt(p.thru, 10);
+    return t > 0 && t < 18;
+  });
+  const sortF = aRoundIsLive
+    ? [...field].sort((a,b)=>{
+        // Live mode: sort by position
+        const pa=parsePos(a.pos),pb=parsePos(b.pos);
+        if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
+        if(!pa)return 1;
+        if(!pb)return -1;
+        return pa-pb;
+      })
+    : [...field].sort((a,b)=>{
+        // Between rounds: sort by tee time DESCENDING (latest at top, earliest at bottom)
+        const ta = parseTeeTime(a.teeTime);
+        const tb = parseTeeTime(b.teeTime);
+        if (ta !== tb) return tb - ta;
+        // Tiebreaker: by position (leader on top)
+        const pa=parsePos(a.pos),pb=parsePos(b.pos);
+        if(pa&&pb)return pa-pb;
+        return (a.rank??999) - (b.rank??999);
+      });
   const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>a.name.localeCompare(b.name));
   const filteredTier=tierField.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
   const fieldVis=sortF.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
