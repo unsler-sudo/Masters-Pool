@@ -9,6 +9,7 @@ const THEMES = {
   players: {
     emoji:'⛳', tagline:"Golf's Fifth Major",
     logoUrl:'https://upload.wikimedia.org/wikipedia/en/5/5d/ThePlayersChampionshipLogo.png',
+    logoNoBg:true,
     eventName:'The Players Championship', courseName:'TPC Sawgrass · Ponte Vedra Beach, FL',
     teeTime:'2027-03-11T12:00:00Z', purse:25000000,
     primary:'#0f3d5c', dark:'#1e7090', mid:'#3290b0', accent:'#c8a84b', accentLight:'#faf3e0',
@@ -20,6 +21,7 @@ const THEMES = {
   masters: {
     emoji:'🌸', tagline:'A Tradition Unlike Any Other',
     logoUrl:'https://upload.wikimedia.org/wikipedia/en/2/23/Masters_Logo.png',
+    logoNoBg:true,
     eventName:'The Masters', courseName:'Augusta National Golf Club',
     teeTime:'2026-04-09T11:00:00Z', purse:21000000,
     primary:'#2d5016', dark:'#3a7020', mid:'#4a8a2a', accent:'#d94878', accentLight:'#f9e8ef',
@@ -41,7 +43,8 @@ const THEMES = {
   },
   usopen: {
     emoji:'🇺🇸', tagline:'The Hardest Test in Golf',
-    logoUrl:'https://upload.wikimedia.org/wikipedia/en/7/76/US_Open_%28Golf%29_Logo.png',
+    logoUrl:'https://mediacenter.usga.org/file.php/191226/2026-USO_SHINNECOCK_FULL-COLOR+%281%29.jpg?thumbnail=modal',
+    logoNoBg:true,
     eventName:'U.S. Open', courseName:'Shinnecock Hills Golf Club · Southampton, NY',
     teeTime:'2026-06-18T11:00:00Z', purse:21500000,
     primary:'#1a2a5c', dark:'#3a4a8c', mid:'#a82828', accent:'#c83030', accentLight:'#fdeaea',
@@ -1180,7 +1183,10 @@ export default function App(){
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:400,fontStyle:'italic',opacity:.75,letterSpacing:1.5,marginBottom:3}}>{T.tagline}</div>
             <div style={{fontSize:11,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
           </div>
-          {T.logoUrl&&<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={T.logoUrl} alt={T.eventName+' logo'} style={{height:72,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';}}/></div>}
+          {T.logoUrl&&(T.logoNoBg
+            ?<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',height:72,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>
+            :<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={T.logoUrl} alt={T.eventName+' logo'} style={{height:72,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';}}/></div>
+          )}
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
             <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
               <span style={{fontSize:14,filter:'grayscale(.3)'}}>⚙</span>
