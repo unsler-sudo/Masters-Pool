@@ -8,7 +8,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 const THEMES = {
   players: {
     emoji:'⛳', tagline:"Golf's Fifth Major",
-    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/5/5d/The_Players_Championship_logo.svg/1200px-The_Players_Championship_logo.svg.png',
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/5/5d/ThePlayersChampionshipLogo.png',
     eventName:'The Players Championship', courseName:'TPC Sawgrass · Ponte Vedra Beach, FL',
     teeTime:'2027-03-11T12:00:00Z', purse:25000000,
     primary:'#0f3d5c', dark:'#061e2e', mid:'#1a5a7a', accent:'#c8a84b', accentLight:'#faf3e0',
@@ -19,7 +19,7 @@ const THEMES = {
   },
   masters: {
     emoji:'🌸', tagline:'A Tradition Unlike Any Other',
-    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/d/db/Masters_Tournament_Logo.svg/1200px-Masters_Tournament_Logo.svg.png',
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/2/23/Masters_Logo.png',
     eventName:'The Masters', courseName:'Augusta National Golf Club',
     teeTime:'2026-04-09T11:00:00Z', purse:21000000,
     primary:'#2d5016', dark:'#0a1f04', mid:'#1e5010', accent:'#d94878', accentLight:'#f9e8ef',
@@ -30,7 +30,7 @@ const THEMES = {
   },
   pga: {
     emoji:'🏆', tagline:'The Wanamaker Trophy',
-    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/4/4f/PGA_Championship_logo.svg/1200px-PGA_Championship_logo.svg.png',
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/5/5d/PGA_Championship.png',
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
     teeTime:'2026-05-14T11:00:00Z', purse:20000000,
     primary:'#1a2a5c', dark:'#050d1a', mid:'#243475', accent:'#c9a84c', accentLight:'#faf3e0',
@@ -41,7 +41,7 @@ const THEMES = {
   },
   usopen: {
     emoji:'🇺🇸', tagline:'The Hardest Test in Golf',
-    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/0/05/US_Open_%28golf%29_logo.svg/1200px-US_Open_%28golf%29_logo.svg.png',
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/7/76/US_Open_%28Golf%29_Logo.png',
     eventName:'U.S. Open', courseName:'Shinnecock Hills Golf Club · Southampton, NY',
     teeTime:'2026-06-18T11:00:00Z', purse:21500000,
     primary:'#1a2a5c', dark:'#0d1a2e', mid:'#8a1818', accent:'#b02020', accentLight:'#fdeaea',
@@ -52,7 +52,7 @@ const THEMES = {
   },
   open: {
     emoji:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', tagline:'The Oldest Major',
-    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/8/85/Open_Championship_logo.svg/1200px-Open_Championship_logo.svg.png',
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/d/d0/The_Open_Championship_logo.png',
     eventName:'The Open Championship', courseName:'Royal Birkdale · Southport, England',
     teeTime:'2026-07-16T05:35:00Z', purse:17000000,
     primary:'#5a3e28', dark:'#1a0f08', mid:'#7a5a3c', accent:'#8a6a9a', accentLight:'#f0ecf5',
