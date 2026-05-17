@@ -30,7 +30,7 @@ const THEMES = {
   },
   pga: {
     emoji:'🏆', tagline:'The Wanamaker Trophy',
-    logoUrl:'https://upload.wikimedia.org/wikipedia/en/5/5d/PGA_Championship.png',
+    logoUrl:'https://www.aronimink.org/documents/20124/815283/26CH_ARON_4C.png/7528f96a-a7b1-b752-bf2c-ed0f3bf59c16?t=1706303048615',
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
     teeTime:'2026-05-14T11:00:00Z', purse:20000000,
     primary:'#1a2a5c', dark:'#050d1a', mid:'#243475', accent:'#c9a84c', accentLight:'#faf3e0',
@@ -1175,15 +1175,13 @@ export default function App(){
           <ellipse cx="370" cy="175" rx="50" ry="12" fill={T.dark} opacity=".3"/>
         </svg>
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:14}}>
-            {T.logoUrl&&<img src={T.logoUrl} alt={T.eventName+' logo'} style={{height:60,width:'auto',filter:'drop-shadow(0 2px 6px rgba(0,0,0,.4))'}} onError={(ev)=>{ev.target.style.display='none';}}/>}
-            <div>
-              {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:600,opacity:.9,letterSpacing:1.5,marginBottom:1}}>{poolMeta.poolName}</div>}
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:10,fontWeight:400,fontStyle:'italic',opacity:.6,letterSpacing:1.5,marginBottom:2}}>{T.tagline}</div>
-              <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
-              <div style={{fontSize:11,opacity:.55,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
-            </div>
+          <div>
+            {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:600,opacity:.9,letterSpacing:1.5,marginBottom:1}}>{poolMeta.poolName}</div>}
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:10,fontWeight:400,fontStyle:'italic',opacity:.6,letterSpacing:1.5,marginBottom:2}}>{T.tagline}</div>
+            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
+            <div style={{fontSize:11,opacity:.55,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
           </div>
+          {T.logoUrl&&<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',height:110,width:'auto',filter:'drop-shadow(0 3px 10px rgba(0,0,0,.5))',pointerEvents:'none',opacity:.95}} onError={(ev)=>{ev.target.style.display='none';}}/>}
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
             <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
               <span style={{fontSize:14,filter:'grayscale(.3)'}}>⚙</span>
