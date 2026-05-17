@@ -1390,19 +1390,18 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
 
         {tab==='Field'&&<>
           <input style={{...inp,marginBottom:6}} placeholder="Search players..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          <div style={{marginBottom:8,textAlign:'center'}}>
+          {!pastTeeTime&&<div style={{marginBottom:8,textAlign:'center'}}>
             {fieldSource&&<div style={{fontSize:10,color:T.primary,background:`${T.primary}0a`,padding:'4px 10px',borderRadius:20,display:'inline-block',marginBottom:4}}>{fieldSource}</div>}
-            {fieldLastUpdated&&<div style={{fontSize:10,color:'#8a9580',marginTop:2}}>{pastTeeTime?'Scores update every 60s':`Field last updated: ${fieldLastUpdated} · auto-refreshes every 60s`}</div>}
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,fontSize:10,color:'#8a9580',justifyContent:'center'}}>
-            {!pastTeeTime&&<>
-              <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#e8f5e8',color:'#2d7a1e',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>✓</span> Confirmed</span>
-              <span>·</span>
-              <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#fff0d6',color:'#7a4a00',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>–</span> On Track</span>
-              <span>·</span>
-            </>}
+            {fieldLastUpdated&&<div style={{fontSize:10,color:'#8a9580',marginTop:2}}>Field last updated: {fieldLastUpdated} · auto-refreshes every 60s</div>}
+          </div>}
+          {!pastTeeTime&&<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,fontSize:10,color:'#8a9580',justifyContent:'center'}}>
+            <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#e8f5e8',color:'#2d7a1e',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>✓</span> Confirmed</span>
+            <span>·</span>
+            <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#fff0d6',color:'#7a4a00',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>–</span> On Track</span>
+            <span>·</span>
             <span>Tap player for scorecard</span>
-          </div>
+          </div>}
+          {pastTeeTime&&<div style={{fontSize:10,color:'#8a9580',textAlign:'center',marginBottom:8}}>Tap player for scorecard</div>}
           <div style={{borderRadius:9,overflow:'hidden',border:`1px solid ${T.cardBorder}`}}>
             <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5}}>
               <span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee/Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span>
