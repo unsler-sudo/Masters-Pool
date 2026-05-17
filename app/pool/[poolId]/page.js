@@ -10,6 +10,7 @@ const THEMES = {
     emoji:'⛳', tagline:"Golf's Fifth Major",
     logoUrl:'https://upload.wikimedia.org/wikipedia/en/5/5d/ThePlayersChampionshipLogo.png',
     logoNoBg:true,
+    logoHeight:50,
     eventName:'The Players Championship', courseName:'TPC Sawgrass · Ponte Vedra Beach, FL',
     teeTime:'2027-03-11T12:00:00Z', purse:25000000,
     primary:'#0f3d5c', dark:'#1e7090', mid:'#3290b0', accent:'#c8a84b', accentLight:'#faf3e0',
@@ -45,6 +46,7 @@ const THEMES = {
     emoji:'🇺🇸', tagline:'The Hardest Test in Golf',
     logoUrl:'https://mediacenter.usga.org/file.php/191226/2026-USO_SHINNECOCK_FULL-COLOR+%281%29.jpg?thumbnail=modal',
     logoNoBg:true,
+    logoHeight:90,
     eventName:'U.S. Open', courseName:'Shinnecock Hills Golf Club · Southampton, NY',
     teeTime:'2026-06-18T11:00:00Z', purse:21500000,
     primary:'#1a2a5c', dark:'#3a4a8c', mid:'#a82828', accent:'#c83030', accentLight:'#fdeaea',
@@ -225,10 +227,11 @@ export default function App(){
 
   const T = { ...THEMES[activeMajor]||THEMES.pga, ...scheduleData[activeMajor] };
   const TEE_TIME = new Date(T.teeTime).getTime();
+  const TOURNAMENT_END = TEE_TIME + 6 * 24 * 60 * 60 * 1000; // 6 days after tee-off
   const TOURNAMENT = { name: T.eventName, purse: T.purse };
   const TIERS = TIER_DEFS.map(t => t.id===2 ? {...t, color:T.primary} : t);
 
-  const pastTeeTime = now >= TEE_TIME;
+  const pastTeeTime = now >= TEE_TIME && now <= TOURNAMENT_END;
   const locked = serverLocked || pastTeeTime;
   const picksHidden = serverPicksHidden && !pastTeeTime;
 
@@ -452,7 +455,7 @@ export default function App(){
         return {
           name:p.name, country:p.country||'USA',
           odds, tier:rank<TIER_CUTS[0]?1:rank<TIER_CUTS[1]?2:3,
-          rank, win,
+          rank, dgRank:p.dgRank, win,
           confirmed:p.confirmed,
           onTrack:p.onTrack||false,
           teeTime: teeInfo?.teeTime || null,
@@ -1209,8 +1212,8 @@ export default function App(){
             <div style={{fontSize:10,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
           </div>
           {T.logoUrl&&(T.logoNoBg
-            ?<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',height:72,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>
-            :<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={T.logoUrl} alt={T.eventName+' logo'} style={{height:72,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';}}/></div>
+            ?<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',height:T.logoHeight||72,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>
+            :<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={T.logoUrl} alt={T.eventName+' logo'} style={{height:T.logoHeight||72,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';}}/></div>
           )}
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
             <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
