@@ -586,6 +586,29 @@ export async function POST(request) {
       return Response.json({ ok:true, messages:[] });
     }
 
+    // ─── EMERGENCY: Repair missing pool meta ────────────────────────
+    if (body.action === 'repair-meta') {
+      if (body.password !== process.env.PLATFORM_ADMIN_PASSWORD) {
+        return Response.json({ error:'Platform admin only' }, { status:401 });
+      }
+      const { meta } = body;
+      if (!meta || !meta.poolName) return Response.json({ error:'meta object with poolName required' }, { status:400 });
+      // Set sensible defaults
+      const fullMeta = {
+        poolId,
+        major: 'pga',
+        paid: true,
+        active: true,
+        createdAt: new Date().toISOString(),
+        paidAt: new Date().toISOString(),
+        ...meta,
+      };
+      await redis('SET', k(poolId, 'meta'), JSON.stringify(fullMeta));
+      // Also ensure pool is in the global index
+      await redis('SADD', 'pools:index', poolId);
+      return Response.json({ ok:true, meta:fullMeta });
+    }
+
     // ─── EMERGENCY: Rollback an auto-rotation ───────────────────────
     if (body.action === 'rollback-rotation') {
       if (body.password !== process.env.PLATFORM_ADMIN_PASSWORD) {
