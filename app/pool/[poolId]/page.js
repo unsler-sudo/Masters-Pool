@@ -1185,10 +1185,10 @@ export default function App(){
           <ellipse cx="370" cy="175" rx="50" ry="12" fill={T.dark} opacity=".3"/>
         </svg>
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
-          <div>
-            {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:13,fontWeight:700,opacity:.95,letterSpacing:1,marginBottom:2}}>{poolMeta.poolName}</div>}
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:400,fontStyle:'italic',opacity:.75,letterSpacing:1.5,marginBottom:3}}>{T.tagline}</div>
-            <div style={{fontSize:11,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
+          <div style={{maxWidth:'42%'}}>
+            {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,opacity:.95,letterSpacing:.5,marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{poolMeta.poolName}</div>}
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:9,fontWeight:400,fontStyle:'italic',opacity:.75,letterSpacing:.8,marginBottom:3,lineHeight:1.2}}>{T.tagline}</div>
+            <div style={{fontSize:10,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
           </div>
           {T.logoUrl&&(T.logoNoBg
             ?<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',height:72,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>
