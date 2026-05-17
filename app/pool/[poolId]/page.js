@@ -465,23 +465,31 @@ export default function App(){
       setFields(prev=>({...prev,[major]:enriched}));
 
       if(updateDisplay){
-        // Merge with current field to preserve live scores, OR apply cached raw scores
+        // Determine if this major is in its tournament window
+        const teeT = new Date(THEMES[major]?.teeTime || 0).getTime();
+        const cutoff = teeT + 6 * 24 * 60 * 60 * 1000; // 6 days after tee-off
+        const nowMs = Date.now();
+        const isThisMajorActive = nowMs >= teeT && nowMs <= cutoff;
+
+        // Only merge with current field/raw scores if this major is in tournament window
         setField(prev=>{
-          // If we have cached raw scores from API, apply them to the new field
-          if(rawScoresRef.current){
+          if(isThisMajorActive && rawScoresRef.current){
             return mergeScoresIntoField(enriched, rawScoresRef.current);
           }
-          // Otherwise preserve any existing live data
-          if(!prev||prev.length===0)return enriched;
-          return enriched.map(newP=>{
-            const existing=prev.find(p=>p.name===newP.name);
-            if(existing&&(existing.thru||existing.pos!=='-'||existing.earnings>0)){
-              return{...newP,pos:existing.pos,score:existing.score,today:existing.today,
-                thru:existing.thru,earnings:existing.earnings,
-                r1:existing.r1,r2:existing.r2,r3:existing.r3,r4:existing.r4};
-            }
-            return newP;
-          });
+          if(isThisMajorActive && prev && prev.length > 0){
+            // Preserve existing live data for the active tournament
+            return enriched.map(newP=>{
+              const existing=prev.find(p=>p.name===newP.name);
+              if(existing&&(existing.thru||existing.pos!=='-'||existing.earnings>0)){
+                return{...newP,pos:existing.pos,score:existing.score,today:existing.today,
+                  thru:existing.thru,earnings:existing.earnings,
+                  r1:existing.r1,r2:existing.r2,r3:existing.r3,r4:existing.r4};
+              }
+              return newP;
+            });
+          }
+          // Not the active tournament — return clean field with no score data
+          return enriched;
         });
         const confirmed = enriched.filter(p=>p.confirmed).length;
         const onTrack   = enriched.filter(p=>p.onTrack&&!p.confirmed).length;
@@ -864,7 +872,17 @@ export default function App(){
     const t = parseInt(p.thru, 10);
     return t > 0 && t < 18;
   });
-  const sortF = aRoundIsLive
+  // Detect if we're viewing the active major (has tee times AND past tee-off, or is showing live data)
+  const anyTeeTimes = field.some(p => p.teeTime);
+  const isActiveMajor = pastTeeTime || anyTeeTimes;
+  const sortF = !isActiveMajor
+    ? [...field].sort((a,b)=>{
+        // Not in tournament window — sort by DG rank
+        const ra = a.dgRank ?? a.rank ?? 999;
+        const rb = b.dgRank ?? b.rank ?? 999;
+        return ra - rb;
+      })
+    : aRoundIsLive
     ? [...field].sort((a,b)=>{
         // Cut players always at bottom
         const aCut = /CUT|WD|DQ|MC/i.test(a.pos);
