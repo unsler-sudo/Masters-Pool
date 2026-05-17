@@ -8,6 +8,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 const THEMES = {
   players: {
     emoji:'⛳', tagline:"Golf's Fifth Major",
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/5/5d/The_Players_Championship_logo.svg/1200px-The_Players_Championship_logo.svg.png',
     eventName:'The Players Championship', courseName:'TPC Sawgrass · Ponte Vedra Beach, FL',
     teeTime:'2027-03-11T12:00:00Z', purse:25000000,
     primary:'#0f3d5c', dark:'#061e2e', mid:'#1a5a7a', accent:'#c8a84b', accentLight:'#faf3e0',
@@ -18,6 +19,7 @@ const THEMES = {
   },
   masters: {
     emoji:'🌸', tagline:'A Tradition Unlike Any Other',
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/d/db/Masters_Tournament_Logo.svg/1200px-Masters_Tournament_Logo.svg.png',
     eventName:'The Masters', courseName:'Augusta National Golf Club',
     teeTime:'2026-04-09T11:00:00Z', purse:21000000,
     primary:'#2d5016', dark:'#0a1f04', mid:'#1e5010', accent:'#d94878', accentLight:'#f9e8ef',
@@ -28,6 +30,7 @@ const THEMES = {
   },
   pga: {
     emoji:'🏆', tagline:'The Wanamaker Trophy',
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/4/4f/PGA_Championship_logo.svg/1200px-PGA_Championship_logo.svg.png',
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
     teeTime:'2026-05-14T11:00:00Z', purse:20000000,
     primary:'#1a2a5c', dark:'#050d1a', mid:'#243475', accent:'#c9a84c', accentLight:'#faf3e0',
@@ -38,6 +41,7 @@ const THEMES = {
   },
   usopen: {
     emoji:'🇺🇸', tagline:'The Hardest Test in Golf',
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/0/05/US_Open_%28golf%29_logo.svg/1200px-US_Open_%28golf%29_logo.svg.png',
     eventName:'U.S. Open', courseName:'Shinnecock Hills Golf Club · Southampton, NY',
     teeTime:'2026-06-18T11:00:00Z', purse:21500000,
     primary:'#1a2a5c', dark:'#0d1a2e', mid:'#8a1818', accent:'#b02020', accentLight:'#fdeaea',
@@ -48,6 +52,7 @@ const THEMES = {
   },
   open: {
     emoji:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', tagline:'The Oldest Major',
+    logoUrl:'https://upload.wikimedia.org/wikipedia/en/thumb/8/85/Open_Championship_logo.svg/1200px-Open_Championship_logo.svg.png',
     eventName:'The Open Championship', courseName:'Royal Birkdale · Southport, England',
     teeTime:'2026-07-16T05:35:00Z', purse:17000000,
     primary:'#5a3e28', dark:'#1a0f08', mid:'#7a5a3c', accent:'#8a6a9a', accentLight:'#f0ecf5',
@@ -1170,11 +1175,14 @@ export default function App(){
           <ellipse cx="370" cy="175" rx="50" ry="12" fill={T.dark} opacity=".3"/>
         </svg>
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
-          <div>
-            {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:600,opacity:.9,letterSpacing:1.5,marginBottom:1}}>{poolMeta.poolName}</div>}
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:10,fontWeight:400,fontStyle:'italic',opacity:.6,letterSpacing:1.5,marginBottom:2}}>{T.tagline}</div>
-            <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
-            <div style={{fontSize:11,opacity:.55,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
+          <div style={{display:'flex',alignItems:'center',gap:14}}>
+            {T.logoUrl&&<img src={T.logoUrl} alt={T.eventName+' logo'} style={{height:60,width:'auto',filter:'drop-shadow(0 2px 6px rgba(0,0,0,.4))'}} onError={(ev)=>{ev.target.style.display='none';}}/>}
+            <div>
+              {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:600,opacity:.9,letterSpacing:1.5,marginBottom:1}}>{poolMeta.poolName}</div>}
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:10,fontWeight:400,fontStyle:'italic',opacity:.6,letterSpacing:1.5,marginBottom:2}}>{T.tagline}</div>
+              <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
+              <div style={{fontSize:11,opacity:.55,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
+            </div>
           </div>
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
             <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
