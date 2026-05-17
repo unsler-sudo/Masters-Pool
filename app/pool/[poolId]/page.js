@@ -1171,7 +1171,8 @@ export default function App(){
         </svg>
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
           <div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:400,fontStyle:'italic',opacity:.7,letterSpacing:1.5,marginBottom:2}}>{poolMeta?.poolName || T.tagline}</div>
+            {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:11,fontWeight:600,opacity:.9,letterSpacing:1.5,marginBottom:1}}>{poolMeta.poolName}</div>}
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:10,fontWeight:400,fontStyle:'italic',opacity:.6,letterSpacing:1.5,marginBottom:2}}>{T.tagline}</div>
             <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
             <div style={{fontSize:11,opacity:.55,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
           </div>
