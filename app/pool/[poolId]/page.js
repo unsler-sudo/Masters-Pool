@@ -1181,7 +1181,7 @@ export default function App(){
             <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:900,letterSpacing:'-0.5px',textShadow:'0 2px 8px rgba(0,0,0,.3)'}}>{TOURNAMENT.name}</h1>
             <div style={{fontSize:11,opacity:.6,marginTop:2}}>{fmt(TOURNAMENT.purse)} purse · 2+4+3 picks</div>
           </div>
-          {T.logoUrl&&<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:12,left:'50%',transform:'translateX(-50%)',height:60,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>}
+          {T.logoUrl&&<img src={T.logoUrl} alt={T.eventName+' logo'} style={{position:'absolute',top:4,left:'50%',transform:'translateX(-50%)',height:48,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>}
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
             <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
               <span style={{fontSize:14,filter:'grayscale(.3)'}}>⚙</span>
