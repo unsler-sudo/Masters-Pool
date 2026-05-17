@@ -586,6 +586,24 @@ export async function POST(request) {
       return Response.json({ ok:true, messages:[] });
     }
 
+    if (body.action === 'cleanup-orphan-payments') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const entries = await getEntries(poolId);
+      const payments = await getPayments(poolId);
+      const entryNames = new Set(entries.map(e => e.name));
+      const cleaned = {};
+      const removed = [];
+      Object.entries(payments).forEach(([name, val]) => {
+        if (entryNames.has(name)) {
+          cleaned[name] = val;
+        } else {
+          removed.push(name);
+        }
+      });
+      await savePayments(poolId, cleaned);
+      return Response.json({ ok:true, removed, remaining: Object.keys(cleaned).length });
+    }
+
     // ─── EMERGENCY: Repair missing pool meta ────────────────────────
     if (body.action === 'repair-meta') {
       if (body.password !== process.env.PLATFORM_ADMIN_PASSWORD) {
