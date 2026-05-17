@@ -886,6 +886,11 @@ export default function App(){
   });
   // Only consider this major "active" if it's actually within its tournament window
   const isActiveMajor = pastTeeTime;
+  // Detect if the tournament is fully complete: everyone has R4 score OR is cut
+  const tournamentComplete = field.length > 0 && field.every(p => {
+    const isCut = /CUT|WD|DQ|MC/i.test(p.pos);
+    return isCut || p.r4 != null;
+  });
   const sortF = !isActiveMajor
     ? [...field].sort((a,b)=>{
         // Not in tournament window — sort by DG rank
@@ -895,14 +900,14 @@ export default function App(){
         if (ra !== rb) return ra - rb;
         return a.name.localeCompare(b.name);
       })
-    : aRoundIsLive
+    : (aRoundIsLive || tournamentComplete)
     ? [...field].sort((a,b)=>{
         // Cut players always at bottom
         const aCut = /CUT|WD|DQ|MC/i.test(a.pos);
         const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
-        // Live mode: sort by position
+        // Live mode OR tournament complete: sort by position (leaderboard order)
         const pa=parsePos(a.pos),pb=parsePos(b.pos);
         if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
         if(!pa)return 1;
