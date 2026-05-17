@@ -1356,8 +1356,14 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);
             // Show tee time per player until they have actual thru data (meaning they've teed off)
-            const hasTeedOff = (p.thru && p.thru !== '' && p.thru !== '-') || (p.pos && p.pos !== '-');
-            const showTeeTime = p.teeTime && !hasTeedOff && !isCut;
+            const thruNum = parseInt(p.thru, 10);
+            const isActivelyPlaying = thruNum > 0 && thruNum < 18;
+            const justFinished = thruNum === 18;
+            // Show tee time if: player hasn't started yet (no thru, no pos) OR they finished a round and have next tee scheduled
+            const showTeeTime = p.teeTime && !isActivelyPlaying && !isCut && (
+              (!p.thru && p.pos === '-') ||  // hasn't started any round
+              justFinished                     // finished a round, next tee available
+            );
             return(
               <div key={p.name} onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',background:isCut?'#fafafa':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut?.6:1}}>
                 <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut?'#999':T.primary,fontSize:12}}>{isCut?'✂️':p.pos}</span>
