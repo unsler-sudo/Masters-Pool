@@ -1191,7 +1191,7 @@ export default function App(){
       </header>
 
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)'}}>
-        {TABS.map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3}}>{t==='Admin'?'⚙ ':''}{t}</button>)}
+        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3}}>{t==='Admin'?'⚙ ':''}{t}</button>)}
       </nav>
       {lastUp&&!picksHidden&&<div style={{padding:'4px 14px',background:T.navActive,borderBottom:`1px solid ${T.cardBorder}`,textAlign:'center'}}><span style={{fontSize:10,color:'#8a9580'}}>Scores update automatically · Last: {lastUp}</span></div>}
       {justActivated&&<div style={{background:'#d1fae5',padding:'10px 16px',fontSize:13,color:'#065f46',textAlign:'center',fontWeight:600}}>🎉 Your pool is live! Share this link with your friends to start entering picks.</div>}
