@@ -884,9 +884,8 @@ export default function App(){
     const t = parseInt(p.thru, 10);
     return t > 0 && t < 18;
   });
-  // Detect if we're viewing the active major (has tee times AND past tee-off, or is showing live data)
-  const anyTeeTimes = field.some(p => p.teeTime);
-  const isActiveMajor = pastTeeTime || anyTeeTimes;
+  // Only consider this major "active" if it's actually within its tournament window
+  const isActiveMajor = pastTeeTime;
   const sortF = !isActiveMajor
     ? [...field].sort((a,b)=>{
         // Not in tournament window — sort by DG rank
