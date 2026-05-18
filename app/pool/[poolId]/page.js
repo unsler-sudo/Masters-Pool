@@ -37,7 +37,7 @@ const THEMES = {
       ? 'https://lh3.googleusercontent.com/sitesv/AA5AbUCLDehE2dxLOr4XwdL7Qa4tEBd1R48QClelJ8vpmJ-mpPjJSy_1CoXPaQ45VEfedqLoUgEZjhVCHhvZEWNxmAG9H9qUUaznsk6P0dmyIn8EFDNeuSkP4N_XxKtyIOGn_c3OHIHDzY8dqsb2uHGK1ndmOjTdm58MdegAZECQEr4E14dOCqOJSmAn51tqGrLhbBcBBjvtbFAEdYdchy1x67ozz1k6bX0jyoQLYfI=w1280'
       : 'https://lh3.googleusercontent.com/sitesv/AA5AbUBmVWWBpruB1yG0irjnd635hYrhH5rkfnYlWy1FKVSK535wOKIE65hUFF0lo7a_d8koFzOHfYrmyLp--CXdDv4dS3spzlpFf3kuNvPxMJ0in2Y4n5gt24gRJ5mGalrLBvI5toVkPNGXufxq2d-Qj5emIZejKb5vsXygtY6vxWwr-oM9ZCwryL7BMd1vP4_HdhO6Y58LawLtSdwSNZ-hP5FHcM4kC1UzX9z6y6A=w1280'),
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
-    teeTime:'2026-05-14T11:00:00Z', purse:20000000,
+    teeTime:'2026-05-14T11:00:00Z', purse:20500000,
     primary:'#1a2a5c', dark:'#3a4a8c', mid:'#5060a0', accent:'#c9a84c', accentLight:'#faf3e0',
     navBg:'#fff', navActive:'#eef0f8', navBorder:'#1a2a5c',
     headerBg:'linear-gradient(170deg,#3a4a8c 0%,#5060a0 35%,#6878b8 65%,#7c8cc8 100%)',
@@ -80,6 +80,73 @@ const TIER_DEFS = [
 const TOTAL_PICKS = 9;
 const TIER_CUTS = [10, 40];
 
+// Per-major payout distribution percentages
+// PGA Championship: Per PGA of America 2026 distribution (verified against $3.69M winner / $20.5M purse)
+// US Open: Per USGA 2025 distribution
+// The Open: Per R&A 2025 distribution  
+// Masters: Per Augusta National (Masters has slightly different — uses % of $20M base + bonuses)
+// The Players: Standard PGA Tour event distribution
+const PAYOUT_PGA = {
+  1:.180,2:.1080,3:.0680,4:.0480,5:.0400,6:.0360,7:.0335,8:.0310,9:.0290,10:.0270,
+  11:.0250,12:.0230,13:.0210,14:.0190,15:.0178,16:.0168,17:.0158,18:.0149,19:.0139,20:.0129,
+  21:.0119,22:.0109,23:.0101,24:.0094,25:.0086,26:.0079,27:.0076,28:.0073,29:.0070,30:.0067,
+  31:.0064,32:.0061,33:.0058,34:.0056,35:.0053,36:.0051,37:.0048,38:.0046,39:.0044,40:.0042,
+  41:.0040,42:.0038,43:.0037,44:.0035,45:.0033,46:.0031,47:.0029,48:.0028,49:.0027,50:.0026,
+  51:.0025,52:.0024,53:.0024,54:.0023,55:.0022,56:.0022,57:.0021,58:.0021,59:.0020,60:.0020,
+  61:.0020,62:.0019,63:.0019,64:.0019,65:.0018,66:.0018,67:.0018,68:.0018,69:.0018,70:.0017,
+  71:.0017,72:.0017,73:.0017,74:.0017,75:.0017,76:.0017,77:.0017,78:.0016,79:.0016,80:.0016,
+  81:.0016,82:.0016
+};
+
+const PAYOUT_USOPEN = {
+  1:.180,2:.108,3:.068,4:.049,5:.041,6:.0365,7:.034,8:.031,9:.029,10:.027,
+  11:.025,12:.023,13:.021,14:.019,15:.018,16:.017,17:.016,18:.015,19:.014,20:.013,
+  21:.012,22:.011,23:.0105,24:.0097,25:.0089,26:.0082,27:.0077,28:.0074,29:.0072,30:.0069,
+  31:.0066,32:.0063,33:.0060,34:.0057,35:.0055,36:.0052,37:.0050,38:.0048,39:.0046,40:.0044,
+  41:.0042,42:.0040,43:.0038,44:.0036,45:.0034,46:.0032,47:.0030,48:.0028,49:.0027,50:.0026,
+  51:.0025,52:.0025,53:.0024,54:.0024,55:.0023,56:.0023,57:.0023,58:.0023,59:.0023,60:.0022,
+  61:.0022,62:.0022,63:.0022,64:.0022,65:.0021
+};
+
+const PAYOUT_OPEN = {
+  1:.180,2:.1040,3:.0670,4:.0510,5:.0410,6:.0360,7:.0310,8:.0260,9:.0230,10:.0205,
+  11:.0185,12:.0167,13:.0151,14:.0137,15:.0125,16:.0114,17:.0104,18:.0095,19:.0087,20:.0080,
+  21:.0074,22:.0069,23:.0064,24:.0060,25:.0056,26:.0053,27:.0050,28:.0047,29:.0044,30:.0041,
+  31:.0039,32:.0037,33:.0035,34:.0033,35:.0031,36:.0030,37:.0028,38:.0027,39:.0026,40:.0025,
+  41:.0024,42:.0023,43:.0022,44:.0021,45:.0020,46:.0019,47:.0019,48:.0018,49:.0017,50:.0017,
+  51:.0016,52:.0016,53:.0015,54:.0015,55:.0015,56:.0014,57:.0014,58:.0014,59:.0014,60:.0013,
+  61:.0013,62:.0013,63:.0013,64:.0013,65:.0013,66:.0013,67:.0012,68:.0012,69:.0012,70:.0012
+};
+
+const PAYOUT_MASTERS = {
+  1:.18,2:.108,3:.068,4:.048,5:.04,6:.036,7:.0335,8:.031,9:.029,10:.027,
+  11:.025,12:.023,13:.021,14:.019,15:.018,16:.017,17:.016,18:.015,19:.014,20:.013,
+  21:.012,22:.011,23:.0105,24:.0097,25:.0089,26:.00805,27:.00775,28:.00745,29:.00715,30:.00685,
+  31:.00655,32:.00625,33:.00595,34:.0057,35:.00545,36:.0052,37:.00495,38:.00475,39:.00455,40:.00435,
+  41:.00415,42:.00395,43:.00375,44:.00355,45:.00335,46:.00315,47:.00295,48:.00279,49:.00265,50:.00257
+};
+
+const PAYOUT_PLAYERS = {
+  1:.18,2:.109,3:.069,4:.049,5:.041,6:.03625,7:.03375,8:.03125,9:.02925,10:.02725,
+  11:.02525,12:.02325,13:.02125,14:.01925,15:.01825,16:.01725,17:.01625,18:.01525,19:.01425,20:.01325,
+  21:.01225,22:.01125,23:.01045,24:.00965,25:.00885,26:.00805,27:.00775,28:.00745,29:.00715,30:.00685,
+  31:.00655,32:.00625,33:.00595,34:.0057,35:.00545,36:.0052,37:.00495,38:.00475,39:.00455,40:.00435,
+  41:.00415,42:.00395,43:.00375,44:.00355,45:.00335,46:.00315,47:.00295,48:.00279,49:.00265,50:.00257,
+  51:.00251,52:.00245,53:.00241,54:.00237,55:.00235,56:.00233,57:.00231,58:.00229,59:.00227,60:.00225,
+  61:.00223,62:.00221,63:.00219,64:.00217,65:.00215
+};
+
+const PAYOUT_BY_MAJOR = {
+  pga: PAYOUT_PGA,
+  usopen: PAYOUT_USOPEN,
+  open: PAYOUT_OPEN,
+  masters: PAYOUT_MASTERS,
+  players: PAYOUT_PLAYERS,
+};
+
+// Default fallback
+const PAYOUT = PAYOUT_PGA;
+
 const FLAG_MAP = {
   USA:'🇺🇸',ENG:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',SCO:'🏴󠁧󠁢󠁳󠁣󠁴󠁿',WAL:'🏴󠁧󠁢󠁷󠁬󠁳󠁿',NIR:'🇬🇧',
   IRL:'🇮🇪',ESP:'🇪🇸',AUS:'🇦🇺',JPN:'🇯🇵',NOR:'🇳🇴',
@@ -112,9 +179,11 @@ const flip=n=>n.includes(', ')?n.split(', ').reverse().join(' '):n;
 const fmtScore=n=>{if(n==null)return null;if(n===0)return'E';return n>0?`+${n}`:String(n);};
 const toLastFirst=name=>{const p=name.trim().split(' ');if(p.length<2)return name;const last=p.pop();return`${last}, ${p.join(' ')}`;};
 
-function calcEarnings(players, purse){
-  const g={};players.forEach(p=>{const pos=parsePos(p.pos);if(pos&&pos<=65){if(!g[pos])g[pos]=[];g[pos].push(p.name);}});
-  const m={};Object.entries(g).forEach(([ps,pls])=>{const pos=+ps;let t=0;for(let i=0;i<pls.length;i++)t+=PAYOUT[pos+i]||0;const e=Math.round(t/pls.length*purse);pls.forEach(n=>{m[n]=e;});});
+function calcEarnings(players, purse, major){
+  const payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
+  const maxPos = Math.max(...Object.keys(payoutTable).map(Number));
+  const g={};players.forEach(p=>{const pos=parsePos(p.pos);if(pos&&pos<=maxPos){if(!g[pos])g[pos]=[];g[pos].push(p.name);}});
+  const m={};Object.entries(g).forEach(([ps,pls])=>{const pos=+ps;let t=0;for(let i=0;i<pls.length;i++)t+=payoutTable[pos+i]||0;const e=Math.round(t/pls.length*purse);pls.forEach(n=>{m[n]=e;});});
   return m;
 }
 
@@ -597,7 +666,7 @@ export default function App(){
       }
       return f;
     });
-    const em=calcEarnings(updated, TOURNAMENT.purse);
+    const em=calcEarnings(updated, TOURNAMENT.purse, activeMajor);
     updated.forEach(p=>{p.earnings=em[p.name]||0;});
     if(Object.keys(em).length>0){
       fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1010,6 +1079,9 @@ export default function App(){
   }
 
   return(
+    <div style={{fontFamily:"'DM Sans',sans-serif",background:T.bg,minHeight:'100vh',color:'#1a2e0a'}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,800;0,900;1,400&family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes fu{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         @keyframes sd{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes su{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
