@@ -1857,12 +1857,20 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const ranked=[...a.entries].map(e=>({
                   ...e,
                   total:e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
-                })).sort((x,y)=>y.total-x.total);
-                // Pool prize money from saved entryFee
+                }))
+                  .filter(e=>e.picks && e.picks.length > 0)
+                  .sort((x,y)=>y.total-x.total);
+                // Pool prize money — prefer saved prizes, fall back to computed from entryFee
                 const archiveFee = a.entryFee || 0;
-                const pot = ranked.length * archiveFee;
-                const showPrizes = archiveFee > 0 && ranked.length >= 3;
-                const prizes = showPrizes ? [pot - archiveFee * 3, archiveFee * 2, archiveFee] : [];
+                const computedPot = ranked.length * archiveFee;
+                const savedPrizes = a.prizes;
+                const showPrizes = savedPrizes ? true : (archiveFee > 0 && ranked.length >= 3);
+                const prizes = savedPrizes
+                  ? [savedPrizes.first||0, savedPrizes.second||0, savedPrizes.third||0]
+                  : (archiveFee > 0 && ranked.length >= 3
+                    ? [computedPot - archiveFee * 3, archiveFee * 2, archiveFee]
+                    : []);
+                const pot = savedPrizes ? (prizes[0]+prizes[1]+prizes[2]) : computedPot;
                 return<div key={archiveId} style={{marginBottom:16,borderRadius:12,overflow:'hidden',border:`1px solid ${THEME.cardBorder}`}}>
                   <div onClick={()=>setExpandedArchive(isExpanded?null:archiveId)} style={{background:THEME.headerBg,padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
                     <span style={{fontSize:24}}>{THEME.emoji}</span>
