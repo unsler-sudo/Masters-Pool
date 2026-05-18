@@ -1878,7 +1878,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <span style={{fontSize:24}}>{THEME.emoji}</span>
                     <div style={{flex:1}}>
                       <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:'#fff'}}>{THEME.eventName}</div>
-                      <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{new Date(a.archivedAt).toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries{showPrizes&&<> · ${pot} pot</>}</div>
+                      <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{new Date(THEME.teeTime).toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries{showPrizes&&<> · ${pot} pot</>}</div>
                     </div>
                     <span style={{fontSize:18,color:'rgba(255,255,255,0.6)'}}>{isExpanded?'▲':'▼'}</span>
                   </div>
