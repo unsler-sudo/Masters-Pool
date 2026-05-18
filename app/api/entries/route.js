@@ -616,6 +616,16 @@ export async function POST(request) {
       return Response.json({ ok:true, removed, remaining: Object.keys(cleaned).length });
     }
 
+    if (body.action === 'delete-archive') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const { archiveKey } = body;
+      if (!archiveKey || !archiveKey.startsWith('archive:')) {
+        return Response.json({ error:'archiveKey required (e.g. archive:usopen_2026)' }, { status:400 });
+      }
+      await redis('DEL', k(poolId, archiveKey));
+      return Response.json({ ok:true, deleted: archiveKey });
+    }
+
     // ─── EMERGENCY: Repair missing pool meta ────────────────────────
     if (body.action === 'repair-meta') {
       if (body.password !== process.env.PLATFORM_ADMIN_PASSWORD) {
