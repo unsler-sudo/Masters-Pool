@@ -819,6 +819,23 @@ export async function POST(request) {
       return Response.json({ ok:true, entryFee:fee });
     }
 
+    if (body.action==='save-full-archive') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const { major, year, earnings } = body;
+      const archiveKey = k(poolId, `archive:${major}_${year}`);
+      const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
+      const archiveData = {
+        major,
+        year,
+        archivedAt: new Date().toISOString(),
+        entries,
+        payments,
+        earnings: earnings || {},
+      };
+      await redis('SET', archiveKey, JSON.stringify(archiveData));
+      return Response.json({ ok:true, archived:{entries:entries.length, earnings:Object.keys(earnings||{}).length}});
+    }
+
     if (body.action==='save-archive-earnings') {
       if (body.password!=='auto' && !await checkAdmin(body.password))
         return Response.json({ error:'Wrong password' }, { status:401 });
