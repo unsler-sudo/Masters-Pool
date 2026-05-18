@@ -199,6 +199,7 @@ export default function App(){
   const [toast,setToast]=useState('');
   const [adminPw,setAdminPw]=useState('');
   const [adminOk,setAdminOk]=useState(false);
+  const [adminAuthError,setAdminAuthError]=useState('');
   const [serverLocked,setServerLocked]=useState(false);
   const [serverPicksHidden,setServerPicksHidden]=useState(true);
   const [paymentsHidden,setPaymentsHidden]=useState(false);
@@ -1742,9 +1743,20 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
         {tab==='Admin'&&(!adminOk?
           <div style={{background:'#fff',padding:20,borderRadius:11,border:`1px solid ${T.cardBorder}`}}>
             <p style={{color:'#6b7c5e',marginBottom:10,fontSize:13}}>Enter admin password:</p>
+            {adminAuthError&&<p style={{color:'#c44',marginBottom:10,fontSize:12,fontWeight:600}}>{adminAuthError}</p>}
             <div style={{display:'flex',gap:8}}>
-              <input style={inp} type="password" placeholder="Password" value={adminPw} onChange={e=>setAdminPw(e.target.value)} onKeyDown={e=>e.key==='Enter'&&setAdminOk(true)}/>
-              <button type="button" style={{...pri,padding:'10px 24px',minWidth:80}} onClick={()=>setAdminOk(true)}>Enter</button>
+              <input style={inp} type="password" placeholder="Password" value={adminPw} onChange={e=>{setAdminPw(e.target.value);setAdminAuthError('');}} onKeyDown={async e=>{
+                if(e.key==='Enter'){
+                  const d=await adminAction('verify-admin',{});
+                  if(d?.ok)setAdminOk(true);
+                  else setAdminAuthError('Wrong password');
+                }
+              }}/>
+              <button type="button" style={{...pri,padding:'10px 24px',minWidth:80}} onClick={async()=>{
+                const d=await adminAction('verify-admin',{});
+                if(d?.ok)setAdminOk(true);
+                else setAdminAuthError('Wrong password');
+              }}>Enter</button>
             </div>
           </div>
           :<>
@@ -1866,7 +1878,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       <span style={{flex:1,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</span>
                       <span style={{width:50,textAlign:'center',fontSize:11,color:'#8a9580'}}>{e.picks.length}</span>
                       <button type="button" onClick={()=>togglePayment(e.name)} style={{width:74,marginLeft:3,marginRight:3,background:paid?'#e8f5e8':'#f5f5f5',border:`1px solid ${paid?'#2d7a1e':'#ccc'}`,color:paid?'#2d7a1e':'#888',padding:'4px 0',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer'}}>{paid?'✓ Paid':'Mark Paid'}</button>
-                      <button type="button" style={{width:54,marginLeft:3,background:'transparent',border:'1px solid #c44',color:'#c44',padding:'4px 0',borderRadius:5,fontSize:11,cursor:'pointer'}} onClick={async()=>{if(!confirm(`Remove ${e.name}'s entry?`))return;await adminAction('delete',{name:e.name});msg('Removed');}}>Remove</button>
+                      <button type="button" style={{width:54,marginLeft:3,background:'transparent',border:'1px solid #c44',color:'#c44',padding:'4px 0',borderRadius:5,fontSize:11,cursor:'pointer'}} onClick={async()=>{
+                        if(!confirm(`Remove ${e.name}'s entry?`))return;
+                        const d=await adminAction('delete',{name:e.name});
+                        if(d?.ok){msg(`Removed ${e.name}`);loadEntries();}
+                      }}>Remove</button>
                     </div>);})}
                 </div>
               }
