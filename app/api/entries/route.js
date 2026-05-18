@@ -145,10 +145,14 @@ async function autoManage(poolId) {
         const archiveKey = k(poolId, `archive:${currentMajor}_${year}`);
         let existingEarnings = {};
         try { const ex = await redis('GET', archiveKey); if (ex) existingEarnings = JSON.parse(ex).earnings || {}; } catch {}
+        // Get current entryFee before we reset for next major
+        let currentEntryFee = 0;
+        try { const m = await redis('GET', k(poolId,'meta')); if (m) currentEntryFee = JSON.parse(m).entryFee || 0; } catch {}
         await redis('SET', archiveKey, JSON.stringify({
           major: currentMajor, year,
           archivedAt: new Date().toISOString(),
           entries, payments, earnings: existingEarnings,
+          entryFee: currentEntryFee,
         }));
       }
       // Mark pool as unpaid for next major — commissioner must pay $10 to unlock
@@ -678,7 +682,7 @@ export async function POST(request) {
 
     if (body.action === 'import-archive') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
-      const { major, year, entries, payments, earnings } = body;
+      const { major, year, entries, payments, earnings, entryFee } = body;
       if (!major || !year || !Array.isArray(entries)) {
         return Response.json({ error:'major, year, and entries[] required' }, { status:400 });
       }
@@ -687,6 +691,7 @@ export async function POST(request) {
         major, year,
         archivedAt: new Date().toISOString(),
         entries, payments: payments || {}, earnings: earnings || {},
+        entryFee: entryFee || 0,
         manuallyImported: true,
       };
       await redis('SET', archiveKey, JSON.stringify(archiveData));
@@ -890,7 +895,7 @@ export async function POST(request) {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const { major, year, earnings } = body;
       const archiveKey = k(poolId, `archive:${major}_${year}`);
-      const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
+      const [entries, payments, meta] = await Promise.all([getEntries(poolId), getPayments(poolId), getPoolMeta(poolId)]);
       const archiveData = {
         major,
         year,
@@ -898,6 +903,7 @@ export async function POST(request) {
         entries,
         payments,
         earnings: earnings || {},
+        entryFee: meta?.entryFee || 0,
       };
       await redis('SET', archiveKey, JSON.stringify(archiveData));
       return Response.json({ ok:true, archived:{entries:entries.length, earnings:Object.keys(earnings||{}).length}});
