@@ -453,10 +453,7 @@ export default function App(){
 
       // For non-active majors (pre-tournament), show ALL scraped players regardless of confirmed status
       // For the active major, only show confirmed/onTrack players
-      const teeT = new Date(THEMES[major]?.teeTime || 0).getTime();
-      const cutoff = teeT + 6 * 24 * 60 * 60 * 1000;
-      const nowMs = Date.now();
-      const isThisMajorInWindow = nowMs >= teeT && nowMs <= cutoff;
+      // (teeT, cutoff, nowMs, isThisMajorInWindow already declared above)
       const playersToShow = isThisMajorInWindow
         ? scrapedPlayers.filter(p=>p.confirmed||p.onTrack)
         : scrapedPlayers;
