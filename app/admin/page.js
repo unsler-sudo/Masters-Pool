@@ -103,6 +103,46 @@ export default function AdminDashboard() {
           ))}
         </div>
 
+        {/* Tournament Purses */}
+        <div style={{background:'#fff',borderRadius:10,boxShadow:'0 1px 4px rgba(0,0,0,.06)',padding:'16px 20px',marginBottom:28}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <div style={{fontWeight:700,color:'#1a2a5c',fontSize:15}}>💰 Tournament Purses</div>
+            <div style={{fontSize:11,color:'#9ca3af'}}>Update annually when each major announces their purse</div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:12}}>
+            {[
+              {key:'players', label:'⛳ Players',   year:2027, defaultPurse:data.purses?.players  ?? 25000000},
+              {key:'masters', label:'🌸 Masters',   year:2026, defaultPurse:data.purses?.masters  ?? 22500000},
+              {key:'pga',     label:'🏆 PGA',       year:2026, defaultPurse:data.purses?.pga      ?? 20500000},
+              {key:'usopen',  label:'🇺🇸 US Open',   year:2026, defaultPurse:data.purses?.usopen   ?? 21500000},
+              {key:'open',    label:'🏴 The Open',  year:2026, defaultPurse:data.purses?.open     ?? 17000000},
+            ].map(major=>(
+              <div key={major.key} style={{padding:'10px 12px',background:'#f9fafb',borderRadius:8,border:'1px solid #e5e7eb'}}>
+                <div style={{fontSize:12,fontWeight:700,color:'#374151',marginBottom:4}}>{major.label}</div>
+                <div style={{fontSize:10,color:'#9ca3af',marginBottom:6}}>{major.year} Purse</div>
+                <div style={{display:'flex',alignItems:'center',gap:4}}>
+                  <span style={{fontSize:13,color:'#6b7280'}}>$</span>
+                  <input
+                    type="number"
+                    defaultValue={major.defaultPurse}
+                    onBlur={async e=>{
+                      const newPurse=parseInt(e.target.value,10);
+                      if(!newPurse||newPurse===major.defaultPurse)return;
+                      const res=await fetch('/api/admin-pools',{method:'POST',headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({password,action:'set-purse',major:major.key,purse:newPurse})});
+                      const d=await res.json();
+                      if(d.ok)setData(prev=>({...prev,purses:{...(prev.purses||{}),[major.key]:newPurse}}));
+                    }}
+                    onKeyDown={e=>{if(e.key==='Enter')e.target.blur();}}
+                    style={{width:'100%',padding:'6px 8px',border:'1px solid #d1d5db',borderRadius:5,fontSize:13,fontWeight:600,outline:'none'}}
+                  />
+                </div>
+                <div style={{fontSize:10,color:'#9ca3af',marginTop:3}}>= ${((major.defaultPurse)/1000000).toFixed(1)}M</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Pools table */}
         <div style={{background:'#fff',borderRadius:10,boxShadow:'0 1px 4px rgba(0,0,0,.06)',overflow:'hidden'}}>
           <div style={{padding:'16px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,color:'#1a2a5c',fontSize:15}}>
