@@ -33,7 +33,7 @@ const THEMES = {
   },
   pga: {
     emoji:'🏆', tagline:'The Wanamaker Trophy',
-    logoUrl:'https://www.aronimink.org/documents/20124/815283/26CH_ARON_4C.png/7528f96a-a7b1-b752-bf2c-ed0f3bf59c16?t=1706303048615',
+    logoUrl:'https://d3m889aznlr23d.cloudfront.net/img/events/id/458/458987506/assets/aff16a9aebdcd602165e9e2da1a70591.PGA_Frisco-2027.jpg',
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
     teeTime:'2026-05-14T11:00:00Z', purse:20000000,
     primary:'#1a2a5c', dark:'#3a4a8c', mid:'#5060a0', accent:'#c9a84c', accentLight:'#faf3e0',
@@ -57,7 +57,7 @@ const THEMES = {
   },
   open: {
     emoji:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', tagline:'The Oldest Major',
-    logoUrl:'https://upload.wikimedia.org/wikipedia/en/d/d0/The_Open_Championship_logo.png',
+    logoUrl:'https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:r000.png/tournaments/logos/r100.png',
     eventName:'The Open Championship', courseName:'Royal Birkdale · Southport, England',
     teeTime:'2026-07-16T05:35:00Z', purse:17000000,
     primary:'#5a3e28', dark:'#7a5a3c', mid:'#9a7a58', accent:'#8a6a9a', accentLight:'#f0ecf5',
