@@ -68,6 +68,21 @@ export async function POST(request) {
       return Response.json({ ok: true, meta });
     }
 
+    // ── Set tournament purse ─────────────────────────────────────────────────
+    if (body.action === 'set-purse') {
+      const { major, purse } = body;
+      const VALID = ['players','masters','pga','usopen','open'];
+      if (!VALID.includes(major)) {
+        return Response.json({ error: `Invalid major: ${major}` }, { status: 400 });
+      }
+      const newPurse = parseInt(purse, 10);
+      if (!newPurse || newPurse < 1000000) {
+        return Response.json({ error: 'Purse must be at least $1M' }, { status: 400 });
+      }
+      await redis('SET', `tournament:purse:${major}`, String(newPurse));
+      return Response.json({ ok: true, major, purse: newPurse });
+    }
+
     // ── Get all pools ─────────────────────────────────────────────────────────
     const poolIds = await redis('SMEMBERS', 'pools:index') || [];
     const pools = [];
@@ -98,7 +113,21 @@ export async function POST(request) {
     const paidPools    = pools.filter(p => p.paid).length;
     const totalRevenue = paidPools * 10;
 
-    return Response.json({ ok: true, pools, stats: { totalPools, paidPools, totalRevenue } });
+    // Load tournament purses (with defaults if not set)
+    const PURSE_DEFAULTS = {
+      players: 25000000,
+      masters: 22500000,
+      pga:     20500000,
+      usopen:  21500000,
+      open:    17000000,
+    };
+    const purses = {};
+    for (const major of Object.keys(PURSE_DEFAULTS)) {
+      const stored = await redis('GET', `tournament:purse:${major}`);
+      purses[major] = stored ? parseInt(stored, 10) : PURSE_DEFAULTS[major];
+    }
+
+    return Response.json({ ok: true, pools, stats: { totalPools, paidPools, totalRevenue }, purses });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }
