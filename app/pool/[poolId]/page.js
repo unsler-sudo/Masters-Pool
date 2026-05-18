@@ -347,9 +347,15 @@ export default function App(){
 
       // Build odds map — DataGolf returns names as "Last, First", scraper returns "First Last"
       // Store BOTH formats so lookups work regardless of which side queries
+      // Only fetch odds for the active major - DataGolf's pre-tournament endpoint only has
+      // current week's odds, so applying them to non-active majors is incorrect
       const oddsMap = {};
       const teeTimeMap = {};
-      if(updateDisplay){
+      const teeT = new Date(THEMES[major]?.teeTime || 0).getTime();
+      const cutoff = teeT + 6 * 24 * 60 * 60 * 1000;
+      const nowMs = Date.now();
+      const isThisMajorInWindow = nowMs >= teeT && nowMs <= cutoff;
+      if(updateDisplay && isThisMajorInWindow){
         let preds = [];
         const preRes = await fetch('/api/scores?endpoint=pre-tournament');
         if(preRes.ok){
