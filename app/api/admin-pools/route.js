@@ -33,6 +33,21 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ── Update a meta field on a pool ────────────────────────────────────────
+    if (body.action === 'update-meta') {
+      const { poolId, field, value } = body;
+      const ALLOWED = ['poolName','commissionerName','commissionerEmail','adminPassword','entryFee'];
+      if (!ALLOWED.includes(field)) {
+        return Response.json({ error: `Field "${field}" not editable` }, { status: 400 });
+      }
+      const metaRaw = await redis('GET', `pool:${poolId}:meta`);
+      if (!metaRaw) return Response.json({ error: 'Pool not found' }, { status: 404 });
+      const meta = JSON.parse(metaRaw);
+      meta[field] = field === 'entryFee' ? (parseInt(value,10)||0) : value;
+      await redis('SET', `pool:${poolId}:meta`, JSON.stringify(meta));
+      return Response.json({ ok: true, meta });
+    }
+
     // ── Get all pools ─────────────────────────────────────────────────────────
     const poolIds = await redis('SMEMBERS', 'pools:index') || [];
     const pools = [];
