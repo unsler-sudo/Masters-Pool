@@ -1874,8 +1874,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <button type="button" style={{...pri,fontSize:12,marginBottom:4}} onClick={async()=>{
                   const earnings={};
                   field.forEach(p=>{if(p.earnings>0)earnings[p.name]=p.earnings;});
-                  await adminAction('save-archive-earnings',{major:activeMajor,year:new Date().getFullYear(),earnings});
-                  msg('Final earnings saved ✓');
+                  const d=await adminAction('save-full-archive',{major:activeMajor,year:new Date().getFullYear(),earnings});
+                  if(d?.ok)msg(`Archived ${d.archived?.entries||0} entries, ${d.archived?.earnings||0} payouts ✓`);
                 }}>💾 Save Final Results Now</button>
                 <div style={{fontSize:10,color:'#8a9580'}}>Run after the final round to lock in earnings before Tuesday rotation.</div>
               </div>}
