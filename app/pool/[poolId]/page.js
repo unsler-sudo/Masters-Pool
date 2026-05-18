@@ -181,6 +181,7 @@ export default function App(){
   const [scheduleData,setScheduleData]=useState({});
   const [entries,setEntries]=useState([]);
   const [poolMeta,setPoolMeta]=useState(null);
+  const [poolNotFound,setPoolNotFound]=useState(false);
   const [payments,setPayments]=useState({});
   const [field,setField]=useState([]);
   const [fields,setFields]=useState({});
@@ -270,6 +271,12 @@ export default function App(){
     try{
       const r=await fetch('/api/entries?poolId='+poolId);
       const d=await r.json();
+      // If no meta returned, pool was deleted or never existed
+      if(!d.meta){
+        setPoolNotFound(true);
+        return;
+      }
+      setPoolNotFound(false);
       if(d.entries)setEntries(d.entries);
       if(d.locked!==undefined)setServerLocked(d.locked);
       if(d.picksHidden!==undefined)setServerPicksHidden(d.picksHidden);
@@ -987,10 +994,22 @@ export default function App(){
     </div>
   );
 
+  if(poolNotFound){
+    return(
+      <div style={{fontFamily:"'DM Sans',sans-serif",minHeight:'100vh',background:'#f5f5f0',color:'#1a2e0a',display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
+        <div style={{textAlign:'center',maxWidth:420}}>
+          <div style={{fontSize:64,marginBottom:16}}>⛳</div>
+          <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:900,marginBottom:12}}>Pool not found</h1>
+          <p style={{color:'#6b7280',fontSize:14,lineHeight:1.5,marginBottom:24}}>
+            This pool doesn't exist or has been deleted. The link may be incorrect, or the commissioner has removed the pool.
+          </p>
+          <a href="/" style={{display:'inline-block',background:'#1a2a5c',color:'#fff',padding:'10px 24px',borderRadius:8,textDecoration:'none',fontSize:14,fontWeight:600}}>← Back to home</a>
+        </div>
+      </div>
+    );
+  }
+
   return(
-    <div style={{fontFamily:"'DM Sans',sans-serif",background:T.bg,minHeight:'100vh',color:'#1a2e0a'}}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,800;0,900;1,400&family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes fu{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         @keyframes sd{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
         @keyframes su{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
