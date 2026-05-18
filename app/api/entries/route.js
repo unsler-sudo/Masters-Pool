@@ -826,8 +826,13 @@ export async function POST(request) {
       const archiveKey = k(poolId, `archive:${major}_${year}`);
       try {
         const r = await redis('GET', archiveKey);
-        if (r) { const a=JSON.parse(r); a.earnings=earnings; await redis('SET', archiveKey, JSON.stringify(a)); }
-        else await redis('SET', archiveKey, JSON.stringify({ major, year, archivedAt:new Date().toISOString(), entries:[], payments:{}, earnings }));
+        // Only update if archive already exists — don't create empty ones
+        if (r) {
+          const a = JSON.parse(r);
+          a.earnings = earnings;
+          await redis('SET', archiveKey, JSON.stringify(a));
+        }
+        // If no archive exists, do nothing (Save Final Results will create it properly)
       } catch {}
       return Response.json({ ok:true });
     }
