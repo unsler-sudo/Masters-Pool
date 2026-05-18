@@ -1858,22 +1858,29 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   ...e,
                   total:e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
                 })).sort((x,y)=>y.total-x.total);
+                // Pool prize money from saved entryFee
+                const archiveFee = a.entryFee || 0;
+                const pot = ranked.length * archiveFee;
+                const showPrizes = archiveFee > 0 && ranked.length >= 3;
+                const prizes = showPrizes ? [pot - archiveFee * 3, archiveFee * 2, archiveFee] : [];
                 return<div key={archiveId} style={{marginBottom:16,borderRadius:12,overflow:'hidden',border:`1px solid ${THEME.cardBorder}`}}>
                   <div onClick={()=>setExpandedArchive(isExpanded?null:archiveId)} style={{background:THEME.headerBg,padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
                     <span style={{fontSize:24}}>{THEME.emoji}</span>
                     <div style={{flex:1}}>
                       <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:'#fff'}}>{THEME.eventName}</div>
-                      <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{new Date(a.archivedAt).toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries</div>
+                      <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{new Date(a.archivedAt).toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries{showPrizes&&<> · ${pot} pot</>}</div>
                     </div>
                     <span style={{fontSize:18,color:'rgba(255,255,255,0.6)'}}>{isExpanded?'▲':'▼'}</span>
                   </div>
                   {isExpanded&&<div style={{background:'#fff',animation:'sd .2s ease'}}>
                     {ranked.map((e,i)=>{
                       const picksWithEarnings=e.picks.map(pn=>({name:pn,earned:earnings[pn]||0})).sort((x,y)=>y.earned-x.earned);
+                      const prize=showPrizes&&i<3?prizes[i]:0;
                       return<div key={e.name} style={{borderBottom:`1px solid ${THEME.cardBorder}`}}>
                         <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:i===0?`${THEME.primary}08`:'#fff'}}>
                           <span style={{fontSize:i<3?18:13,fontWeight:800,width:28,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</span>
                           <span style={{flex:1,fontWeight:600,fontSize:14}}>{e.name}</span>
+                          {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${prize}</span>}
                           {hasEarnings&&<span style={{fontWeight:800,color:THEME.primary,fontSize:14}}>{fmt(e.total)}</span>}
                         </div>
                         {hasEarnings&&<div style={{padding:'4px 14px 10px 50px',display:'flex',flexWrap:'wrap',gap:6,fontSize:11}}>
