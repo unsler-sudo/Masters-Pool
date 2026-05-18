@@ -33,7 +33,9 @@ const THEMES = {
   },
   pga: {
     emoji:'🏆', tagline:'The Wanamaker Trophy',
-    logoUrl:'https://d3m889aznlr23d.cloudfront.net/img/events/id/458/458987506/assets/aff16a9aebdcd602165e9e2da1a70591.PGA_Frisco-2027.jpg',
+    logoUrl: (new Date().getFullYear() >= 2027
+      ? 'https://lh3.googleusercontent.com/sitesv/AA5AbUCLDehE2dxLOr4XwdL7Qa4tEBd1R48QClelJ8vpmJ-mpPjJSy_1CoXPaQ45VEfedqLoUgEZjhVCHhvZEWNxmAG9H9qUUaznsk6P0dmyIn8EFDNeuSkP4N_XxKtyIOGn_c3OHIHDzY8dqsb2uHGK1ndmOjTdm58MdegAZECQEr4E14dOCqOJSmAn51tqGrLhbBcBBjvtbFAEdYdchy1x67ozz1k6bX0jyoQLYfI=w1280'
+      : 'https://lh3.googleusercontent.com/sitesv/AA5AbUBmVWWBpruB1yG0irjnd635hYrhH5rkfnYlWy1FKVSK535wOKIE65hUFF0lo7a_d8koFzOHfYrmyLp--CXdDv4dS3spzlpFf3kuNvPxMJ0in2Y4n5gt24gRJ5mGalrLBvI5toVkPNGXufxq2d-Qj5emIZejKb5vsXygtY6vxWwr-oM9ZCwryL7BMd1vP4_HdhO6Y58LawLtSdwSNZ-hP5FHcM4kC1UzX9z6y6A=w1280'),
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
     teeTime:'2026-05-14T11:00:00Z', purse:20000000,
     primary:'#1a2a5c', dark:'#3a4a8c', mid:'#5060a0', accent:'#c9a84c', accentLight:'#faf3e0',
@@ -44,7 +46,7 @@ const THEMES = {
   },
   usopen: {
     emoji:'🇺🇸', tagline:'The Hardest Test in Golf',
-    logoUrl:'https://mediacenter.usga.org/file.php/191226/2026-USO_SHINNECOCK_FULL-COLOR+%281%29.jpg?thumbnail=modal',
+    logoUrl:'https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:r000.png/tournaments/logos/r026.png',
     logoNoBg:true,
     logoHeight:90,
     eventName:'U.S. Open', courseName:'Shinnecock Hills Golf Club · Southampton, NY',
