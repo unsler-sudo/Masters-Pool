@@ -289,7 +289,9 @@ export async function POST(request) {
     // Verify admin password against pool meta (per-pool password)
     const checkAdmin = async (pw) => {
       const meta = await getPoolMeta(poolId);
-      const validPw = meta?.adminPassword || process.env.ADMIN_PASSWORD || 'masters2026';
+      // If pool doesn't exist (was deleted), no admin access is possible
+      if (!meta) return false;
+      const validPw = meta.adminPassword || process.env.ADMIN_PASSWORD || 'masters2026';
       return pw === validPw;
     };
 
