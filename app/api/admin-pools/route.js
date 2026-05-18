@@ -16,8 +16,28 @@ async function redis(cmd, ...args) {
 }
 
 async function deletePool(poolId) {
-  const keys = ['meta','entries','payments','locked','picks_hidden','major'];
-  await Promise.all(keys.map(k => redis('DEL', `pool:${poolId}:${k}`)));
+  // Find ALL keys belonging to this pool using SCAN pattern matching
+  try {
+    let cursor = '0';
+    const allKeys = [];
+    do {
+      // SCAN cursor [MATCH pattern] [COUNT count]
+      const result = await redis('SCAN', cursor, 'MATCH', `pool:${poolId}:*`, 'COUNT', '100');
+      cursor = result[0];
+      if (result[1] && result[1].length > 0) allKeys.push(...result[1]);
+    } while (cursor !== '0');
+    
+    // Delete all found keys
+    if (allKeys.length > 0) {
+      await Promise.all(allKeys.map(key => redis('DEL', key)));
+    }
+  } catch (e) {
+    // Fallback: delete known keys if SCAN fails
+    const keys = ['meta','entries','payments','locked','picks_hidden','payments_hidden','major','chat'];
+    await Promise.all(keys.map(k => redis('DEL', `pool:${poolId}:${k}`)));
+  }
+  
+  // Remove from index
   await redis('SREM', 'pools:index', poolId);
 }
 
