@@ -274,7 +274,20 @@ export async function GET(request) {
       getEntries(poolId), getLocked(poolId), getPicksHidden(poolId), getPaymentsHidden(poolId),
       getPayments(poolId), getMajor(poolId), getPoolMeta(poolId),
     ]);
-    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta });
+
+    // Load dynamic tournament purses
+    const PURSE_DEFAULTS = {
+      players: 25000000, masters: 22500000, pga: 20500000, usopen: 21500000, open: 17000000,
+    };
+    const purses = {};
+    for (const m of Object.keys(PURSE_DEFAULTS)) {
+      try {
+        const stored = await redis('GET', `tournament:purse:${m}`);
+        purses[m] = stored ? parseInt(stored, 10) : PURSE_DEFAULTS[m];
+      } catch { purses[m] = PURSE_DEFAULTS[m]; }
+    }
+
+    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses });
   } catch (err) {
     return Response.json({ entries:[], locked:false, picksHidden:true, paymentsHidden:false, payments:{}, major:'pga', error:err.message });
   }
