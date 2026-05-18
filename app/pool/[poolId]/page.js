@@ -307,6 +307,7 @@ export default function App(){
   const [entries,setEntries]=useState([]);
   const [poolMeta,setPoolMeta]=useState(null);
   const [poolNotFound,setPoolNotFound]=useState(false);
+  const [dynamicPurses,setDynamicPurses]=useState(null);
   const [payments,setPayments]=useState({});
   const [field,setField]=useState([]);
   const [fields,setFields]=useState({});
@@ -357,7 +358,8 @@ export default function App(){
   const T = { ...THEMES[activeMajor]||THEMES.pga, ...scheduleData[activeMajor] };
   const TEE_TIME = new Date(T.teeTime).getTime();
   const TOURNAMENT_END = TEE_TIME + 6 * 24 * 60 * 60 * 1000; // 6 days after tee-off
-  const TOURNAMENT = { name: T.eventName, purse: T.purse };
+  const effectivePurse = (dynamicPurses && dynamicPurses[activeMajor]) || T.purse;
+  const TOURNAMENT = { name: T.eventName, purse: effectivePurse };
   const TIERS = TIER_DEFS.map(t => t.id===2 ? {...t, color:T.primary} : t);
 
   const pastTeeTime = now >= TEE_TIME && now <= TOURNAMENT_END;
@@ -408,6 +410,7 @@ export default function App(){
       if(d.paymentsHidden!==undefined)setPaymentsHidden(d.paymentsHidden);
       if(d.payments)setPayments(d.payments);
       if(d.meta)setPoolMeta(d.meta);
+      if(d.purses)setDynamicPurses(d.purses);
       if(d.major&&THEMES[d.major]){
         const prevMajor = activeMajorRef.current;
         setActiveMajor(d.major);
