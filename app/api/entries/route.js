@@ -646,6 +646,53 @@ export async function POST(request) {
       return Response.json({ ok:true, deleted: archiveKey });
     }
 
+    if (body.action === 'redis-read-raw') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const { key } = body;
+      if (!key) return Response.json({ error:'key required' }, { status:400 });
+      try {
+        const value = await redis('GET', key);
+        return Response.json({ ok:true, key, value, exists: value !== null });
+      } catch (e) {
+        return Response.json({ ok:false, key, error: e.message });
+      }
+    }
+
+    if (body.action === 'redis-scan-keys') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const { pattern } = body;
+      if (!pattern) return Response.json({ error:'pattern required (e.g. *masters*)' }, { status:400 });
+      try {
+        let cursor = '0';
+        const allKeys = [];
+        do {
+          const result = await redis('SCAN', cursor, 'MATCH', pattern, 'COUNT', '100');
+          cursor = result[0];
+          if (result[1] && result[1].length > 0) allKeys.push(...result[1]);
+        } while (cursor !== '0' && allKeys.length < 500);
+        return Response.json({ ok:true, pattern, keys: allKeys, count: allKeys.length });
+      } catch (e) {
+        return Response.json({ ok:false, error: e.message });
+      }
+    }
+
+    if (body.action === 'import-archive') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const { major, year, entries, payments, earnings } = body;
+      if (!major || !year || !Array.isArray(entries)) {
+        return Response.json({ error:'major, year, and entries[] required' }, { status:400 });
+      }
+      const archiveKey = k(poolId, `archive:${major}_${year}`);
+      const archiveData = {
+        major, year,
+        archivedAt: new Date().toISOString(),
+        entries, payments: payments || {}, earnings: earnings || {},
+        manuallyImported: true,
+      };
+      await redis('SET', archiveKey, JSON.stringify(archiveData));
+      return Response.json({ ok:true, archived:{entries:entries.length, earnings:Object.keys(earnings||{}).length}});
+    }
+
     // ─── EMERGENCY: Repair missing pool meta ────────────────────────
     if (body.action === 'repair-meta') {
       if (body.password !== process.env.PLATFORM_ADMIN_PASSWORD) {
