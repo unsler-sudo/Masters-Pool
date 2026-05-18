@@ -6,6 +6,41 @@ const MAJOR_NAMES = {
   usopen:'U.S. Open', open:'The Open',
 };
 
+function EditableCell({ value, placeholder, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(value || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (val === (value || '')) { setEditing(false); return; }
+    setSaving(true);
+    await onSave(val);
+    setSaving(false);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={val}
+        onChange={e=>setVal(e.target.value)}
+        onBlur={save}
+        onKeyDown={e=>{if(e.key==='Enter')save();if(e.key==='Escape'){setVal(value||'');setEditing(false);}}}
+        disabled={saving}
+        placeholder={placeholder}
+        style={{padding:'4px 6px',border:'1px solid #2563eb',borderRadius:4,fontSize:12,width:'100%',outline:'none'}}
+      />
+    );
+  }
+
+  return (
+    <span onClick={()=>setEditing(true)} style={{cursor:'pointer',display:'inline-block',padding:'2px 4px',borderRadius:3,minWidth:60}} title="Click to edit">
+      {value || <span style={{color:'#cbd5e1',fontStyle:'italic'}}>{placeholder||'(empty)'}</span>}
+    </span>
+  );
+}
+
 export default function AdminDashboard() {
   const [password, setPassword] = useState('');
   const [authed, setAuthed]     = useState(false);
@@ -84,14 +119,24 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {pools.map((p,i)=>(
+                {pools.map((p,i)=>{
+                  const updateField=async(field,value)=>{
+                    await fetch('/api/admin-pools',{method:'POST',headers:{'Content-Type':'application/json'},
+                      body:JSON.stringify({password,action:'update-meta',poolId:p.poolId,field,value})});
+                    setData(d=>({...d,pools:d.pools.map(x=>x.poolId===p.poolId?{...x,[field]:value}:x)}));
+                  };
+                  return(
                   <tr key={p.poolId} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
                     <td style={{padding:'12px 16px',fontWeight:600,fontSize:13}}>
                       <a href={`/pool/${p.poolId}`} style={{color:'#1a2a5c',textDecoration:'none'}}>{p.poolName}</a>
                       <div style={{fontSize:10,color:'#9ca3af',marginTop:2}}>{p.poolId}</div>
                     </td>
-                    <td style={{padding:'12px 16px',fontSize:13,color:'#374151'}}>{p.commissionerName}</td>
-                    <td style={{padding:'12px 16px',fontSize:12,color:'#6b7280'}}>{p.commissionerEmail}</td>
+                    <td style={{padding:'12px 16px',fontSize:13,color:'#374151'}}>
+                      <EditableCell value={p.commissionerName} placeholder="Add name" onSave={v=>updateField('commissionerName',v)}/>
+                    </td>
+                    <td style={{padding:'12px 16px',fontSize:12,color:'#6b7280'}}>
+                      <EditableCell value={p.commissionerEmail} placeholder="Add email" onSave={v=>updateField('commissionerEmail',v)}/>
+                    </td>
                     <td style={{padding:'12px 16px',fontSize:12,color:'#374151'}}>{MAJOR_NAMES[p.major]||p.major}</td>
                     <td style={{padding:'12px 16px',fontSize:13,fontWeight:700,color:'#1a2a5c',textAlign:'center'}}>{p.entryCount}</td>
                     <td style={{padding:'12px 16px'}}>
@@ -118,8 +163,8 @@ export default function AdminDashboard() {
                         Delete
                       </button>
                     </td>
-                  </tr>
-                ))}
+                  </tr>);
+                })}
               </tbody>
             </table>
           }
