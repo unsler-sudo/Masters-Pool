@@ -924,6 +924,7 @@ export async function POST(request) {
     if (body.action==='get-archives-public') {
       const MAJORS = ['players','masters','pga','usopen','open'];
       const years  = [2025,2026,2027,2028];
+      const MAJOR_ORDER = { players: 0, masters: 1, pga: 2, usopen: 3, open: 4 };
       const archives = [];
       for (const major of MAJORS) {
         for (const year of years) {
@@ -933,7 +934,10 @@ export async function POST(request) {
           } catch {}
         }
       }
-      archives.sort((a,b) => new Date(b.archivedAt) - new Date(a.archivedAt));
+      archives.sort((a,b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return (MAJOR_ORDER[b.major] || 0) - (MAJOR_ORDER[a.major] || 0);
+      });
       return Response.json({ ok:true, archives });
     }
 
@@ -941,6 +945,9 @@ export async function POST(request) {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const MAJORS = ['players','masters','pga','usopen','open'];
       const years  = [2025,2026,2027,2028];
+      // Tee times for chronological sort within each year
+      // Players (March) < Masters (April) < PGA (May) < US Open (June) < Open (July)
+      const MAJOR_ORDER = { players: 0, masters: 1, pga: 2, usopen: 3, open: 4 };
       const archives = [];
       for (const major of MAJORS) {
         for (const year of years) {
@@ -950,7 +957,11 @@ export async function POST(request) {
           } catch {}
         }
       }
-      archives.sort((a,b) => new Date(b.archivedAt) - new Date(a.archivedAt));
+      // Sort by year desc, then major order desc (latest major in year first)
+      archives.sort((a,b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return (MAJOR_ORDER[b.major] || 0) - (MAJOR_ORDER[a.major] || 0);
+      });
       return Response.json({ ok:true, archives });
     }
 
