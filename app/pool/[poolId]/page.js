@@ -1861,13 +1861,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   .filter(e=>e.picks && e.picks.length > 0)
                   .sort((x,y)=>y.total-x.total);
                 // Pool prize money — prefer saved prizes, fall back to computed from entryFee
+                // Use the FULL entry count from the archive (a.entries.length), not the filtered ranked.length
                 const archiveFee = a.entryFee || 0;
-                const computedPot = ranked.length * archiveFee;
+                const fullEntryCount = a.entries.length;
+                const computedPot = fullEntryCount * archiveFee;
                 const savedPrizes = a.prizes;
-                const showPrizes = savedPrizes ? true : (archiveFee > 0 && ranked.length >= 3);
+                const showPrizes = savedPrizes ? true : (archiveFee > 0 && fullEntryCount >= 3);
                 const prizes = savedPrizes
                   ? [savedPrizes.first||0, savedPrizes.second||0, savedPrizes.third||0]
-                  : (archiveFee > 0 && ranked.length >= 3
+                  : (archiveFee > 0 && fullEntryCount >= 3
                     ? [computedPot - archiveFee * 3, archiveFee * 2, archiveFee]
                     : []);
                 const pot = savedPrizes ? (prizes[0]+prizes[1]+prizes[2]) : computedPot;
