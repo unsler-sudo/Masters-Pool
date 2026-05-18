@@ -293,6 +293,11 @@ export async function POST(request) {
       return pw === validPw;
     };
 
+    if (body.action === 'verify-admin') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      return Response.json({ ok:true });
+    }
+
     if (body.action === 'submit') {
       const locked = await getLocked(poolId);
       if (locked) return Response.json({ error:'Entries are locked!' }, { status:403 });
