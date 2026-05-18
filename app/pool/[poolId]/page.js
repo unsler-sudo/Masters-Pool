@@ -2066,22 +2066,30 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       ...e,
                       total:e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
                     })).sort((x,y)=>y.total-x.total);
+                    // Compute pool prize money based on archive's entryFee
+                    const archiveFee = a.entryFee || 0;
+                    const pot = ranked.length * archiveFee;
+                    const showPrizes = archiveFee > 0 && ranked.length >= 3;
+                    const prizes = showPrizes ? [pot - archiveFee * 3, archiveFee * 2, archiveFee] : [];
                     return<div key={a.major+'_'+a.year} style={{marginBottom:16,background:THEME.bodyBg,borderRadius:10,padding:12,border:`1px solid ${THEME.cardBorder}`}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
                         <span style={{fontSize:20}}>{THEME.emoji}</span>
                         <div>
-                          <div style={{fontWeight:700,fontSize:14,color:THEME.primary}}>{THEME.eventName}</div>
+                          <div style={{fontWeight:700,fontSize:14,color:THEME.primary}}>{THEME.eventName} {a.year}</div>
                           <div style={{fontSize:10,color:'#8a9580'}}>
                             {new Date(a.archivedAt).toLocaleDateString()} · {a.entries.length} entries
+                            {showPrizes&&<span style={{marginLeft:6}}>· ${pot} pot</span>}
                             {!hasEarnings&&<span style={{color:'#e5a000',marginLeft:6}}>· no earnings saved</span>}
                           </div>
                         </div>
                       </div>
                       {ranked.map((e,i)=>{
                         const paid=!!a.payments?.[e.name];
+                        const prize=showPrizes&&i<3?prizes[i]:0;
                         return<div key={e.name} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${THEME.cardBorder}`,fontSize:13}}>
                           <span style={{fontSize:i<3?16:13,fontWeight:800,width:28,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</span>
                           <span style={{flex:1,fontWeight:600}}>{e.name}</span>
+                          {prize>0&&<span style={{fontSize:10,fontWeight:800,padding:'1px 6px',borderRadius:8,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${prize}</span>}
                           {hasEarnings&&<span style={{fontWeight:700,color:THEME.primary,fontSize:13}}>{fmt(e.total)}</span>}
                           <span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:8,background:paid?'#e8f5e8':'#f5f5f5',color:paid?'#2d7a1e':'#aaa'}}>{paid?'✓':'Unpaid'}</span>
                         </div>;
