@@ -459,8 +459,11 @@ export default function App(){
       setFields(prev=>{
         const cached = prev[major];
         if(cached?.length > 0){
-          setField(cached);
-          setFieldSource(`📡 datagolf.com/major-fields · ${cached.length} confirmed in field ✓ · cached`);
+          // Filter cached data through confirmed/onTrack to prevent flicker
+          // (old cache may have unfiltered players from pre-tournament views)
+          const filteredCache = cached.filter(p=>p.confirmed||p.onTrack);
+          setField(filteredCache);
+          setFieldSource(`📡 datagolf.com/major-fields · ${filteredCache.length} confirmed in field ✓ · cached`);
         } else {
           setField([]);
           setFieldSource(`⏳ Loading ${theme.eventName} field...`);
