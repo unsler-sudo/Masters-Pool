@@ -254,7 +254,6 @@ export default function App(){
   const poolId       = params?.poolId || 'default';
   const justActivated = searchParams?.get('activated') === '1';
 
-  const JOIN_CODE_REQUIRED = !!poolMeta?.joinCodeRequired;
   const [joinCodeEntry, setJoinCodeEntry] = useState('');
   const [joinCodeError, setJoinCodeError] = useState('');
   const [joinCodePassed, setJoinCodePassed] = useState(false);
@@ -283,6 +282,7 @@ export default function App(){
   const [scheduleData,setScheduleData]=useState({});
   const [entries,setEntries]=useState([]);
   const [poolMeta,setPoolMeta]=useState(null);
+  const JOIN_CODE_REQUIRED = !!poolMeta?.joinCodeRequired;
   const [poolNotFound,setPoolNotFound]=useState(false);
   const [dynamicPurses,setDynamicPurses]=useState(null);
   const [payments,setPayments]=useState({});
