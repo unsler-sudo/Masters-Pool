@@ -254,7 +254,7 @@ export default function App(){
   const poolId       = params?.poolId || 'default';
   const justActivated = searchParams?.get('activated') === '1';
 
-  const JOIN_CODE_REQUIRED = false;
+  const JOIN_CODE_REQUIRED = !!poolMeta?.joinCodeRequired;
   const [joinCodeEntry, setJoinCodeEntry] = useState('');
   const [joinCodeError, setJoinCodeError] = useState('');
   const [joinCodePassed, setJoinCodePassed] = useState(false);
@@ -1983,6 +1983,27 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
+            </div>
+            <div style={sec}><h3 style={stl}>🔑 Join Code</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Optionally require a join code to enter the pool. Share the code only with the people you want to join.</p>
+              <label style={{fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginBottom:10}}>
+                <input type="checkbox" id="joinCodeRequiredInput" defaultChecked={!!poolMeta?.joinCodeRequired} onChange={async(e)=>{
+                  const required=e.target.checked;
+                  const d=await adminAction('set-join-code',{joinCodeRequired:required,joinCode:poolMeta?.joinCode||''});
+                  if(d?.ok){msg(required?'Join code now required':'Join code optional');setPoolMeta(prev=>({...prev,joinCodeRequired:required}));}
+                }}/>
+                <span style={{fontWeight:600}}>Require join code to enter pool</span>
+              </label>
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                <input style={{...inp,marginBottom:0,textTransform:'uppercase',fontFamily:'monospace',letterSpacing:2,fontSize:16,fontWeight:700}} type="text" placeholder="ABCD12" id="joinCodeInput" defaultValue={poolMeta?.joinCode||''} maxLength={20}/>
+                <button type="button" style={pri} onClick={async()=>{
+                  const code=document.getElementById('joinCodeInput').value.trim().toUpperCase();
+                  if(!code){msg('Code cannot be empty');return;}
+                  const d=await adminAction('set-join-code',{joinCodeRequired:!!poolMeta?.joinCodeRequired,joinCode:code});
+                  if(d?.ok){msg('Join code updated');setPoolMeta(prev=>({...prev,joinCode:code}));document.getElementById('joinCodeInput').value=code;}
+                }}>💾 Save Code</button>
+              </div>
+              <p style={{fontSize:11,color:'#888',marginTop:8}}>Current code: <strong style={{fontFamily:'monospace',color:T.primary,fontSize:13}}>{poolMeta?.joinCode||'(none set)'}</strong></p>
             </div>
             <div style={sec}><h3 style={stl}>🎨 Custom Pool Logo</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Override the major's default logo with your own. Paste a public image URL (PNG/JPG). Leave blank to use the default major logo.</p>
