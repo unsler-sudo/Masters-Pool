@@ -1,5 +1,3 @@
-//Force rebuild
-
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -407,9 +405,10 @@ export default function App(){
       if(d.purses)setDynamicPurses(d.purses);
       if(d.major&&THEMES[d.major]){
         const prevMajor = activeMajorRef.current;
+        const isFirstLoad = !field || field.length === 0;
         setActiveMajor(d.major);
         activeMajorRef.current = d.major;
-        if(d.major !== prevMajor){
+        if(d.major !== prevMajor || isFirstLoad){
           fetchField(d.major, true);
         }
       }
@@ -783,10 +782,11 @@ export default function App(){
 
   useEffect(()=>{
     fetchSchedule();
-    // Fire field and scores in PARALLEL - whichever arrives first triggers merge
-    // fetchScores caches raw data in rawScoresRef; fetchField applies it when field loads
-    loadEntries();
-    fetchField().then(()=>setReady(true));
+    // Load entries first - this determines the active major
+    // Then loadEntries will call fetchField() with the correct major
+    // Don't call fetchField() here directly because activeMajor defaults to 'pga'
+    // which causes brief flash of PGA data when active major is different
+    loadEntries().then(()=>setReady(true));
     fetchScores(true);
     setTimeout(()=>fetchAllFields(), 3000);
     // During tournament: only refresh scores and entries. Don't refetch field (it's locked).
