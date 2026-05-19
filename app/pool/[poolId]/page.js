@@ -1,4 +1,3 @@
-// force rebuild
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -34,9 +33,8 @@ const THEMES = {
   },
   pga: {
     emoji:'🏆', tagline:'The Wanamaker Trophy',
-    logoUrl: (new Date().getFullYear() >= 2027
-      ? 'https://lh3.googleusercontent.com/sitesv/AA5AbUCLDehE2dxLOr4XwdL7Qa4tEBd1R48QClelJ8vpmJ-mpPjJSy_1CoXPaQ45VEfedqLoUgEZjhVCHhvZEWNxmAG9H9qUUaznsk6P0dmyIn8EFDNeuSkP4N_XxKtyIOGn_c3OHIHDzY8dqsb2uHGK1ndmOjTdm58MdegAZECQEr4E14dOCqOJSmAn51tqGrLhbBcBBjvtbFAEdYdchy1x67ozz1k6bX0jyoQLYfI=w1280'
-      : 'https://lh3.googleusercontent.com/sitesv/AA5AbUBmVWWBpruB1yG0irjnd635hYrhH5rkfnYlWy1FKVSK535wOKIE65hUFF0lo7a_d8koFzOHfYrmyLp--CXdDv4dS3spzlpFf3kuNvPxMJ0in2Y4n5gt24gRJ5mGalrLBvI5toVkPNGXufxq2d-Qj5emIZejKb5vsXygtY6vxWwr-oM9ZCwryL7BMd1vP4_HdhO6Y58LawLtSdwSNZ-hP5FHcM4kC1UzX9z6y6A=w1280'),
+    logoUrl:'https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:r000.png/tournaments/logos/r033.png',
+    logoNoBg:true,
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
     teeTime:'2026-05-14T11:00:00Z', purse:20500000,
     primary:'#1a2a5c', dark:'#3a4a8c', mid:'#5060a0', accent:'#c9a84c', accentLight:'#faf3e0',
@@ -1882,14 +1880,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const pot = savedPrizes ? (prizes[0]+prizes[1]+prizes[2]) : computedPot;
                 return<div key={archiveId} style={{marginBottom:16,borderRadius:12,overflow:'hidden',border:`1px solid ${THEME.cardBorder}`}}>
                   <div onClick={()=>setExpandedArchive(isExpanded?null:archiveId)} style={{background:THEME.headerBg,padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
-                    {savedLogo
-                      ? (savedLogoNoBg
-                        ? <img src={savedLogo} alt={THEME.eventName} style={{height:36,width:'auto',filter:'drop-shadow(0 2px 4px rgba(0,0,0,.3))'}} onError={(ev)=>{ev.target.style.display='none';ev.target.nextSibling.style.display='inline';}}/>
-                        : <div style={{background:'#fff',borderRadius:6,padding:'3px 6px',display:'inline-flex',alignItems:'center',boxShadow:'0 2px 4px rgba(0,0,0,.2)'}}><img src={savedLogo} alt={THEME.eventName} style={{height:30,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';ev.target.parentElement.nextSibling.style.display='inline';}}/></div>
-                      )
-                      : null
-                    }
-                    <span style={{fontSize:24,display:savedLogo?'none':'inline'}}>{THEME.emoji}</span>
+                    {savedLogo && (savedLogoNoBg
+                      ? <img src={savedLogo} alt={THEME.eventName} style={{height:36,width:'auto',filter:'drop-shadow(0 2px 4px rgba(0,0,0,.3))'}}/>
+                      : <div style={{background:'#fff',borderRadius:6,padding:'3px 6px',display:'inline-flex',alignItems:'center',boxShadow:'0 2px 4px rgba(0,0,0,.2)'}}><img src={savedLogo} alt={THEME.eventName} style={{height:30,width:'auto',display:'block'}}/></div>
+                    )}
+                    {!savedLogo && <span style={{fontSize:24}}>{THEME.emoji}</span>}
                     <div style={{flex:1}}>
                       <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:'#fff'}}>{THEME.eventName}</div>
                       <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{displayDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries{showPrizes&&<> · ${pot} pot</>}</div>
