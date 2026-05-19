@@ -1613,7 +1613,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               }}>Unlock for {T.eventName} — $10 →</button>
               <div style={{fontSize:11,color:'#9ca3af'}}>Your pool history and URL are preserved · Secure payment via Stripe</div>
             </div>
-            :<div style={bx}><div style={{fontSize:44,marginBottom:10}}>🔒</div><p style={{color:'#6b7c5e'}}>Entries locked — tournament has started!</p></div>
+            :<div style={bx}><div style={{fontSize:44,marginBottom:10}}>🔒</div><p style={{color:'#6b7c5e',fontWeight:700,marginBottom:6}}>Entries locked</p><p style={{color:'#8a9580',fontSize:13}}>The pool is currently closed. Check back soon — entries reopen once odds are available.</p></div>
           :<>
             {countdown&&<div style={{background:T.accentLight,padding:'8px 14px',borderRadius:9,marginBottom:10,fontSize:12,color:T.accent,textAlign:'center',border:`1px solid ${T.accent}30`}}>⏱ {countdown}</div>}
             {editMode&&<div style={{background:'#fff7e6',border:'1px solid #f5c14a',borderRadius:9,padding:'8px 12px',marginBottom:10,fontSize:12,color:'#7a5500',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
