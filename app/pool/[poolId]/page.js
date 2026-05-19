@@ -1531,23 +1531,23 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               </button>
             </div>
           </div>}
-          {countdown&&!locked&&poolMeta?.paid!==false&&<div style={{
+          {countdown&&poolMeta?.paid!==false&&<div style={{
             background:`linear-gradient(135deg,${T.dark} 0%,${T.mid} 100%)`,
             borderRadius:14,marginBottom:12,padding:'16px 18px',
             display:'flex',alignItems:'center',justifyContent:'space-between',
             boxShadow:`0 4px 16px ${T.primary}40`,
           }}>
             <div>
-              <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',fontWeight:600,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Entries Close In</div>
+              <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',fontWeight:600,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{locked?'Tournament Tees Off In':'Entries Close In'}</div>
               <div style={{fontSize:26,fontWeight:800,color:'#fff',fontFamily:"'Playfair Display',serif",letterSpacing:-.5}}>{countdown.replace(' until entries lock','')}</div>
               <div style={{fontSize:11,color:'rgba(255,255,255,0.55)',marginTop:3}}>{T.courseName}</div>
             </div>
             <div style={{textAlign:'center'}}>
               <div style={{fontSize:36}}>{T.emoji}</div>
-              <button type="button" onClick={()=>setTab('Enter Pool')} style={{
+              {!locked&&<button type="button" onClick={()=>setTab('Enter Pool')} style={{
                 marginTop:6,background:'rgba(255,255,255,0.15)',border:'1px solid rgba(255,255,255,0.3)',
                 color:'#fff',borderRadius:20,padding:'5px 14px',fontSize:11,fontWeight:700,cursor:'pointer',
-              }}>Enter Now →</button>
+              }}>Enter Now →</button>}
             </div>
           </div>}
           {ranked.length===0?
