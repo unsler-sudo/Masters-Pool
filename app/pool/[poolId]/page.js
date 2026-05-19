@@ -1391,7 +1391,10 @@ export default function App(){
             const useCustom = !!customLogo;
             const logoSrc = customLogo || T.logoUrl;
             const noBg = useCustom ? poolMeta?.customLogoNoBg : T.logoNoBg;
-            const logoHeight = useCustom ? (poolMeta?.customLogoHeight || 72) : (T.logoHeight || 72);
+            const baseLogoHeight = useCustom ? (poolMeta?.customLogoHeight || 72) : (T.logoHeight || 72);
+            // Bump logo size on desktop (window width > 600px)
+            const isDesktop = typeof window !== 'undefined' && window.innerWidth > 600;
+            const logoHeight = isDesktop ? Math.round(baseLogoHeight * 1.5) : baseLogoHeight;
             if(!logoSrc) return null;
             return noBg
               ?<img src={logoSrc} alt="Pool logo" style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',height:logoHeight,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>
