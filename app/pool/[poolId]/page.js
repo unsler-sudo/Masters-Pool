@@ -38,7 +38,7 @@ const THEMES = {
       : new Date().getFullYear() === 2027
         ? '/logos/pga-2027-frisco.svg'
         : 'https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:r000.png/tournaments/logos/r033.png',
-    logoNoBg:true,
+    logoNoBg:false,
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
     teeTime:'2026-05-14T11:00:00Z', purse:20500000,
     primary:'#1a2a5c', dark:'#3a4a8c', mid:'#5060a0', accent:'#c9a84c', accentLight:'#faf3e0',
