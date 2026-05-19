@@ -214,10 +214,23 @@ async function autoManage(poolId) {
       return nextKey;
     }
 
-    if (now >= unlockTime && now < teeTime) {
+    // Unlock window: Monday 9 AM ET of tournament week
+    // This aligns with DataGolf publishing pre-tournament odds Monday morning
+    const nowDate = new Date(now);
+    const etHourNow = (nowDate.getUTCHours() - 4 + 24) % 24;
+    const isMondayOrLater = nowDate.getUTCDay() >= 1; // 1=Monday
+    const isAfter9amET = etHourNow >= 9;
+    const teeDate = new Date(teeTime);
+    const daysToTee = (teeTime - now) / (24 * 60 * 60 * 1000);
+    // Unlock if we're within the tournament week (≤ 5 days to tee) AND it's at least Monday 9 AM ET
+    const inUnlockWindow = daysToTee <= 5 && daysToTee > 0 &&
+      (nowDate.getUTCDay() > 1 || (nowDate.getUTCDay() === 1 && etHourNow >= 9));
+
+    if (inUnlockWindow) {
       const meta = await getPoolMeta(poolId);
       if (await getLocked(poolId) && meta?.paid) {
         await redis('SET', k(poolId,'locked'), 'false');
+        console.log(`[autoManage] Auto-unlocked ${poolId} for ${currentMajor} - within tournament week`);
       }
       // Send reminder email if unpaid and haven't sent one yet
       if (meta && !meta.paid && !meta.reminderSent && meta.commissionerEmail && process.env.RESEND_API_KEY) {
@@ -259,6 +272,14 @@ async function autoManage(poolId) {
         // Mark reminder as sent so we don't spam them
         meta.reminderSent = true;
         await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
+      }
+    }
+
+    // Auto-lock when tournament starts (at tee time)
+    if (now >= teeTime && now < endTime) {
+      if (!(await getLocked(poolId))) {
+        await redis('SET', k(poolId,'locked'), 'true');
+        console.log(`[autoManage] Auto-locked ${poolId} - tournament started`);
       }
     }
 
