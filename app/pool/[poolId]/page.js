@@ -278,32 +278,6 @@ export default function App(){
     }
   };
 
-  if (JOIN_CODE_REQUIRED && !joinCodePassed && !justActivated) {
-    return (
-      <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'DM Sans',sans-serif"}}>
-        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-        <div style={{background:'#fff',borderRadius:16,padding:36,maxWidth:400,width:'100%',textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
-          <div style={{fontSize:48,marginBottom:12}}>⛳</div>
-          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:800,color:'#1a2a5c',marginBottom:8}}>Private Pool</h2>
-          <p style={{color:'#6b7280',fontSize:14,marginBottom:24}}>Enter the join code from your commissioner to access this pool.</p>
-          <input
-            style={{width:'100%',padding:'12px 14px',borderRadius:8,border:'1px solid #d1d5db',fontSize:18,textAlign:'center',letterSpacing:4,fontWeight:700,boxSizing:'border-box',marginBottom:12,textTransform:'uppercase'}}
-            placeholder="XXXXXX"
-            maxLength={8}
-            value={joinCodeEntry}
-            onChange={e=>setJoinCodeEntry(e.target.value.toUpperCase())}
-            onKeyDown={e=>e.key==='Enter'&&handleJoinCodeSubmit()}
-          />
-          {joinCodeError&&<div style={{color:'#dc2626',fontSize:13,marginBottom:12}}>{joinCodeError}</div>}
-          <button type="button" onClick={handleJoinCodeSubmit}
-            style={{width:'100%',background:'#1a2a5c',color:'#fff',border:'none',borderRadius:8,padding:'12px',fontSize:15,fontWeight:700,cursor:'pointer'}}>
-            Join Pool →
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const [tab,setTab]=useState('Standings');
   const [activeMajor,setActiveMajor]=useState('pga');
   const [scheduleData,setScheduleData]=useState({});
@@ -1135,6 +1109,33 @@ export default function App(){
             This pool doesn't exist or has been deleted. The link may be incorrect, or the commissioner has removed the pool.
           </p>
           <a href="/" style={{display:'inline-block',background:'#1a2a5c',color:'#fff',padding:'10px 24px',borderRadius:8,textDecoration:'none',fontSize:14,fontWeight:600}}>← Back to home</a>
+        </div>
+      </div>
+    );
+  }
+
+  // Join code gate — must come after ALL hooks to comply with Rules of Hooks
+  if (JOIN_CODE_REQUIRED && !joinCodePassed && !justActivated) {
+    return (
+      <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'DM Sans',sans-serif"}}>
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+        <div style={{background:'#fff',borderRadius:16,padding:36,maxWidth:400,width:'100%',textAlign:'center',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
+          <div style={{fontSize:48,marginBottom:12}}>⛳</div>
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:800,color:'#1a2a5c',marginBottom:8}}>Private Pool</h2>
+          <p style={{color:'#6b7280',fontSize:14,marginBottom:24}}>Enter the join code from your commissioner to access this pool.</p>
+          <input
+            style={{width:'100%',padding:'12px 14px',borderRadius:8,border:'1px solid #d1d5db',fontSize:18,textAlign:'center',letterSpacing:4,fontWeight:700,boxSizing:'border-box',marginBottom:12,textTransform:'uppercase'}}
+            placeholder="XXXXXX"
+            maxLength={8}
+            value={joinCodeEntry}
+            onChange={e=>setJoinCodeEntry(e.target.value.toUpperCase())}
+            onKeyDown={e=>e.key==='Enter'&&handleJoinCodeSubmit()}
+          />
+          {joinCodeError&&<div style={{color:'#dc2626',fontSize:13,marginBottom:12}}>{joinCodeError}</div>}
+          <button type="button" onClick={handleJoinCodeSubmit}
+            style={{width:'100%',background:'#1a2a5c',color:'#fff',border:'none',borderRadius:8,padding:'12px',fontSize:15,fontWeight:700,cursor:'pointer'}}>
+            Join Pool →
+          </button>
         </div>
       </div>
     );
