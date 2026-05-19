@@ -1755,6 +1755,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   setChatName('');setChatCode('');setChatVerified(false);
                 }} style={{background:'transparent',border:'none',color:T.primary,fontSize:10,cursor:'pointer',textDecoration:'underline'}}>Sign out</button>
               </div>
+              {!entries.find(e=>e.name===chatName)&&<div style={{background:'#fef3c7',border:'1px solid #fbbf24',borderRadius:9,padding:'10px 14px',marginBottom:10,fontSize:12,color:'#92400e',display:'flex',alignItems:'center',gap:8}}>
+                <span style={{fontSize:18}}>⚠️</span>
+                <div>
+                  <div style={{fontWeight:700,marginBottom:2}}>Enter the pool to chat</div>
+                  <div style={{fontSize:11,opacity:.85}}>You can read messages but need an entry in the current major to post.</div>
+                </div>
+              </div>}
               <div ref={chatScrollRef} style={{
                 background:'#fff',borderRadius:11,border:`1px solid ${T.cardBorder}`,
                 height:380,overflowY:'auto',padding:12,marginBottom:10,
