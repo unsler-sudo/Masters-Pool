@@ -33,7 +33,11 @@ const THEMES = {
   },
   pga: {
     emoji:'🏆', tagline:'The Wanamaker Trophy',
-    logoUrl:'https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:r000.png/tournaments/logos/r033.png',
+    logoUrl: new Date().getFullYear() === 2026
+      ? '/logos/pga-2026-aronimink.svg'
+      : new Date().getFullYear() === 2027
+        ? '/logos/pga-2027-frisco.svg'
+        : 'https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:r000.png/tournaments/logos/r033.png',
     logoNoBg:true,
     eventName:'PGA Championship', courseName:'Aronimink Golf Club · Newtown Square, PA',
     teeTime:'2026-05-14T11:00:00Z', purse:20500000,
