@@ -4,6 +4,14 @@ const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const STRIPE_SECRET = process.env.STRIPE_SECRET_KEY;
 const BYPASS_CODE   = process.env.ADMIN_BYPASS_CODE || '';
+const PROMO_CODES = {
+  'USOPEN26': {
+    validForMajors: ['usopen'],
+    expiresAt: '2026-06-19T00:00:00Z', // Day after US Open 2026 starts
+    description: 'Free US Open 2026',
+  },
+  // Add more promo codes here as needed
+};
 const POOL_PRICE    = parseInt(process.env.POOL_PRICE_CENTS || '1000'); // $10.00
 const BASE_URL      = process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com';
 
@@ -111,6 +119,35 @@ export async function POST(request) {
     await redis('SET', `pool:${poolId}:picks_hidden`, 'true');
     // Add to pools index
     await redis('SADD', 'pools:index', poolId);
+
+    // ── Promo code — free pool for a specific major (with expiration) ───────
+    if (bypassCode && PROMO_CODES[bypassCode.toUpperCase()]) {
+      const promo = PROMO_CODES[bypassCode.toUpperCase()];
+      const now = Date.now();
+      const expiresAt = promo.expiresAt ? new Date(promo.expiresAt).getTime() : null;
+      const isExpired = expiresAt && now > expiresAt;
+      const isValidMajor = promo.validForMajors.includes(major);
+
+      if (isExpired) {
+        return Response.json({ error: 'Promo code expired' }, { status: 400 });
+      }
+      if (!isValidMajor) {
+        return Response.json({ error: `Promo code only valid for: ${promo.validForMajors.join(', ')}` }, { status: 400 });
+      }
+
+      meta.paid   = true;
+      meta.active = true;
+      meta.promoCodeUsed = bypassCode.toUpperCase();
+      await redis('SET', `pool:${poolId}:meta`, JSON.stringify(meta));
+      await redis('SET', `pool:${poolId}:locked`, 'false');
+      await sendConfirmationEmail(meta, poolId);
+      return Response.json({
+        ok: true, poolId, joinCode,
+        poolUrl: `${BASE_URL}/pool/${poolId}`,
+        free: true,
+        promoUsed: bypassCode.toUpperCase(),
+      });
+    }
 
     // ── Bypass code — skip payment (owner's free pools) ──────────────────────
     if (bypassCode && bypassCode === BYPASS_CODE) {
