@@ -861,6 +861,18 @@ export async function POST(request) {
       return Response.json({ ok:true, meta });
     }
 
+    if (body.action==='set-join-code') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId);
+      if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
+      meta.joinCodeRequired = !!body.joinCodeRequired;
+      if (body.joinCode !== undefined) {
+        meta.joinCode = String(body.joinCode || '').trim().toUpperCase();
+      }
+      await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
+      return Response.json({ ok:true, meta });
+    }
+
     if (body.action==='delete') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const entries = await getEntries(poolId);
