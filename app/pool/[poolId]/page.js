@@ -581,12 +581,10 @@ export default function App(){
         });
       }
 
-      // For non-active majors (pre-tournament), show ALL scraped players regardless of confirmed status
-      // For the active major, only show confirmed/onTrack players
-      // (teeT, cutoff, nowMs, isThisMajorInWindow already declared above)
-      const playersToShow = isThisMajorInWindow
-        ? scrapedPlayers.filter(p=>p.confirmed||p.onTrack)
-        : scrapedPlayers;
+      // Always filter to confirmed/onTrack players (pre-tournament AND in-window)
+      // This gives the cleanest accurate field count without showing potential entrants
+      // who didn't actually make it (qualifiers, alternates not in)
+      const playersToShow = scrapedPlayers.filter(p=>p.confirmed||p.onTrack);
       const enriched = playersToShow.map((p,i)=>{
         const key  = p.name.toLowerCase().trim();
         const win  = oddsMap[key] ?? 0;
