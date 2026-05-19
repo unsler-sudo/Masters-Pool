@@ -238,11 +238,26 @@ const flip=n=>n.includes(', ')?n.split(', ').reverse().join(' '):n;
 const fmtScore=n=>{if(n==null)return null;if(n===0)return'E';return n>0?`+${n}`:String(n);};
 const toLastFirst=name=>{const p=name.trim().split(' ');if(p.length<2)return name;const last=p.pop();return`${last}, ${p.join(' ')}`;};
 
-function calcEarnings(players, purse, major){
+function calcEarnings(players, purse, major, tournamentComplete){
   const payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
   const maxPos = Math.max(...Object.keys(payoutTable).map(Number));
   const g={};players.forEach(p=>{const pos=parsePos(p.pos);if(pos&&pos<=maxPos){if(!g[pos])g[pos]=[];g[pos].push(p.name);}});
-  const m={};Object.entries(g).forEach(([ps,pls])=>{const pos=+ps;let t=0;for(let i=0;i<pls.length;i++)t+=payoutTable[pos+i]||0;const e=Math.round(t/pls.length*purse);pls.forEach(n=>{m[n]=e;});});
+  const m={};
+  Object.entries(g).forEach(([ps,pls])=>{
+    const pos=+ps;
+    // Live tournament: if multiple players tied at the LEAD (position 1), each gets full winner share (no split)
+    // After tournament complete: revert to standard tied-split math
+    if(pos===1 && pls.length>1 && !tournamentComplete){
+      const winnerShare = Math.round(payoutTable[1]*purse);
+      pls.forEach(n=>{m[n]=winnerShare;});
+      return;
+    }
+    // Standard tied-split math for everyone else (or final results)
+    let t=0;
+    for(let i=0;i<pls.length;i++)t+=payoutTable[pos+i]||0;
+    const e=Math.round(t/pls.length*purse);
+    pls.forEach(n=>{m[n]=e;});
+  });
   return m;
 }
 
@@ -702,7 +717,12 @@ export default function App(){
       }
       return f;
     });
-    const em=calcEarnings(updated, TOURNAMENT.purse, activeMajor);
+    // Tournament is complete when every non-cut player has an r4 score
+    const isComplete = updated.length > 0 && updated.every(p => {
+      const isCut = /CUT|WD|DQ|MC/i.test(p.pos||'');
+      return isCut || p.r4 != null;
+    });
+    const em=calcEarnings(updated, TOURNAMENT.purse, activeMajor, isComplete);
     updated.forEach(p=>{p.earnings=em[p.name]||0;});
     if(Object.keys(em).length>0){
       fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
