@@ -1854,6 +1854,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const hasEarnings=Object.keys(earnings).length>0;
                 const archiveId=a.major+'_'+a.year;
                 const isExpanded=expandedArchive===archiveId;
+                // Use saved logo data if available, otherwise current theme
+                const savedLogo = a.logoUrl || THEME.logoUrl;
+                const savedLogoNoBg = a.logoNoBg !== null && a.logoNoBg !== undefined ? a.logoNoBg : THEME.logoNoBg;
+                const savedLogoHeight = a.logoHeight || THEME.logoHeight || 36;
+                // Use saved tournament date if available
+                const displayDate = a.tournamentDate ? new Date(a.tournamentDate) : new Date(THEME.teeTime);
                 const ranked=[...a.entries].map(e=>({
                   ...e,
                   total:e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
@@ -1875,10 +1881,17 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const pot = savedPrizes ? (prizes[0]+prizes[1]+prizes[2]) : computedPot;
                 return<div key={archiveId} style={{marginBottom:16,borderRadius:12,overflow:'hidden',border:`1px solid ${THEME.cardBorder}`}}>
                   <div onClick={()=>setExpandedArchive(isExpanded?null:archiveId)} style={{background:THEME.headerBg,padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
-                    <span style={{fontSize:24}}>{THEME.emoji}</span>
+                    {savedLogo
+                      ? (savedLogoNoBg
+                        ? <img src={savedLogo} alt={THEME.eventName} style={{height:36,width:'auto',filter:'drop-shadow(0 2px 4px rgba(0,0,0,.3))'}} onError={(ev)=>{ev.target.style.display='none';ev.target.nextSibling.style.display='inline';}}/>
+                        : <div style={{background:'#fff',borderRadius:6,padding:'3px 6px',display:'inline-flex',alignItems:'center',boxShadow:'0 2px 4px rgba(0,0,0,.2)'}}><img src={savedLogo} alt={THEME.eventName} style={{height:30,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';ev.target.parentElement.nextSibling.style.display='inline';}}/></div>
+                      )
+                      : null
+                    }
+                    <span style={{fontSize:24,display:savedLogo?'none':'inline'}}>{THEME.emoji}</span>
                     <div style={{flex:1}}>
                       <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:'#fff'}}>{THEME.eventName}</div>
-                      <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{new Date(THEME.teeTime).toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries{showPrizes&&<> · ${pot} pot</>}</div>
+                      <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{displayDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries{showPrizes&&<> · ${pot} pot</>}</div>
                     </div>
                     <span style={{fontSize:18,color:'rgba(255,255,255,0.6)'}}>{isExpanded?'▲':'▼'}</span>
                   </div>
@@ -2062,7 +2075,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <button type="button" style={{...pri,fontSize:12,marginBottom:4}} onClick={async()=>{
                   const earnings={};
                   field.forEach(p=>{if(p.earnings>0)earnings[p.name]=p.earnings;});
-                  const d=await adminAction('save-full-archive',{major:activeMajor,year:new Date().getFullYear(),earnings});
+                  const d=await adminAction('save-full-archive',{
+                    major:activeMajor,
+                    year:new Date().getFullYear(),
+                    earnings,
+                    logoUrl: T.logoUrl,
+                    logoNoBg: T.logoNoBg,
+                    logoHeight: T.logoHeight,
+                    tournamentDate: T.teeTime,
+                  });
                   if(d?.ok)msg(`Archived ${d.archived?.entries||0} entries, ${d.archived?.earnings||0} payouts ✓`);
                 }}>💾 Save Final Results Now</button>
                 <div style={{fontSize:10,color:'#8a9580'}}>Run after the final round to lock in earnings before Tuesday rotation.</div>
