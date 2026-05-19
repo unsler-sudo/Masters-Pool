@@ -682,7 +682,7 @@ export async function POST(request) {
 
     if (body.action === 'import-archive') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
-      const { major, year, entries, payments, earnings, entryFee } = body;
+      const { major, year, entries, payments, earnings, entryFee, prizes, logoUrl, logoNoBg, logoHeight, tournamentDate } = body;
       if (!major || !year || !Array.isArray(entries)) {
         return Response.json({ error:'major, year, and entries[] required' }, { status:400 });
       }
@@ -692,6 +692,11 @@ export async function POST(request) {
         archivedAt: new Date().toISOString(),
         entries, payments: payments || {}, earnings: earnings || {},
         entryFee: entryFee || 0,
+        prizes: prizes || null,
+        logoUrl: logoUrl || null,
+        logoNoBg: logoNoBg !== undefined ? logoNoBg : null,
+        logoHeight: logoHeight || null,
+        tournamentDate: tournamentDate || null,
         manuallyImported: true,
       };
       await redis('SET', archiveKey, JSON.stringify(archiveData));
@@ -893,7 +898,7 @@ export async function POST(request) {
 
     if (body.action==='save-full-archive') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
-      const { major, year, earnings } = body;
+      const { major, year, earnings, logoUrl, logoNoBg, logoHeight, tournamentDate } = body;
       const archiveKey = k(poolId, `archive:${major}_${year}`);
       const [entries, payments, meta] = await Promise.all([getEntries(poolId), getPayments(poolId), getPoolMeta(poolId)]);
       const archiveData = {
@@ -904,6 +909,10 @@ export async function POST(request) {
         payments,
         earnings: earnings || {},
         entryFee: meta?.entryFee || 0,
+        logoUrl: logoUrl || null,
+        logoNoBg: logoNoBg !== undefined ? logoNoBg : null,
+        logoHeight: logoHeight || null,
+        tournamentDate: tournamentDate || null,
       };
       await redis('SET', archiveKey, JSON.stringify(archiveData));
       return Response.json({ ok:true, archived:{entries:entries.length, earnings:Object.keys(earnings||{}).length}});
