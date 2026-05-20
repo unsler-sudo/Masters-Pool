@@ -7,7 +7,7 @@ const BYPASS_CODE   = process.env.ADMIN_BYPASS_CODE || '';
 const PROMO_CODES = {
   'USOPEN26': {
     validForMajors: ['usopen'],
-    expiresAt: '2026-06-19T00:00:00Z', // Day after US Open 2026 starts
+    expiresAt: '2026-06-18T09:00:00Z', // June 18 5 AM ET (9 AM UTC)
     description: 'Free US Open 2026',
   },
   // Add more promo codes here as needed
