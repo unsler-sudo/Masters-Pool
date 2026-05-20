@@ -28,8 +28,8 @@ function getMajors() {
   return SCHEDULE.map(m => {
     let year = currentYear;
     const thisYearDate = new Date(currentYear, m.month - 1, m.approxDay);
-    // Add 6 days to cover tournament completion before considering it "past"
-    const tournamentEnd = new Date(thisYearDate.getTime() + 6 * 24 * 60 * 60 * 1000);
+    // Tournament ends Sunday (3 days after Thursday tee time)
+    const tournamentEnd = new Date(thisYearDate.getTime() + 3 * 24 * 60 * 60 * 1000);
     if (now > tournamentEnd) {
       year = currentYear + 1;
     }
