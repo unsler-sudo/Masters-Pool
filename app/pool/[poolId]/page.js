@@ -78,10 +78,20 @@ const DG_EVENT_IDS = { 11:'players', 14:'masters', 33:'pga', 26:'usopen', 100:'o
 const TIER_DEFS = [
   { id:1, name:'Favorites',  label:'Group A — Favorites',  color:'#b8960c', picks:2 },
   { id:2, name:'Contenders', label:'Group B — Contenders', color:'#1a2a5c', picks:4 },
-  { id:3, name:'Longshots',  label:'Group C — Longshots',  color:'#6b4c9a', picks:3 },
+  { id:3, name:'Longshots',  label:'Group C — Longshots',  color:'#6b4c9a', picks:4 },
 ];
-const TOTAL_PICKS = 9;
-const TIER_CUTS = [10, 40];
+const TOTAL_PICKS = 10;
+
+// Tier cutoffs by major — Masters has a smaller field (~90 players) so cuts scale down
+// Format: [tier A max rank, tier B max rank] — anyone ranked higher is Tier C
+const TIER_CUTS_BY_MAJOR = {
+  pga:     [12, 68],   // Top 12 favorites, 13-68 contenders (56), 69+ longshots
+  usopen:  [12, 68],
+  open:    [12, 68],
+  players: [12, 68],
+  masters: [12, 36],   // Top 12 favorites, 13-36 contenders (24), 37+ longshots
+};
+const TIER_CUTS = [12, 68]; // Default fallback (matches standard majors)
 
 // Per-major payout distribution percentages
 // PGA Championship: Per PGA of America 2026 distribution (verified against $3.69M winner / $20.5M purse)
@@ -589,6 +599,7 @@ export default function App(){
       // This gives the cleanest accurate field count without showing potential entrants
       // who didn't actually make it (qualifiers, alternates not in)
       const playersToShow = scrapedPlayers.filter(p=>p.confirmed||p.onTrack);
+      const cuts = TIER_CUTS_BY_MAJOR[major] || TIER_CUTS;
       const enriched = playersToShow.map((p,i)=>{
         const key  = p.name.toLowerCase().trim();
         const win  = oddsMap[key] ?? 0;
@@ -598,7 +609,7 @@ export default function App(){
         const teeInfo = teeTimeMap[key] || null;
         return {
           name:p.name, country:p.country||'USA',
-          odds, tier:rank<TIER_CUTS[0]?1:rank<TIER_CUTS[1]?2:3,
+          odds, tier:rank<cuts[0]?1:rank<cuts[1]?2:3,
           rank, dgRank:p.dgRank, win,
           confirmed:p.confirmed,
           onTrack:p.onTrack||false,
@@ -2214,7 +2225,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
       </main>
 
       <footer style={{textAlign:'center',padding:'16px 12px',fontSize:10,color:'#8a9580',borderTop:`1px solid ${T.cardBorder}`,background:T.bodyBg}}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:12,color:T.primary,marginBottom:4}}>2 Favorites · 4 Contenders · 3 Longshots</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:12,color:T.primary,marginBottom:4}}>2 Favorites · 4 Contenders · 4 Longshots</div>
         <div>Highest combined earnings wins</div>
       </footer>
     </div>
