@@ -1,23 +1,54 @@
 'use client';
 import { useState } from 'react';
 
-const MAJORS = [
-  { key:'masters', label:'The Masters',          emoji:'🌸', date:'Apr 2027' },
-  { key:'pga',     label:'PGA Championship',     emoji:'🏆', date:'May 2026' },
-  { key:'usopen',  label:'U.S. Open',            emoji:'🇺🇸', date:'Jun 2026' },
-  { key:'open',    label:'The Open Championship',emoji:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', date:'Jul 2026' },
-  { key:'players', label:'The Players',          emoji:'⛳', date:'Mar 2027' },
-];
+// Compute MAJORS dynamically based on current date
+// Always shows the NEXT occurrence of each major, sorted soonest first
+function getMajors() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  
+  // Base schedule (month and day each major happens)
+  // Players: 2nd Thursday of March (~Mar 11)
+  // Masters: 2nd Thursday of April (~Apr 8)
+  // PGA: 3rd Thursday of May (~May 14-21)
+  // US Open: 3rd Thursday of June (~Jun 18)
+  // The Open: 3rd Thursday of July (~Jul 16)
+  const SCHEDULE = [
+    { key:'players', label:'The Players',          emoji:'⛳', month:3,  approxDay:11 },
+    { key:'masters', label:'The Masters',          emoji:'🌸', month:4,  approxDay:8  },
+    { key:'pga',     label:'PGA Championship',     emoji:'🏆', month:5,  approxDay:14 },
+    { key:'usopen',  label:'U.S. Open',            emoji:'🇺🇸', month:6,  approxDay:18 },
+    { key:'open',    label:'The Open Championship',emoji:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', month:7,  approxDay:16 },
+  ];
+
+  const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // For each major, determine if this year's event is upcoming or past
+  // If past, use next year
+  return SCHEDULE.map(m => {
+    let year = currentYear;
+    const thisYearDate = new Date(currentYear, m.month - 1, m.approxDay);
+    // Add 6 days to cover tournament completion before considering it "past"
+    const tournamentEnd = new Date(thisYearDate.getTime() + 6 * 24 * 60 * 60 * 1000);
+    if (now > tournamentEnd) {
+      year = currentYear + 1;
+    }
+    const date = `${MONTH_NAMES[m.month - 1]} ${year}`;
+    const sortKey = new Date(year, m.month - 1, m.approxDay).getTime();
+    return { ...m, date, year, sortKey };
+  }).sort((a, b) => a.sortKey - b.sortKey);
+}
+
+const MAJORS = getMajors();
+const DEFAULT_MAJOR = MAJORS[0].key; // soonest upcoming major
 
 export default function LandingPage() {
-  const [step, setStep]     = useState('home'); // home | create | paying | done
-  const [form, setForm]     = useState({ poolName:'', commissionerName:'', commissionerEmail:'', adminPassword:'', major:'pga', bypassCode:'' });
+  const [step, setStep]     = useState('home');
+  const [form, setForm]     = useState({ poolName:'', commissionerName:'', commissionerEmail:'', adminPassword:'', major:DEFAULT_MAJOR, bypassCode:'' });
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-
   const upd = (k,v) => setForm(f => ({...f, [k]:v}));
-
   const handleCreate = async () => {
     setError('');
     if (!form.poolName.trim())         return setError('Pool name is required');
@@ -33,13 +64,10 @@ export default function LandingPage() {
       });
       const data = await res.json();
       if (!res.ok || data.error) { setError(data.error || 'Failed to create pool'); setLoading(false); return; }
-
       if (data.free) {
-        // Bypass code used — pool is immediately active
         setResult(data);
         setStep('done');
       } else if (data.checkoutUrl) {
-        // Redirect to Stripe
         window.location.href = data.checkoutUrl;
       }
     } catch (e) {
@@ -47,10 +75,8 @@ export default function LandingPage() {
     }
     setLoading(false);
   };
-
   const inp = { width:'100%', padding:'11px 14px', borderRadius:8, border:'1px solid #d1d5db', fontSize:14, outline:'none', boxSizing:'border-box', fontFamily:'inherit' };
   const pri = { background:'#1a2a5c', color:'#fff', border:'none', borderRadius:8, padding:'12px 24px', fontSize:15, fontWeight:700, cursor:'pointer', width:'100%' };
-
   if (step === 'done' && result) {
     return (
       <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 50%,#243475 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'DM Sans',sans-serif"}}>
@@ -79,7 +105,6 @@ export default function LandingPage() {
       </div>
     );
   }
-
   if (step === 'create') {
     return (
       <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 50%,#243475 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'DM Sans',sans-serif"}}>
@@ -88,29 +113,24 @@ export default function LandingPage() {
           <button type="button" onClick={()=>setStep('home')} style={{background:'none',border:'none',color:'#6b7280',cursor:'pointer',fontSize:13,marginBottom:16,padding:0}}>← Back</button>
           <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,color:'#1a2a5c',marginBottom:4}}>Create Your Pool</h2>
           <p style={{color:'#6b7280',fontSize:13,marginBottom:24}}>Set up your private golf pool in 30 seconds.</p>
-
           <div style={{marginBottom:14}}>
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Pool Name</label>
-            <input style={inp} placeholder="e.g. Office Golf Pool 2026" value={form.poolName} onChange={e=>upd('poolName',e.target.value)}/>
+            <input style={inp} placeholder="e.g. Office Golf Pool" value={form.poolName} onChange={e=>upd('poolName',e.target.value)}/>
           </div>
-
           <div style={{marginBottom:14}}>
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Your Name (Commissioner)</label>
             <input style={inp} placeholder="e.g. John Smith" value={form.commissionerName} onChange={e=>upd('commissionerName',e.target.value)}/>
           </div>
-
           <div style={{marginBottom:14}}>
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Your Email</label>
             <input style={inp} type="email" placeholder="e.g. john@email.com" value={form.commissionerEmail} onChange={e=>upd('commissionerEmail',e.target.value)}/>
             <div style={{fontSize:11,color:'#9ca3af',marginTop:4}}>We'll email you when entries open for the next major</div>
           </div>
-
           <div style={{marginBottom:14}}>
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Admin Password</label>
             <input style={inp} type="password" placeholder="Choose a password for managing entries" value={form.adminPassword} onChange={e=>upd('adminPassword',e.target.value)}/>
             <div style={{fontSize:11,color:'#9ca3af',marginTop:4}}>Save this — you'll need it to lock entries and manage the pool</div>
           </div>
-
           <div style={{marginBottom:20}}>
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Starting Major</label>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
@@ -127,19 +147,15 @@ export default function LandingPage() {
               ))}
             </div>
           </div>
-
           <div style={{marginBottom:20}}>
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Promo / Bypass Code <span style={{fontWeight:400,color:'#9ca3af'}}>(optional)</span></label>
             <input style={inp} placeholder="Enter code if you have one" value={form.bypassCode} onChange={e=>upd('bypassCode',e.target.value)}/>
           </div>
-
           {error&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:16}}>{error}</div>}
-
           <div style={{background:'#f9fafb',borderRadius:8,padding:'12px 14px',marginBottom:20,fontSize:12,color:'#6b7280',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span>Pool access — one major</span>
             <span style={{fontWeight:700,color:'#1a2a5c',fontSize:16}}>$10</span>
           </div>
-
           <button type="button" style={{...pri,opacity:loading?.6:1}} onClick={handleCreate} disabled={loading}>
             {loading ? 'Creating...' : 'Create Pool & Pay $10 →'}
           </button>
@@ -148,13 +164,9 @@ export default function LandingPage() {
       </div>
     );
   }
-
-  // Home / landing
   return (
     <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 50%,#243475 100%)',fontFamily:"'DM Sans',sans-serif",color:'#fff'}}>
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-
-      {/* Hero */}
       <div style={{textAlign:'center',padding:'80px 20px 60px'}}>
         <div style={{fontSize:56,marginBottom:16}}>⛳</div>
         <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:42,fontWeight:900,marginBottom:12,letterSpacing:-1}}>
@@ -172,13 +184,11 @@ export default function LandingPage() {
         </button>
         <div style={{fontSize:12,opacity:.5,marginTop:10}}>$10 per major · Renew each tournament · Cancel anytime</div>
       </div>
-
-      {/* Features */}
       <div style={{maxWidth:700,margin:'0 auto',padding:'0 20px 60px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16}}>
         {[
           { emoji:'🏆', title:'Live Standings', desc:'Real-time earnings from DataGolf updated every 60 seconds' },
           { emoji:'🎯', title:'3-Tier Picks', desc:'2 Favorites + 4 Contenders + 3 Longshots = 9 total picks' },
-          { emoji:'📊', title:'All 4 Majors', desc:'Masters, PGA, US Open, The Open — auto-rotates between each' },
+          { emoji:'📊', title:'All 5 Majors', desc:'Players, Masters, PGA, US Open, The Open — auto-rotates between each' },
           { emoji:'🔒', title:'Private Pool', desc:'Your own link, your own password, invite only who you want' },
           { emoji:'⚡', title:'Fully Automated', desc:'Auto-locks at tee time, auto-rotates Tuesday after each major' },
           { emoji:'📚', title:'Past Results', desc:'Final standings archived after every tournament' },
@@ -190,8 +200,6 @@ export default function LandingPage() {
           </div>
         ))}
       </div>
-
-      {/* How it works */}
       <div style={{background:'rgba(0,0,0,.2)',padding:'40px 20px'}}>
         <div style={{maxWidth:600,margin:'0 auto',textAlign:'center'}}>
           <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,marginBottom:28}}>How it works</h2>
@@ -210,8 +218,6 @@ export default function LandingPage() {
           </div>
         </div>
       </div>
-
-      {/* CTA */}
       <div style={{textAlign:'center',padding:'60px 20px'}}>
         <button type="button" onClick={()=>setStep('create')} style={{
           background:'#c9a84c',color:'#1a2a5c',border:'none',borderRadius:10,
