@@ -173,7 +173,7 @@ export default function LandingPage() {
           Tuna Golf Pool
         </h1>
         <p style={{fontSize:18,opacity:.75,maxWidth:480,margin:'0 auto 24px',lineHeight:1.6}}>
-          Create a private golf pool for your friends, office, or group. Pick 9 golfers across 3 tiers and track live earnings during every major.
+          Create a private golf pool for your friends, office, or group. Pick 10 golfers across 3 tiers and track live earnings during every major.
         </p>
         <div style={{maxWidth:440,margin:'0 auto 28px',padding:'14px 18px',background:'linear-gradient(135deg,rgba(201,168,76,.18),rgba(201,168,76,.08))',borderRadius:12,border:'1px solid rgba(201,168,76,.4)'}}>
           <div style={{fontSize:11,fontWeight:700,color:'#c9a84c',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🎁 Limited Time</div>
@@ -194,7 +194,7 @@ export default function LandingPage() {
       <div style={{maxWidth:700,margin:'0 auto',padding:'0 20px 60px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16}}>
         {[
           { emoji:'🏆', title:'Live Standings', desc:'Real-time earnings from DataGolf updated every 60 seconds' },
-          { emoji:'🎯', title:'3-Tier Picks', desc:'2 Favorites + 4 Contenders + 3 Longshots = 9 total picks' },
+          { emoji:'🎯', title:'3-Tier Picks', desc:'2 Favorites + 4 Contenders + 4 Longshots = 10 total picks' },
           { emoji:'📊', title:'All 5 Majors', desc:'Players, Masters, PGA, US Open, The Open — auto-rotates between each' },
           { emoji:'🔒', title:'Private Pool', desc:'Your own link, your own password, invite only who you want' },
           { emoji:'⚡', title:'Fully Automated', desc:'Auto-locks at tee time, auto-rotates Tuesday after each major' },
