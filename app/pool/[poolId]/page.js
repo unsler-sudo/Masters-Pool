@@ -771,7 +771,8 @@ export default function App(){
     // Only fetch live scores if the major being viewed is in its tournament window
     // Otherwise scores from the in-play feed (current PGA) would incorrectly attach to other majors
     // EXCEPT: in pgatour mode, in-play feed always matches the active event, so always fetch
-    if(!pastTeeTime && activeMajor !== 'pgatour'){
+    const currentMajor = activeMajorRef.current || activeMajor;
+    if(!pastTeeTime && currentMajor !== 'pgatour'){
       // Clear any stale score data and exit
       rawScoresRef.current=null;
       return;
@@ -2131,13 +2132,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   if(enabled){
                     if(!confirm('Switch the pool to PGA Tour mode? This resets current entries and uses whatever event is active this week on the PGA Tour.'))return;
                     const d=await adminAction('set-major',{major:'pgatour'});
-                    if(d?.ok){msg('Switched to PGA Tour mode');setActiveMajor('pgatour');loadEntries();}
+                    if(d?.ok){msg('Switched to PGA Tour mode');setActiveMajor('pgatour');activeMajorRef.current='pgatour';loadEntries();}
                   } else {
                     if(!confirm('Switch back to the major schedule? This resets current PGA Tour entries.'))return;
                     // Switch back to next upcoming major
                     const nextMajor='usopen'; // Default - rotation will determine actual next major
                     const d=await adminAction('set-major',{major:nextMajor});
-                    if(d?.ok){msg('Switched back to major schedule');setActiveMajor(nextMajor);loadEntries();}
+                    if(d?.ok){msg('Switched back to major schedule');setActiveMajor(nextMajor);activeMajorRef.current=nextMajor;loadEntries();}
                   }
                 }}/>
                 <span style={{fontWeight:600}}>Run this week's PGA Tour event</span>
