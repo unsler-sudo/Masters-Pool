@@ -1,6 +1,5 @@
-
-
 'use client';
+// build: pgatour-purse-fix-v2-20260521-1830
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -849,12 +848,17 @@ export default function App(){
       const isCut = /CUT|WD|DQ|MC/i.test(p.pos||'');
       return isCut || p.r4 != null;
     });
-    const em=calcEarnings(updated, TOURNAMENT.purse, activeMajor, isComplete);
+    // Use refs to avoid stale closures (especially when switching majors mid-session)
+    const liveMajor = activeMajorRef.current || activeMajor;
+    const livePurses = dynamicPursesRef.current;
+    const liveTheme = THEMES[liveMajor] || THEMES.pga;
+    const livePurse = (livePurses && livePurses[liveMajor]) || liveTheme.purse;
+    const em=calcEarnings(updated, livePurse, liveMajor, isComplete);
     updated.forEach(p=>{p.earnings=em[p.name]||0;});
     if(Object.keys(em).length>0){
       fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({poolId,action:'save-archive-earnings',password:adminPw||'auto',
-          major:activeMajor,year:new Date().getFullYear(),earnings:em})
+          major:liveMajor,year:new Date().getFullYear(),earnings:em})
       }).catch(()=>{});
     }
     return updated;
