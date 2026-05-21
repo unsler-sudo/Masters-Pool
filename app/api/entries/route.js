@@ -107,6 +107,12 @@ async function autoManage(poolId) {
       }
     }
 
+    // ── Skip all auto-management when in PGA Tour mode ────────────────────────
+    // Commissioner is manually controlling the pool's events
+    if (meta?.pgaTourMode || (await redis('GET', `pool:${poolId}:major`)) === 'pgatour') {
+      return 'pgatour';
+    }
+
     const MAJOR_SCHEDULE = await getMajorSchedule();
     const currentMajor = await getMajor(poolId);
     const idx = MAJOR_SCHEDULE.findIndex(m => m.key === currentMajor);
@@ -892,6 +898,30 @@ export async function POST(request) {
       }
       await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
       return Response.json({ ok:true, meta });
+    }
+
+    if (body.action==='set-major') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const validMajors = ['players','masters','pga','usopen','open','pgatour'];
+      if (!validMajors.includes(body.major)) {
+        return Response.json({ error:'Invalid major' }, { status:400 });
+      }
+      // Switch the pool's active major and reset entries
+      await Promise.all([
+        redis('SET', k(poolId,'major'), body.major),
+        redis('DEL', k(poolId,'entries')),
+        redis('DEL', k(poolId,'payments')),
+        redis('SET', k(poolId,'locked'), 'false'),
+        redis('SET', k(poolId,'picks_hidden'), 'true'),
+      ]);
+      // Update meta to track if we're in PGA Tour mode
+      const meta = await getPoolMeta(poolId);
+      if (meta) {
+        meta.major = body.major;
+        meta.pgaTourMode = body.major === 'pgatour';
+        await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
+      }
+      return Response.json({ ok:true, major: body.major });
     }
 
     if (body.action==='delete') {
