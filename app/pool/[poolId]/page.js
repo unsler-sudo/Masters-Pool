@@ -756,7 +756,8 @@ export default function App(){
   const fetchScores=async(quiet)=>{
     // Only fetch live scores if the major being viewed is in its tournament window
     // Otherwise scores from the in-play feed (current PGA) would incorrectly attach to other majors
-    if(!pastTeeTime){
+    // EXCEPT: in pgatour mode, in-play feed always matches the active event, so always fetch
+    if(!pastTeeTime && activeMajor !== 'pgatour'){
       // Clear any stale score data and exit
       rawScoresRef.current=null;
       return;
