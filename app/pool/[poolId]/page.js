@@ -487,18 +487,21 @@ export default function App(){
           if(ptRes.ok){
             const ptData = await ptRes.json();
             const eventName = ptData.event_name || ptData.name || 'PGA Tour Event';
-            const courseName = ptData.course_name || ptData.course || 'PGA Tour';
-            // Tee time: estimate Thursday 11 AM UTC of current week if not provided
-            const teeDate = ptData.start_date ? new Date(ptData.start_date) : null;
+            // Find this event in the schedule to get course/location/start_date
+            const currentEvent = events.find(e => 
+              (e.event_name||'').toLowerCase() === eventName.toLowerCase()
+            );
+            const courseName = currentEvent
+              ? `${currentEvent.course || ''}${currentEvent.location ? ' · ' + currentEvent.location : ''}`
+              : 'PGA Tour';
+            const teeDate = currentEvent?.start_date ? new Date(currentEvent.start_date + 'T11:00:00Z') : null;
             const teeTime = teeDate ? teeDate.toISOString() : null;
-            const purse = ptData.purse || ptData.total_purse || 8000000;
             setScheduleData(prev => ({
               ...prev,
               pgatour: {
                 eventName,
                 courseName,
                 ...(teeTime && { teeTime }),
-                purse,
               },
             }));
           }
@@ -1512,8 +1515,8 @@ export default function App(){
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
           <div style={{maxWidth:'42%'}}>
             {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,opacity:.95,letterSpacing:.5,marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{poolMeta.poolName}</div>}
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:9,fontWeight:400,fontStyle:'italic',opacity:.75,letterSpacing:.8,marginBottom:3,lineHeight:1.2}}>{T.tagline}</div>
-            <div style={{fontSize:10,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:activeMajor==='pgatour'?11:9,fontWeight:activeMajor==='pgatour'?600:400,fontStyle:'italic',opacity:.85,letterSpacing:.8,marginBottom:3,lineHeight:1.2}}>{activeMajor==='pgatour'?T.eventName:T.tagline}</div>
+            <div style={{fontSize:10,opacity:.65}}>{activeMajor==='pgatour'?T.courseName:`${fmt(TOURNAMENT.purse)} purse`}</div>
           </div>
           {(()=>{
             const customLogo = poolMeta?.customLogoUrl;
