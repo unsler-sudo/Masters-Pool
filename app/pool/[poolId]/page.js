@@ -1,5 +1,6 @@
+
 'use client';
-// build: pgatour-purse-fix-v2-20260521-1830
+// build: pgatour-payout-table-v3-20260521-1900
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -223,12 +224,32 @@ const PAYOUT_PLAYERS = {
   71:0.00203000,72:0.00203000,73:0.00199000
 };
 
+// Standard PGA Tour event payout percentages (top 65 paid)
+// Source: easyofficepools.com — used for non-major PGA Tour events
+// Sums to exactly 100% — distributes full purse
+const PAYOUT_PGATOUR = {
+  1:0.18000, 2:0.10900, 3:0.06900, 4:0.04900, 5:0.04100,
+  6:0.03625, 7:0.03375, 8:0.03125, 9:0.02925, 10:0.02725,
+  11:0.02525, 12:0.02325, 13:0.02125, 14:0.01925, 15:0.01825,
+  16:0.01725, 17:0.01625, 18:0.01525, 19:0.01425, 20:0.01325,
+  21:0.01225, 22:0.01125, 23:0.01045, 24:0.00965, 25:0.00885,
+  26:0.00805, 27:0.00775, 28:0.00745, 29:0.00715, 30:0.00685,
+  31:0.00655, 32:0.00625, 33:0.00595, 34:0.00570, 35:0.00545,
+  36:0.00520, 37:0.00495, 38:0.00475, 39:0.00455, 40:0.00435,
+  41:0.00415, 42:0.00395, 43:0.00375, 44:0.00355, 45:0.00335,
+  46:0.00315, 47:0.00295, 48:0.00279, 49:0.00265, 50:0.00257,
+  51:0.00251, 52:0.00245, 53:0.00241, 54:0.00237, 55:0.00235,
+  56:0.00233, 57:0.00231, 58:0.00229, 59:0.00227, 60:0.00225,
+  61:0.00223, 62:0.00221, 63:0.00219, 64:0.00217, 65:0.00215
+};
+
 const PAYOUT_BY_MAJOR = {
   pga: PAYOUT_PGA,
   usopen: PAYOUT_USOPEN,
   open: PAYOUT_OPEN,
   masters: PAYOUT_MASTERS,
   players: PAYOUT_PLAYERS,
+  pgatour: PAYOUT_PGATOUR,
 };
 
 // Default fallback
