@@ -1,4 +1,3 @@
-
 'use client';
 // build: pgatour-payout-table-v3-20260521-1900
 import { useState, useEffect, useRef } from 'react';
