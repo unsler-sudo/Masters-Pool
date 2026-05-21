@@ -308,7 +308,7 @@ export async function GET(request) {
 
     // Load dynamic tournament purses
     const PURSE_DEFAULTS = {
-      players: 25000000, masters: 22500000, pga: 20500000, usopen: 21500000, open: 17000000,
+      players: 25000000, masters: 22500000, pga: 20500000, usopen: 21500000, open: 17000000, pgatour: 9000000,
     };
     const purses = {};
     for (const m of Object.keys(PURSE_DEFAULTS)) {
