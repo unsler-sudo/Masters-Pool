@@ -76,11 +76,11 @@ const THEMES = {
   // Pool admins use this to run their pool on whichever PGA Tour event is happening this week.
   pgatour: {
     emoji:'🏌️', tagline:'PGA Tour Event',
-    logoUrl:'https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:r000.png/tournaments/logos/r000.png',
+    logoUrl:'/logos/pga-tour.svg',
     logoNoBg:true,
     logoHeight:60,
     eventName:'PGA Tour Event', courseName:'Current PGA Tour event',
-    teeTime:null, purse:8000000, // Generic placeholder, updated dynamically
+    teeTime:null, purse:9000000,
     primary:'#1a3d76', dark:'#1f4a8c', mid:'#2c5ba8', accent:'#c8a84c', accentLight:'#faf3e0',
     navBg:'#fff', navActive:'#e8eef7', navBorder:'#1a3d76',
     headerBg:'linear-gradient(170deg,#1f4a8c 0%,#2c5ba8 35%,#3c70c0 65%,#5088d4 100%)',
