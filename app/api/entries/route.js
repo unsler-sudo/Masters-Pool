@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const VALID_MAJORS = ['players','masters','pga','usopen','open'];
+const VALID_MAJORS = ['players','masters','pga','usopen','open','pgatour'];
 
 // ─── Major Schedule — calculated dynamically, works forever ──────────────────
 const UNLOCK_DAYS_BEFORE = 7;
