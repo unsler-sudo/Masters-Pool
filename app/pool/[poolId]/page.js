@@ -71,6 +71,22 @@ const THEMES = {
     bg:'linear-gradient(180deg,#cec8bc 0%,#f0ece2 300px)',
     bodyBg:'#f0ece2', cardBorder:'#d0c8bc', inputBorder:'#c4bdb0', stripeBg:'#f7f3ee', rowHl:'#ede5d8',
   },
+  // ─── PGA TOUR MODE — generic theme for any current PGA Tour event ────────────
+  // Activated via admin toggle. Pulls current event name/course from DataGolf live model.
+  // Pool admins use this to run their pool on whichever PGA Tour event is happening this week.
+  pgatour: {
+    emoji:'🏌️', tagline:'PGA Tour Event',
+    logoUrl:'https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:r000.png/tournaments/logos/r000.png',
+    logoNoBg:true,
+    logoHeight:60,
+    eventName:'PGA Tour Event', courseName:'Current PGA Tour event',
+    teeTime:null, purse:8000000, // Generic placeholder, updated dynamically
+    primary:'#1a3d76', dark:'#1f4a8c', mid:'#2c5ba8', accent:'#c8a84c', accentLight:'#faf3e0',
+    navBg:'#fff', navActive:'#e8eef7', navBorder:'#1a3d76',
+    headerBg:'linear-gradient(170deg,#1f4a8c 0%,#2c5ba8 35%,#3c70c0 65%,#5088d4 100%)',
+    bg:'linear-gradient(180deg,#c4cee0 0%,#e8eef7 300px)',
+    bodyBg:'#e8eef7', cardBorder:'#c4cee0', inputBorder:'#b4bcd0', stripeBg:'#eff4f9', rowHl:'#d8e2ef',
+  },
 };
 
 const DG_EVENT_IDS = { 11:'players', 14:'masters', 33:'pga', 26:'usopen', 100:'open' };
@@ -90,6 +106,7 @@ const TIER_CUTS_BY_MAJOR = {
   open:    [12, 68],
   players: [12, 68],
   masters: [12, 36],   // Top 12 favorites, 13-36 contenders (24), 37+ longshots
+  pgatour: [12, 56],   // Smaller fields for signature events (~70 players)
 };
 const TIER_CUTS = [12, 68]; // Default fallback (matches standard majors)
 
@@ -461,6 +478,31 @@ export default function App(){
       }
 
       if(Object.keys(updates).length > 0) setScheduleData(updates);
+
+      // When in PGA Tour mode, also fetch the current week's event info
+      if(activeMajor === 'pgatour'){
+        try {
+          const ptRes = await fetch(`/api/scores?endpoint=pretournament`);
+          if(ptRes.ok){
+            const ptData = await ptRes.json();
+            const eventName = ptData.event_name || ptData.name || 'PGA Tour Event';
+            const courseName = ptData.course_name || ptData.course || 'PGA Tour';
+            // Tee time: estimate Thursday 11 AM UTC of current week if not provided
+            const teeDate = ptData.start_date ? new Date(ptData.start_date) : null;
+            const teeTime = teeDate ? teeDate.toISOString() : null;
+            const purse = ptData.purse || ptData.total_purse || 8000000;
+            setScheduleData(prev => ({
+              ...prev,
+              pgatour: {
+                eventName,
+                courseName,
+                ...(teeTime && { teeTime }),
+                purse,
+              },
+            }));
+          }
+        } catch(e) { console.warn('pgatour event fetch failed:', e.message); }
+      }
     }catch(e){ console.warn('fetchSchedule failed:', e.message); }
   };
 
@@ -2025,6 +2067,29 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
+            </div>
+            <div style={sec}><h3 style={stl}>🏌️ PGA Tour Mode</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Switch the pool to whatever PGA Tour event is happening this week. Toggle off to return to the major schedule. Picks reset when switching.</p>
+              <label style={{fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
+                <input type="checkbox" defaultChecked={activeMajor==='pgatour'} onChange={async(e)=>{
+                  const enabled=e.target.checked;
+                  if(enabled){
+                    if(!confirm('Switch the pool to PGA Tour mode? This resets current entries and uses whatever event is active this week on the PGA Tour.'))return;
+                    const d=await adminAction('set-major',{major:'pgatour'});
+                    if(d?.ok){msg('Switched to PGA Tour mode');setActiveMajor('pgatour');loadEntries();}
+                  } else {
+                    if(!confirm('Switch back to the major schedule? This resets current PGA Tour entries.'))return;
+                    // Switch back to next upcoming major
+                    const nextMajor='usopen'; // Default - rotation will determine actual next major
+                    const d=await adminAction('set-major',{major:nextMajor});
+                    if(d?.ok){msg('Switched back to major schedule');setActiveMajor(nextMajor);loadEntries();}
+                  }
+                }}/>
+                <span style={{fontWeight:600}}>Run this week's PGA Tour event</span>
+              </label>
+              {activeMajor==='pgatour'&&<div style={{marginTop:10,padding:'10px 12px',background:`${T.primary}0a`,borderRadius:8,fontSize:11,color:T.primary}}>
+                ✓ Currently in PGA Tour mode. The pool will track whichever event DataGolf has live this week.
+              </div>}
             </div>
             <div style={sec}><h3 style={stl}>🔑 Join Code</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Optionally require a join code to enter the pool. Share the code only with the people you want to join.</p>
