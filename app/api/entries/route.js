@@ -351,7 +351,7 @@ export async function POST(request) {
       if (!name?.trim()) return Response.json({ error:'Name required' }, { status:400 });
       if (!email?.trim()) return Response.json({ error:'Email required' }, { status:400 });
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return Response.json({ error:'Invalid email' }, { status:400 });
-      if (!picks || picks.length !== 9) return Response.json({ error:'9 picks required' }, { status:400 });
+      if (!picks || picks.length !== 10) return Response.json({ error:'10 picks required' }, { status:400 });
       const entries = await getEntries(poolId);
       if (entries.find(e=>e.name.toLowerCase()===name.trim().toLowerCase()))
         return Response.json({ error:'Name already taken!' }, { status:409 });
@@ -426,7 +426,7 @@ export async function POST(request) {
       if (locked) return Response.json({ error:'Entries are locked' }, { status:403 });
       const { name, code, picks } = body;
       if (!name || !code) return Response.json({ error:'Name and code required' }, { status:400 });
-      if (!picks || picks.length !== 9) return Response.json({ error:'9 picks required' }, { status:400 });
+      if (!picks || picks.length !== 10) return Response.json({ error:'10 picks required' }, { status:400 });
       const entries = await getEntries(poolId);
       const idx = entries.findIndex(e =>
         e.name.toLowerCase() === name.toLowerCase() &&
