@@ -482,7 +482,7 @@ export default function App(){
       // When in PGA Tour mode, also fetch the current week's event info
       if(activeMajor === 'pgatour'){
         try {
-          const ptRes = await fetch(`/api/scores?endpoint=pretournament`);
+          const ptRes = await fetch(`/api/scores?endpoint=pre-tournament`);
           if(ptRes.ok){
             const ptData = await ptRes.json();
             const eventName = ptData.event_name || ptData.name || 'PGA Tour Event';
@@ -525,6 +525,46 @@ export default function App(){
       });
     }
     try{
+      // ─── PGA TOUR MODE — bypass scraper, fetch field from DataGolf directly ─
+      if(major === 'pgatour'){
+        const ptRes = await fetch('/api/scores?endpoint=pre-tournament');
+        if(!ptRes.ok) return;
+        const ptData = await ptRes.json();
+        const players = ptData.baseline_history_fit || ptData.baseline || ptData.players || [];
+        if(players.length < 5) return;
+
+        // Build enriched player list — sorted by win odds (highest first = best players)
+        const enriched = players.map((p, i) => {
+          const name = p.player_name || p.name || '';
+          // Convert "Last, First" → "First Last"
+          const displayName = name.includes(',') ? name.split(',').reverse().map(s=>s.trim()).join(' ') : name;
+          const win = p.win || 0;
+          const odds = win > 0.001 ? `+${Math.round((1/win)*100-100)}` : 'n/a';
+          // PGA Tour fields are smaller (~70-156 players)
+          // Tier cuts: Top 12 favorites, 13-56 contenders, 57+ longshots
+          const tier = i < 12 ? 1 : i < 56 ? 2 : 3;
+          return {
+            name: displayName,
+            country: p.country || 'USA',
+            odds,
+            tier,
+            rank: i,
+            dgRank: p.dg_skill_estimate ? Math.round(p.dg_skill_estimate * 100) : i,
+            win,
+            confirmed: true,
+            onTrack: true,
+          };
+        });
+
+        setFields(prev => ({...prev, [major]: enriched}));
+        if(updateDisplay){
+          setField(enriched);
+          const evName = ptData.event_name || 'PGA Tour Event';
+          setFieldSource(`📡 datagolf.com · ${enriched.length} in ${evName} field`);
+        }
+        return;
+      }
+
       const scrapeRes = await fetch(`/api/scrape-field?major=${major}`);
       if(!scrapeRes.ok) return;
       const scrapeData = await scrapeRes.json();
