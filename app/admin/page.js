@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 const MAJOR_NAMES = {
   players:'The Players', masters:'Masters', pga:'PGA Championship',
-  usopen:'U.S. Open', open:'The Open',
+  usopen:'U.S. Open', open:'The Open', pgatour:'PGA Tour Event',
 };
 
 function EditableCell({ value, placeholder, onSave }) {
@@ -107,19 +107,20 @@ export default function AdminDashboard() {
         <div style={{background:'#fff',borderRadius:10,boxShadow:'0 1px 4px rgba(0,0,0,.06)',padding:'16px 20px',marginBottom:28}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
             <div style={{fontWeight:700,color:'#1a2a5c',fontSize:15}}>💰 Tournament Purses</div>
-            <div style={{fontSize:11,color:'#9ca3af'}}>Update annually when each major announces their purse</div>
+            <div style={{fontSize:11,color:'#9ca3af'}}>Update annually for majors · weekly for PGA Tour events</div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))',gap:12}}>
             {[
-              {key:'players', label:'⛳ Players',   year:2027, defaultPurse:data.purses?.players  ?? 25000000},
-              {key:'masters', label:'🌸 Masters',   year:2026, defaultPurse:data.purses?.masters  ?? 22500000},
-              {key:'pga',     label:'🏆 PGA',       year:2026, defaultPurse:data.purses?.pga      ?? 20500000},
-              {key:'usopen',  label:'🇺🇸 US Open',   year:2026, defaultPurse:data.purses?.usopen   ?? 21500000},
-              {key:'open',    label:'🏴 The Open',  year:2026, defaultPurse:data.purses?.open     ?? 17000000},
+              {key:'players', label:'⛳ Players',   year:'2027', defaultPurse:data.purses?.players  ?? 25000000},
+              {key:'masters', label:'🌸 Masters',   year:'2026', defaultPurse:data.purses?.masters  ?? 22500000},
+              {key:'pga',     label:'🏆 PGA',       year:'2026', defaultPurse:data.purses?.pga      ?? 20500000},
+              {key:'usopen',  label:'🇺🇸 US Open',   year:'2026', defaultPurse:data.purses?.usopen   ?? 21500000},
+              {key:'open',    label:'🏴 The Open',  year:'2026', defaultPurse:data.purses?.open     ?? 17000000},
+              {key:'pgatour', label:'🏌️ PGA Tour',  year:'Current Event', defaultPurse:data.purses?.pgatour ?? 9000000},
             ].map(major=>(
               <div key={major.key} style={{padding:'10px 12px',background:'#f9fafb',borderRadius:8,border:'1px solid #e5e7eb'}}>
                 <div style={{fontSize:12,fontWeight:700,color:'#374151',marginBottom:4}}>{major.label}</div>
-                <div style={{fontSize:10,color:'#9ca3af',marginBottom:6}}>{major.year} Purse</div>
+                <div style={{fontSize:10,color:'#9ca3af',marginBottom:6}}>{major.year === 'Current Event' ? major.year : `${major.year} Purse`}</div>
                 <div style={{display:'flex',alignItems:'center',gap:4}}>
                   <span style={{fontSize:13,color:'#6b7280'}}>$</span>
                   <input
