@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-name-normalize-v5-20260521-1940
+// build: pgatour-hole-scores-v6-20260521-1950
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -912,16 +912,28 @@ export default function App(){
       const all=data.data||data.players||data.scores||[];
       if(!all.length)throw new Error('No hole score data available yet');
 
-      // Match player by name (DataGolf returns "Last, First")
-      const flipped=flip(playerName).toLowerCase().trim(); // "alex smalley"
-      const parts=flipped.split(' ');
-      const lastName=parts[parts.length-1]; // "smalley"
-      const firstName=parts.slice(0,-1).join(' '); // "alex"
-      const expectedFormat=`${lastName}, ${firstName}`; // "smalley, alex"
+      // Normalize names: lowercase, trim, remove diacritics, collapse whitespace
+      const normalize = (s) => (s||'').toLowerCase().trim()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\s+/g, ' ');
+
+      // Build all possible name format variants (matches mergeScoresIntoField logic)
+      const fName = normalize(flip(playerName));
+      const candidates = new Set([fName]);
+      const parts = fName.split(' ');
+      if(parts.length>=2){
+        candidates.add(`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`);
+        if(parts.length>=3){
+          candidates.add(`${parts.slice(1).join(' ')}, ${parts[0]}`);
+          candidates.add(`${parts.slice(2).join(' ')}, ${parts.slice(0,2).join(' ')}`);
+        }
+        if(parts.length>=4){
+          candidates.add(`${parts.slice(3).join(' ')}, ${parts.slice(0,3).join(' ')}`);
+        }
+      }
       const player=all.find(p=>{
-        const n=(p.player_name||'').toLowerCase().trim();
-        // Must match the exact "lastname, firstname" format
-        return n===expectedFormat || n===flipped;
+        const n=normalize(p.player_name||'');
+        return candidates.has(n);
       });
       if(!player)throw new Error('Player not found in hole data');
 
