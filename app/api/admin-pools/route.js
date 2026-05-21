@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic';
+ export const dynamic = 'force-dynamic';
 
 const REDIS_URL    = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN  = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -71,7 +71,7 @@ export async function POST(request) {
     // ── Set tournament purse ─────────────────────────────────────────────────
     if (body.action === 'set-purse') {
       const { major, purse } = body;
-      const VALID = ['players','masters','pga','usopen','open'];
+      const VALID = ['players','masters','pga','usopen','open','pgatour'];
       if (!VALID.includes(major)) {
         return Response.json({ error: `Invalid major: ${major}` }, { status: 400 });
       }
@@ -120,6 +120,7 @@ export async function POST(request) {
       pga:     20500000,
       usopen:  21500000,
       open:    17000000,
+      pgatour: 9000000,  // Generic default — admin updates per current event
     };
     const purses = {};
     for (const major of Object.keys(PURSE_DEFAULTS)) {
