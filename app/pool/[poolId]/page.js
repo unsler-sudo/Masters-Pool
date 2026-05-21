@@ -573,8 +573,21 @@ export default function App(){
           setField(enriched);
           const evName = ptData.event_name || 'PGA Tour Event';
           setFieldSource(`📡 datagolf.com · ${enriched.length} in ${evName} field`);
-          // Immediately fetch live scores to merge in (pgatour always has a live event)
-          setTimeout(() => fetchScores(true), 100);
+          // Immediately fetch and merge live scores (pgatour always has a live event)
+          try {
+            const liveRes = await fetch('/api/scores?endpoint=in-play');
+            if(liveRes.ok){
+              const liveData = await liveRes.json();
+              const liveRaw = liveData.data || liveData.players || [];
+              if(liveRaw.length > 0){
+                rawScoresRef.current = liveRaw;
+                const merged = mergeScoresIntoField(enriched, liveRaw);
+                setField(merged);
+                setFields(prev => ({...prev, [major]: merged}));
+                setLastUp(new Date().toLocaleTimeString());
+              }
+            }
+          } catch(e) { console.warn('pgatour scores fetch failed:', e.message); }
         }
         return;
       }
@@ -1135,7 +1148,7 @@ export default function App(){
     return t > 0 && t < 18;
   });
   // Only consider this major "active" if it's actually within its tournament window
-  const isActiveMajor = pastTeeTime;
+  const isActiveMajor = pastTeeTime || activeMajor === 'pgatour';
   // Detect if the tournament is fully complete: everyone has R4 score OR is cut
   const tournamentComplete = field.length > 0 && field.every(p => {
     const isCut = /CUT|WD|DQ|MC/i.test(p.pos);
