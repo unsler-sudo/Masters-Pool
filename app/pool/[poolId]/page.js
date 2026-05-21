@@ -911,8 +911,6 @@ export default function App(){
     loadEntries().then(()=>setReady(true));
     fetchScores(true);
     setTimeout(()=>fetchAllFields(), 3000);
-    // During tournament: only refresh scores and entries. Don't refetch field (it's locked).
-    // Before tournament: refresh everything since field is still being assembled.
     timer.current=setInterval(()=>{
       fetchScores(true);
       loadEntries();
@@ -1103,6 +1101,14 @@ export default function App(){
       setChatVerified(true);
     }
   },[poolId]);
+
+  // Refetch schedule when active major changes (so pgatour mode loads current event info)
+  useEffect(()=>{
+    if(activeMajor){
+      fetchSchedule();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[activeMajor]);
 
   // Poll chat every 1 second when Chat tab is active (only active when tab is open)
   useEffect(()=>{
