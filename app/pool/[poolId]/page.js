@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-name-match-v4-20260521-1920
+// build: pgatour-name-normalize-v5-20260521-1940
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -834,8 +834,13 @@ export default function App(){
 
   // Pure function to merge live scores into field array
   const mergeScoresIntoField=(currentField, raw)=>{
+    // Normalize names: lowercase, trim, remove diacritics, collapse whitespace
+    const normalize = (s) => (s||'').toLowerCase().trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove diacritics
+      .replace(/\s+/g, ' ');  // collapse multiple spaces
+    
     const updated=currentField.map(f=>{
-      const fName=f.name.toLowerCase().trim();
+      const fName=normalize(f.name);
       // Build all possible name format variants to match against
       const candidates = new Set([fName]);
       if(fName.includes(',')){
@@ -844,18 +849,19 @@ export default function App(){
       } else {
         const parts=fName.split(' ');
         if(parts.length>=2){
-          // Try "last, first" (last word as last name)
           candidates.add(`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`);
-          // Also try "lastN..lastM, first" for multi-part last names (e.g. "Adrien Dumont De Chassart" → "Dumont De Chassart, Adrien")
           if(parts.length>=3){
             candidates.add(`${parts.slice(1).join(' ')}, ${parts[0]}`);
-            // And "last2, first1 first2..." for multi-part first names
             candidates.add(`${parts.slice(2).join(' ')}, ${parts.slice(0,2).join(' ')}`);
+          }
+          if(parts.length>=4){
+            // For 4+ part names: try all reasonable last-name splits
+            candidates.add(`${parts.slice(3).join(' ')}, ${parts.slice(0,3).join(' ')}`);
           }
         }
       }
       const match=raw.find(p=>{
-        const pName=(p.player_name||p.dg_player_name||'').toLowerCase().trim();
+        const pName=normalize(p.player_name||p.dg_player_name||'');
         return candidates.has(pName);
       });
       if(match){
