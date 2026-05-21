@@ -1536,7 +1536,7 @@ export default function App(){
           <div style={{maxWidth:'42%'}}>
             {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,opacity:.95,letterSpacing:.5,marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{poolMeta.poolName}</div>}
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:activeMajor==='pgatour'?11:9,fontWeight:activeMajor==='pgatour'?600:400,fontStyle:'italic',opacity:.85,letterSpacing:.8,marginBottom:3,lineHeight:1.2}}>{activeMajor==='pgatour'?T.eventName:T.tagline}</div>
-            <div style={{fontSize:10,opacity:.65}}>{activeMajor==='pgatour'?T.courseName:`${fmt(TOURNAMENT.purse)} purse`}</div>
+            <div style={{fontSize:10,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
           </div>
           {(()=>{
             const customLogo = poolMeta?.customLogoUrl;
