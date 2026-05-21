@@ -1,3 +1,5 @@
+
+
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -78,7 +80,7 @@ const THEMES = {
     emoji:'🏌️', tagline:'PGA Tour Event',
     logoUrl:'/logos/pga-tour.svg',
     logoNoBg:true,
-    logoHeight:60,
+    logoHeight:90,
     eventName:'PGA Tour Event', courseName:'Current PGA Tour event',
     teeTime:null, purse:9000000,
     primary:'#1a3d76', dark:'#1f4a8c', mid:'#2c5ba8', accent:'#c8a84c', accentLight:'#faf3e0',
@@ -335,6 +337,7 @@ export default function App(){
   const [ready,setReady]=useState(false);
   const [status,setStatus]=useState('');
   const activeMajorRef=useRef('pga');
+  const dynamicPursesRef=useRef(null);
   const [refreshing,setRefreshing]=useState(false);
   const [entryName,setEntryName]=useState('');
   const [entryEmail,setEntryEmail]=useState('');
@@ -430,7 +433,7 @@ export default function App(){
       if(d.paymentsHidden!==undefined)setPaymentsHidden(d.paymentsHidden);
       if(d.payments)setPayments(d.payments);
       if(d.meta)setPoolMeta(d.meta);
-      if(d.purses)setDynamicPurses(d.purses);
+      if(d.purses){setDynamicPurses(d.purses); dynamicPursesRef.current=d.purses;}
       if(d.major&&THEMES[d.major]){
         const prevMajor = activeMajorRef.current;
         const isFirstLoad = !field || field.length === 0;
