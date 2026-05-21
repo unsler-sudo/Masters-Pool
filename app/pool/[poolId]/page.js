@@ -533,14 +533,16 @@ export default function App(){
         const players = ptData.baseline_history_fit || ptData.baseline || ptData.players || [];
         if(players.length < 5) return;
 
-        // Build enriched player list — sorted by win odds (highest first = best players)
-        const enriched = players.map((p, i) => {
+        // Sort players by win odds (highest first = best players)
+        const sorted = [...players].sort((a, b) => (b.win || 0) - (a.win || 0));
+
+        // Build enriched player list
+        const enriched = sorted.map((p, i) => {
           const name = p.player_name || p.name || '';
           // Convert "Last, First" → "First Last"
           const displayName = name.includes(',') ? name.split(',').reverse().map(s=>s.trim()).join(' ') : name;
           const win = p.win || 0;
           const odds = win > 0.001 ? `+${Math.round((1/win)*100-100)}` : 'n/a';
-          // PGA Tour fields are smaller (~70-156 players)
           // Tier cuts: Top 12 favorites, 13-56 contenders, 57+ longshots
           const tier = i < 12 ? 1 : i < 56 ? 2 : 3;
           return {
@@ -549,10 +551,16 @@ export default function App(){
             odds,
             tier,
             rank: i,
-            dgRank: p.dg_skill_estimate ? Math.round(p.dg_skill_estimate * 100) : i,
+            dgRank: i + 1,
             win,
             confirmed: true,
             onTrack: true,
+            pos: '-',
+            score: 'E',
+            today: '',
+            thru: '',
+            earnings: 0,
+            r1: null, r2: null, r3: null, r4: null,
           };
         });
 
@@ -561,6 +569,8 @@ export default function App(){
           setField(enriched);
           const evName = ptData.event_name || 'PGA Tour Event';
           setFieldSource(`📡 datagolf.com · ${enriched.length} in ${evName} field`);
+          // Immediately fetch live scores to merge in (pgatour always has a live event)
+          setTimeout(() => fetchScores(true), 100);
         }
         return;
       }
