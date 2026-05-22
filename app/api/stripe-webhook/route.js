@@ -59,6 +59,21 @@ export async function POST(request) {
         meta.active = true;
         meta.paidAt = new Date().toISOString();
         meta.stripeSessionId = session.id;
+
+        // For PGA Tour mode, lock in the current week's event so auto-rotation knows when to fire
+        if (meta.major === 'pgatour' || meta.pgaTourMode) {
+          try {
+            const ptRes = await fetch(
+              `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+              { cache:'no-store', signal: AbortSignal.timeout(5000) }
+            );
+            if (ptRes.ok) {
+              const ptData = await ptRes.json();
+              if (ptData.event_name) meta.currentPgatourEvent = ptData.event_name;
+            }
+          } catch {}
+        }
+
         await redis('SET', `pool:${poolId}:meta`, JSON.stringify(meta));
 
         // Send confirmation email
@@ -68,6 +83,7 @@ export async function POST(request) {
           const MAJOR_NAMES = {
             players:'The Players Championship', masters:'The Masters',
             pga:'PGA Championship', usopen:'U.S. Open', open:'The Open Championship',
+            pgatour: meta.currentPgatourEvent || 'the current PGA Tour event',
           };
           await fetch('https://api.resend.com/emails', {
             method: 'POST',
