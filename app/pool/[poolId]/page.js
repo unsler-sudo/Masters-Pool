@@ -1,5 +1,5 @@
 'use client';
-// build: logo-fallback-v13-20260522-0220
+// build: pgatour-archives-v15-20260522-0300
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1893,9 +1893,9 @@ export default function App(){
           <ellipse cx="370" cy="175" rx="50" ry="12" fill={T.dark} opacity=".3"/>
         </svg>
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
-          <div style={{maxWidth:'42%'}}>
+          <div style={{maxWidth:'36%'}}>
             {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,opacity:.95,letterSpacing:.5,marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{poolMeta.poolName}</div>}
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:activeMajor==='pgatour'?11:9,fontWeight:activeMajor==='pgatour'?600:400,fontStyle:'italic',opacity:.85,letterSpacing:.8,marginBottom:3,lineHeight:1.2}}>{activeMajor==='pgatour'?T.eventName:T.tagline}</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:9,fontWeight:activeMajor==='pgatour'?600:400,fontStyle:'italic',opacity:.85,letterSpacing:.6,marginBottom:3,lineHeight:1.2}}>{activeMajor==='pgatour'?T.eventName:T.tagline}</div>
             <div style={{fontSize:10,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
           </div>
           {(()=>{
@@ -2390,7 +2390,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const THEME={...THEMES[a.major]||THEMES.pga};
                 const earnings=a.earnings||{};
                 const hasEarnings=Object.keys(earnings).length>0;
-                const archiveId=a.major+'_'+a.year;
+                // For pgatour archives, include event slug in ID to avoid collisions
+                const archiveId = a.major === 'pgatour'
+                  ? `pgatour_${(a.eventName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-')}_${a.year}`
+                  : a.major+'_'+a.year;
                 const isExpanded=expandedArchive===archiveId;
                 // Use saved logo data if available, otherwise current theme
                 const savedLogo = a.logoUrl || THEME.logoUrl;
@@ -2420,12 +2423,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 return<div key={archiveId} style={{marginBottom:16,borderRadius:12,overflow:'hidden',border:`1px solid ${THEME.cardBorder}`}}>
                   <div onClick={()=>setExpandedArchive(isExpanded?null:archiveId)} style={{background:THEME.headerBg,padding:'12px 16px',display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
                     {savedLogo && (savedLogoNoBg
-                      ? <img src={savedLogo} alt={THEME.eventName} style={{height:36,width:'auto',filter:'drop-shadow(0 2px 4px rgba(0,0,0,.3))'}}/>
-                      : <div style={{background:'#fff',borderRadius:6,padding:'3px 6px',display:'inline-flex',alignItems:'center',boxShadow:'0 2px 4px rgba(0,0,0,.2)'}}><img src={savedLogo} alt={THEME.eventName} style={{height:30,width:'auto',display:'block'}}/></div>
+                      ? <img src={savedLogo} alt={a.eventName || THEME.eventName} style={{height:36,width:'auto',filter:'drop-shadow(0 2px 4px rgba(0,0,0,.3))'}}/>
+                      : <div style={{background:'#fff',borderRadius:6,padding:'3px 6px',display:'inline-flex',alignItems:'center',boxShadow:'0 2px 4px rgba(0,0,0,.2)'}}><img src={savedLogo} alt={a.eventName || THEME.eventName} style={{height:30,width:'auto',display:'block'}}/></div>
                     )}
                     {!savedLogo && <span style={{fontSize:24}}>{THEME.emoji}</span>}
                     <div style={{flex:1}}>
-                      <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:'#fff'}}>{THEME.eventName}</div>
+                      <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:'#fff'}}>{a.eventName || THEME.eventName}</div>
                       <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{displayDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries{showPrizes&&<> · ${pot} pot</>}</div>
                     </div>
                     <span style={{fontSize:18,color:'rgba(255,255,255,0.6)'}}>{isExpanded?'▲':'▼'}</span>
@@ -2692,7 +2695,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8}}>
                         <span style={{fontSize:20}}>{THEME.emoji}</span>
                         <div>
-                          <div style={{fontWeight:700,fontSize:14,color:THEME.primary}}>{THEME.eventName} {a.year}</div>
+                          <div style={{fontWeight:700,fontSize:14,color:THEME.primary}}>{a.eventName || THEME.eventName} {a.year}</div>
                           <div style={{fontSize:10,color:'#8a9580'}}>
                             {new Date(a.archivedAt).toLocaleDateString()} · {a.entries.length} entries
                             {showPrizes&&<span style={{marginLeft:6}}>· ${pot} pot</span>}
