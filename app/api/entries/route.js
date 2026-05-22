@@ -107,9 +107,106 @@ async function autoManage(poolId) {
       }
     }
 
-    // ── Skip all auto-management when in PGA Tour mode ────────────────────────
-    // Commissioner is manually controlling the pool's events
+    // ── PGA Tour Mode: weekly auto-rotation, mirrors major rotation logic ─────
     if (meta?.pgaTourMode || (await redis('GET', `pool:${poolId}:major`)) === 'pgatour') {
+      try {
+        const year = new Date().getFullYear();
+        const schedRes = await fetch(
+          `https://feeds.datagolf.com/get-schedule?tour=pga&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          { cache:'no-store', signal: AbortSignal.timeout(5000) }
+        );
+        if (!schedRes.ok) return 'pgatour';
+        const schedData = await schedRes.json();
+        const events = (schedData.schedule || schedData.events || []).filter(e => e.start_date);
+
+        // Find what event was active when this pool was last paid
+        // We track the active event name on meta.currentPgatourEvent
+        const ptRes = await fetch(
+          `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          { cache:'no-store', signal: AbortSignal.timeout(5000) }
+        );
+        if (!ptRes.ok) return 'pgatour';
+        const ptData = await ptRes.json();
+        const dgCurrentEventName = (ptData.event_name || '').toLowerCase();
+
+        // What event did the pool last activate for? (stored when commissioner paid)
+        const poolEventName = (meta?.currentPgatourEvent || '').toLowerCase();
+
+        // First-time activation: just record current DG event and exit
+        if (!poolEventName && dgCurrentEventName) {
+          meta.currentPgatourEvent = ptData.event_name;
+          await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
+          return 'pgatour';
+        }
+
+        // If DataGolf's current event ≠ pool's locked-in event, time to rotate
+        if (dgCurrentEventName && poolEventName && dgCurrentEventName !== poolEventName) {
+          // STRICT WINDOW: only rotate Tuesday morning (6-11 AM ET) — matches majors
+          const nowDate = new Date(now);
+          const etHour = (nowDate.getUTCHours() - 4 + 24) % 24;
+          const isTuesday = nowDate.getUTCDay() === 2;
+          const isMorning = etHour >= 6 && etHour < 12;
+          if (!isTuesday || !isMorning) return 'pgatour';
+
+          // Archive results for the prior event
+          const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
+          if (entries.length > 0) {
+            const slug = poolEventName.replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+            const archiveKey = k(poolId, `archive:pgatour-${slug}_${year}`);
+            let existingEarnings = {};
+            try { const ex = await redis('GET', archiveKey); if (ex) existingEarnings = JSON.parse(ex).earnings || {}; } catch {}
+            await redis('SET', archiveKey, JSON.stringify({
+              major: 'pgatour', eventName: meta.currentPgatourEvent, year,
+              archivedAt: new Date().toISOString(),
+              entries, payments, earnings: existingEarnings,
+              entryFee: meta.entryFee || 0,
+            }));
+          }
+
+          // Reset pool: locked, unpaid, new event tracked
+          meta.paid = false;
+          meta.paidAt = null;
+          meta.reminderSent = false;
+          meta.currentPgatourEvent = ptData.event_name;
+          await Promise.all([
+            redis('SET', k(poolId,'meta'),         JSON.stringify(meta)),
+            redis('DEL', k(poolId,'entries')),
+            redis('DEL', k(poolId,'payments')),
+            redis('SET', k(poolId,'locked'),       'true'),
+            redis('SET', k(poolId,'picks_hidden'), 'true'),
+          ]);
+
+          // Email commissioner
+          if (meta?.commissionerEmail && process.env.RESEND_API_KEY) {
+            const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
+            fetch('https://api.resend.com/emails', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+                to: meta.commissionerEmail,
+                subject: `Your pool is ready for ${ptData.event_name} ⛳`,
+                html: `
+                  <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
+                    <h2 style="color:#1a2a5c">${meta.poolName || 'Your Pool'}</h2>
+                    <p>The PGA Tour heads to <strong>${ptData.event_name}</strong> this week. Your pool is locked until you reactivate it.</p>
+                    <div style="text-align:center;margin:28px 0">
+                      <a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:16px">
+                        Reactivate Your Pool — $10 →
+                      </a>
+                    </div>
+                    <p style="color:#6b7280;font-size:12px">Picks reset weekly so everyone competes fresh. Tap above to unlock for this week's event.</p>
+                  </div>
+                `,
+              }),
+            }).catch(e => console.error('pgatour rotation email failed:', e.message));
+          }
+
+          console.log(`[autoManage] PGA Tour rotation: ${poolId} → ${ptData.event_name}`);
+        }
+      } catch (e) {
+        console.warn('[autoManage] pgatour rotation error:', e.message);
+      }
       return 'pgatour';
     }
 
@@ -919,6 +1016,22 @@ export async function POST(request) {
       if (meta) {
         meta.major = body.major;
         meta.pgaTourMode = body.major === 'pgatour';
+        // When entering PGA Tour mode, capture the current DataGolf event so auto-rotation knows what we're on
+        if (body.major === 'pgatour') {
+          try {
+            const ptRes = await fetch(
+              `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+              { cache:'no-store', signal: AbortSignal.timeout(5000) }
+            );
+            if (ptRes.ok) {
+              const ptData = await ptRes.json();
+              if (ptData.event_name) meta.currentPgatourEvent = ptData.event_name;
+            }
+          } catch {}
+        } else {
+          // Leaving pgatour mode — clear tracked event
+          delete meta.currentPgatourEvent;
+        }
         await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
       }
       return Response.json({ ok:true, major: body.major });
@@ -1004,6 +1117,7 @@ export async function POST(request) {
       const years  = [2025,2026,2027,2028];
       const MAJOR_ORDER = { players: 0, masters: 1, pga: 2, usopen: 3, open: 4 };
       const archives = [];
+      // Major archives: archive:{major}_{year}
       for (const major of MAJORS) {
         for (const year of years) {
           try {
@@ -1012,8 +1126,33 @@ export async function POST(request) {
           } catch {}
         }
       }
+      // PGA Tour archives: archive:pgatour-{event-slug}_{year} — discover via SCAN
+      try {
+        let cursor = '0';
+        do {
+          const res = await redis('SCAN', cursor, 'MATCH', k(poolId, 'archive:pgatour-*'), 'COUNT', 100);
+          if (Array.isArray(res) && res.length === 2) {
+            cursor = res[0];
+            for (const archiveKey of res[1] || []) {
+              try {
+                const r = await redis('GET', archiveKey);
+                if (r) archives.push({ ...JSON.parse(r), payments:{} });
+              } catch {}
+            }
+          } else {
+            cursor = '0';
+          }
+        } while (cursor !== '0');
+      } catch (e) { console.warn('pgatour archive scan failed:', e.message); }
       archives.sort((a,b) => {
         if (a.year !== b.year) return b.year - a.year;
+        // pgatour archives use archivedAt for ordering within a year
+        if (a.major === 'pgatour' && b.major === 'pgatour') {
+          return new Date(b.archivedAt||0) - new Date(a.archivedAt||0);
+        }
+        // pgatour events go after majors within the same year
+        if (a.major === 'pgatour') return 1;
+        if (b.major === 'pgatour') return -1;
         return (MAJOR_ORDER[b.major] || 0) - (MAJOR_ORDER[a.major] || 0);
       });
       return Response.json({ ok:true, archives });
