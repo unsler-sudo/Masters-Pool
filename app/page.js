@@ -1,4 +1,3 @@
-
 'use client';
 import { useState } from 'react';
 
@@ -26,7 +25,7 @@ function getMajors() {
 
   // For each major, determine if this year's event is upcoming or past
   // If past, use next year
-  return SCHEDULE.map(m => {
+  const majors = SCHEDULE.map(m => {
     let year = currentYear;
     const thisYearDate = new Date(currentYear, m.month - 1, m.approxDay);
     // Tournament ends Sunday (3 days after Thursday tee time)
@@ -38,6 +37,14 @@ function getMajors() {
     const sortKey = new Date(year, m.month - 1, m.approxDay).getTime();
     return { ...m, date, year, sortKey };
   }).sort((a, b) => a.sortKey - b.sortKey);
+
+  // PGA Tour Mode — always available, follows the current week's PGA Tour event
+  const pgatour = {
+    key:'pgatour', label:'PGA Tour Mode', emoji:'🏌️',
+    date:'Any weekly event', year:currentYear, sortKey:0,
+  };
+
+  return [...majors, pgatour];
 }
 
 const MAJORS = getMajors();
@@ -133,14 +140,15 @@ export default function LandingPage() {
             <div style={{fontSize:11,color:'#9ca3af',marginTop:4}}>Save this — you'll need it to lock entries and manage the pool</div>
           </div>
           <div style={{marginBottom:20}}>
-            <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Starting Major</label>
+            <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Starting Tournament</label>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
               {MAJORS.map(m=>(
                 <button key={m.key} type="button" onClick={()=>upd('major',m.key)} style={{
-                  padding:'10px 12px',borderRadius:8,textAlign:'left',cursor:'pointer',
+                  padding:'10px 12px',borderRadius:8,textAlign:'left',cursor:'pointer',position:'relative',
                   border:`2px solid ${form.major===m.key?'#1a2a5c':'#e5e7eb'}`,
                   background:form.major===m.key?'#eef0f8':'#fff',
                 }}>
+                  {m.key==='pgatour'&&<div style={{position:'absolute',top:6,right:6,fontSize:8,fontWeight:800,background:'#508cff',color:'#fff',padding:'2px 6px',borderRadius:4,letterSpacing:.5}}>NEW</div>}
                   <div style={{fontSize:18,marginBottom:2}}>{m.emoji}</div>
                   <div style={{fontSize:12,fontWeight:600,color:'#1a2a5c'}}>{m.label}</div>
                   <div style={{fontSize:10,color:'#9ca3af'}}>{m.date}</div>
@@ -203,7 +211,7 @@ export default function LandingPage() {
         {[
           { emoji:'🏆', title:'Live Standings', desc:'Real-time earnings from DataGolf updated every 60 seconds' },
           { emoji:'🎯', title:'3-Tier Picks', desc:'2 Favorites + 4 Contenders + 4 Longshots = 10 total picks' },
-          { emoji:'📊', title:'All 5 Majors', desc:'Players, Masters, PGA, US Open, The Open — auto-rotates between each' },
+          { emoji:'🏌️', title:'Majors + PGA Tour', desc:'All 5 majors plus any weekly PGA Tour event — themed automatically' },
           { emoji:'🔒', title:'Private Pool', desc:'Your own link, your own password, invite only who you want' },
           { emoji:'⚡', title:'Fully Automated', desc:'Auto-locks at tee time, auto-rotates Tuesday after each major' },
           { emoji:'📚', title:'Past Results', desc:'Final standings archived after every tournament' },
