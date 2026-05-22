@@ -1,5 +1,5 @@
 'use client';
-// build: cloudinary-event-logos-v12-20260522-0210
+// build: logo-fallback-v13-20260522-0220
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1908,9 +1908,20 @@ export default function App(){
             const isDesktop = typeof window !== 'undefined' && window.innerWidth > 600;
             const logoHeight = isDesktop ? Math.round(baseLogoHeight * 1.5) : baseLogoHeight;
             if(!logoSrc) return null;
+            // If logoSrc is a Cloudinary PGA Tour event logo, fall back to the local PGA Tour shield on error
+            const onLogoError = (ev) => {
+              const fallback = '/logos/pga-tour.svg';
+              if (ev.target.src.indexOf(fallback) === -1 && logoSrc.indexOf('res.cloudinary.com') !== -1) {
+                ev.target.src = fallback;
+              } else {
+                // Final fallback: hide
+                if (noBg) ev.target.style.display = 'none';
+                else if (ev.target.parentElement) ev.target.parentElement.style.display = 'none';
+              }
+            };
             return noBg
-              ?<img src={logoSrc} alt="Pool logo" style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',height:logoHeight,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={(ev)=>{ev.target.style.display='none';}}/>
-              :<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={logoSrc} alt="Pool logo" style={{height:logoHeight,width:'auto',display:'block'}} onError={(ev)=>{ev.target.parentElement.style.display='none';}}/></div>;
+              ?<img src={logoSrc} alt="Pool logo" style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',height:logoHeight,width:'auto',filter:'drop-shadow(0 3px 8px rgba(0,0,0,.4))',pointerEvents:'none'}} onError={onLogoError}/>
+              :<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={logoSrc} alt="Pool logo" style={{height:logoHeight,width:'auto',display:'block'}} onError={onLogoError}/></div>;
           })()}
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
             <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
