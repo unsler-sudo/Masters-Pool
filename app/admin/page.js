@@ -1,5 +1,6 @@
+
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const MAJOR_NAMES = {
   players:'The Players', masters:'Masters', pga:'PGA Championship',
@@ -47,6 +48,35 @@ export default function AdminDashboard() {
   const [data, setData]         = useState(null);
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
+  const [pgaTourEvent, setPgaTourEvent] = useState(null);
+
+  // Auto-fetch current PGA Tour event for purse helper
+  useEffect(() => {
+    if (!authed) return;
+    const slugify = (n) => n.toLowerCase()
+      .replace(/&/g,'and').replace(/[^a-z0-9\s-]/g,'')
+      .replace(/\s+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
+    (async () => {
+      try {
+        const ptRes = await fetch('/api/scores?endpoint=pre-tournament');
+        if (!ptRes.ok) return;
+        const ptData = await ptRes.json();
+        const eventName = ptData.event_name || '';
+        if (!eventName) return;
+        // Get event_id from schedule for URL
+        const year = new Date().getFullYear();
+        const schedRes = await fetch(`/api/scores?endpoint=schedule&season=${year}`);
+        if (!schedRes.ok) return;
+        const schedData = await schedRes.json();
+        const events = schedData.schedule || schedData.events || [];
+        const ev = events.find(e => (e.event_name||'').toLowerCase() === eventName.toLowerCase());
+        const url = ev
+          ? `https://www.pgatour.com/tournaments/${year}/${slugify(eventName)}/R${year}${String(ev.event_id).padStart(3,'0')}/overview`
+          : null;
+        setPgaTourEvent({ name: eventName, url });
+      } catch {}
+    })();
+  }, [authed]);
 
   const login = async () => {
     setLoading(true); setError('');
@@ -121,6 +151,17 @@ export default function AdminDashboard() {
               <div key={major.key} style={{padding:'10px 12px',background:'#f9fafb',borderRadius:8,border:'1px solid #e5e7eb'}}>
                 <div style={{fontSize:12,fontWeight:700,color:'#374151',marginBottom:4}}>{major.label}</div>
                 <div style={{fontSize:10,color:'#9ca3af',marginBottom:6}}>{major.year === 'Current Event' ? major.year : `${major.year} Purse`}</div>
+                {major.key === 'pgatour' && pgaTourEvent && (
+                  <div style={{marginBottom:6,padding:'6px 8px',background:'#eff6ff',borderRadius:5,border:'1px solid #bfdbfe'}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'#1e40af',marginBottom:2}}>{pgaTourEvent.name}</div>
+                    {pgaTourEvent.url && (
+                      <a href={pgaTourEvent.url} target="_blank" rel="noopener noreferrer"
+                         style={{fontSize:9,color:'#2563eb',textDecoration:'underline',display:'block',wordBreak:'break-all'}}>
+                        📋 Look up purse on pgatour.com →
+                      </a>
+                    )}
+                  </div>
+                )}
                 <div style={{display:'flex',alignItems:'center',gap:4}}>
                   <span style={{fontSize:13,color:'#6b7280'}}>$</span>
                   <input
