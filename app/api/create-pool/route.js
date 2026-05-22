@@ -38,6 +38,7 @@ async function sendConfirmationEmail(meta, poolId) {
   const MAJOR_NAMES = {
     players:'The Players Championship', masters:'The Masters',
     pga:'PGA Championship', usopen:'U.S. Open', open:'The Open Championship',
+    pgatour:'the current PGA Tour event',
   };
   await fetch('https://api.resend.com/emails', {
     method: 'POST',
