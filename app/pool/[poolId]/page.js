@@ -1,5 +1,5 @@
 'use client';
-// build: flag-map-v8-20260521-2010
+// build: pgatour-event-themes-verified-v10-20260521-2200
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -87,6 +87,292 @@ const THEMES = {
     headerBg:'linear-gradient(170deg,#1f4a8c 0%,#2c5ba8 35%,#3c70c0 65%,#5088d4 100%)',
     bg:'linear-gradient(180deg,#c4cee0 0%,#e8eef7 300px)',
     bodyBg:'#e8eef7', cardBorder:'#c4cee0', inputBorder:'#b4bcd0', stripeBg:'#eff4f9', rowHl:'#d8e2ef',
+  },
+};
+
+// ─── Per-event theme overrides for PGA Tour Mode ─────────────────────────────
+// Colors verified via sponsor brand guidelines, tournament traditions, and venue branding.
+// Keyed by DataGolf's event_name (lowercased). Merges on top of base pgatour theme.
+// To add a custom logo: drop in /public/logos/<event-key>.svg and uncomment logoUrl.
+const PGATOUR_EVENT_THEMES = {
+  // ─── JANUARY ───────────────────────────────────────────────────────────────
+  'the sentry': {
+    // Sentry Insurance brand: deep blue + gold accent; "blue chairs" tradition at Kapalua
+    tagline:'Signature · Tournament of Champions',
+    // logoUrl:'/logos/the-sentry.svg',
+    primary:'#003a70', dark:'#0050a0', mid:'#0070c8', accent:'#fcb913',
+    headerBg:'linear-gradient(170deg,#003a70 0%,#0070c8 50%,#3a90e0 100%)',
+    bodyBg:'#e6eef7', cardBorder:'#b8cce0', inputBorder:'#a8bcd0', stripeBg:'#edf3f9', rowHl:'#d0e0ef',
+  },
+  'sony open in hawaii': {
+    // Sony brand: black/blue + Hawaii ocean teal
+    tagline:'Aloha · Waialae Country Club',
+    // logoUrl:'/logos/sony-open.svg',
+    primary:'#005bbb', dark:'#0070d8', mid:'#0a8ae8', accent:'#00b4a0',
+    headerBg:'linear-gradient(170deg,#005bbb 0%,#0a8ae8 50%,#3aa8f0 100%)',
+    bodyBg:'#e6eef7', cardBorder:'#bcd0e0', inputBorder:'#abc0d4', stripeBg:'#edf3f9', rowHl:'#d0deef',
+  },
+  'the american express': {
+    // AmEx official brand: layered blues (Earth Blue, Deep Aqua, Battery Charged)
+    tagline:'PGA WEST · La Quinta',
+    // logoUrl:'/logos/american-express.svg',
+    primary:'#2e77bb', dark:'#1d8ece', mid:'#27aee3', accent:'#9bd4f5',
+    headerBg:'linear-gradient(170deg,#2e77bb 0%,#27aee3 50%,#6cc4ee 100%)',
+    bodyBg:'#e6f0f7', cardBorder:'#b8d0e0', inputBorder:'#a8c0d4', stripeBg:'#edf4f9', rowHl:'#d4e4ef',
+  },
+
+  // ─── FEBRUARY ──────────────────────────────────────────────────────────────
+  'farmers insurance open': {
+    // Farmers trademark: light blue + dark blue + red + white
+    tagline:'Torrey Pines · Pacific Cliffs',
+    // logoUrl:'/logos/farmers-insurance.svg',
+    primary:'#003c80', dark:'#005ba8', mid:'#0080d4', accent:'#d12028',
+    headerBg:'linear-gradient(170deg,#003c80 0%,#0080d4 50%,#3aa0e0 100%)',
+    bodyBg:'#e6eff7', cardBorder:'#b8d0e0', inputBorder:'#a8c0d4', stripeBg:'#edf4f9', rowHl:'#d0e0ef',
+  },
+  'wm phoenix open': {
+    // Waste Management brand: green + yellow ("Greenest Show on Grass")
+    tagline:"The People's Open",
+    // logoUrl:'/logos/wm-phoenix.svg',
+    primary:'#00833e', dark:'#0a9c50', mid:'#15b568', accent:'#ffd700',
+    headerBg:'linear-gradient(170deg,#00833e 0%,#15b568 50%,#48cc88 100%)',
+    bodyBg:'#e6f1e8', cardBorder:'#b8d4c2', inputBorder:'#a8c4b2', stripeBg:'#edf6f0', rowHl:'#d0e6d8',
+  },
+  "at&t pebble beach pro-am": {
+    // AT&T brand: deep blue
+    tagline:'Signature · Pebble Beach Golf Links',
+    // logoUrl:'/logos/pebble-beach.svg',
+    primary:'#00a8e0', dark:'#0089c0', mid:'#00b9f0', accent:'#005a8a',
+    headerBg:'linear-gradient(170deg,#00598a 0%,#0089c0 50%,#00b9f0 100%)',
+    bodyBg:'#e6f1f9', cardBorder:'#b8d2e4', inputBorder:'#a8c2d8', stripeBg:'#edf5fa', rowHl:'#d0e2f0',
+  },
+  'the genesis invitational': {
+    // Genesis Motor luxury brand: black + silver + copper accents (and Tiger's red)
+    tagline:"Signature · Tiger's Tournament",
+    // logoUrl:'/logos/genesis.svg',
+    primary:'#0d0d0d', dark:'#1f1f1f', mid:'#3a3a3a', accent:'#b8000a',
+    headerBg:'linear-gradient(170deg,#0d0d0d 0%,#3a3a3a 50%,#6a6a6a 100%)',
+    bodyBg:'#ebebeb', cardBorder:'#c4c4c4', inputBorder:'#b4b4b4', stripeBg:'#f4f4f4', rowHl:'#dcdcdc',
+  },
+
+  // ─── MARCH ─────────────────────────────────────────────────────────────────
+  'cognizant classic in the palm beaches': {
+    // Cognizant brand: blue + orange
+    tagline:'PGA National · Champion Course',
+    // logoUrl:'/logos/cognizant.svg',
+    primary:'#0033a0', dark:'#0045c0', mid:'#1565d0', accent:'#f58220',
+    headerBg:'linear-gradient(170deg,#0033a0 0%,#1565d0 50%,#4a8ce0 100%)',
+    bodyBg:'#e6ecf5', cardBorder:'#b8cce0', inputBorder:'#a8bcd0', stripeBg:'#edf2f9', rowHl:'#d0deef',
+  },
+  'arnold palmer invitational presented by mastercard': {
+    // Arnold Palmer: iconic red cardigan, 4-color umbrella (red/yellow/blue/green)
+    tagline:"Signature · The King's Tournament",
+    // logoUrl:'/logos/arnold-palmer.svg',
+    primary:'#c8302e', dark:'#a02424', mid:'#dc4844', accent:'#ffd700',
+    headerBg:'linear-gradient(170deg,#a02424 0%,#dc4844 50%,#ec6464 100%)',
+    bodyBg:'#fbe7e7', cardBorder:'#e8c0c0', inputBorder:'#d8b0b0', stripeBg:'#fcf0f0', rowHl:'#f5dadc',
+  },
+  'puerto rico open': {
+    // Puerto Rico flag colors: red + white + blue + tropical accents
+    tagline:'Tropical · Grand Reserve',
+    // logoUrl:'/logos/puerto-rico-open.svg',
+    primary:'#0050a0', dark:'#003a78', mid:'#1070c8', accent:'#ed1c2e',
+    headerBg:'linear-gradient(170deg,#003a78 0%,#1070c8 50%,#4a98e0 100%)',
+    bodyBg:'#e6ecf5', cardBorder:'#b8cce0', inputBorder:'#a8bcd0', stripeBg:'#edf2f9', rowHl:'#d0deef',
+  },
+  'valspar championship': {
+    // Valspar paint brand: orange + yellow; "Snake Pit" theme at Copperhead
+    tagline:'Snake Pit · Copperhead Course',
+    // logoUrl:'/logos/valspar.svg',
+    primary:'#f47b20', dark:'#d8651c', mid:'#f89030', accent:'#1c5e2a',
+    headerBg:'linear-gradient(170deg,#d8651c 0%,#f89030 50%,#fab068 100%)',
+    bodyBg:'#fcefd9', cardBorder:'#e8d0a8', inputBorder:'#d8c098', stripeBg:'#fdf4e6', rowHl:'#f5e0bc',
+  },
+  "texas children's houston open": {
+    // Texas Children's Hospital brand: red + white
+    tagline:'Memorial Park · Houston',
+    // logoUrl:'/logos/houston-open.svg',
+    primary:'#cc0000', dark:'#a80000', mid:'#dc1818', accent:'#ffd700',
+    headerBg:'linear-gradient(170deg,#a80000 0%,#dc1818 50%,#ec4040 100%)',
+    bodyBg:'#fbe5e5', cardBorder:'#e8bcbc', inputBorder:'#d8acac', stripeBg:'#fcedef', rowHl:'#f5d8d8',
+  },
+
+  // ─── APRIL ─────────────────────────────────────────────────────────────────
+  'valero texas open': {
+    // Valero Energy: navy blue + red + yellow
+    tagline:'TPC San Antonio · Oaks Course',
+    // logoUrl:'/logos/valero-texas-open.svg',
+    primary:'#003a70', dark:'#002c54', mid:'#0050a0', accent:'#fbb917',
+    headerBg:'linear-gradient(170deg,#002c54 0%,#0050a0 50%,#3a78c0 100%)',
+    bodyBg:'#e6eff7', cardBorder:'#b8d0e0', inputBorder:'#a8c0d4', stripeBg:'#edf4f9', rowHl:'#d0e0ef',
+  },
+  'rbc heritage': {
+    // RBC Royal Bank: blue + yellow + iconic plaid tartan jacket (Harbour Town green/red plaid)
+    tagline:'Signature · Plaid Jacket',
+    // logoUrl:'/logos/rbc-heritage.svg',
+    primary:'#003168', dark:'#00427c', mid:'#0058a0', accent:'#fdb913',
+    headerBg:'linear-gradient(170deg,#003168 0%,#0058a0 50%,#3a80c8 100%)',
+    bodyBg:'#e6ecf5', cardBorder:'#b8cce0', inputBorder:'#a8bcd0', stripeBg:'#edf2f9', rowHl:'#d0deef',
+  },
+  'zurich classic of new orleans': {
+    // Zurich Insurance: blue (Zurich Blue) + white
+    tagline:'Team Event · TPC Louisiana',
+    // logoUrl:'/logos/zurich-classic.svg',
+    primary:'#2167ae', dark:'#1853a0', mid:'#3a80c8', accent:'#3aa8dc',
+    headerBg:'linear-gradient(170deg,#1853a0 0%,#3a80c8 50%,#6ca0dc 100%)',
+    bodyBg:'#e6ecf5', cardBorder:'#bccae0', inputBorder:'#abbad4', stripeBg:'#eef2f9', rowHl:'#d4dcef',
+  },
+
+  // ─── MAY ───────────────────────────────────────────────────────────────────
+  'miami championship': {
+    // Doral Blue Monster + Miami Vice teal/pink
+    tagline:'Signature · Blue Monster',
+    // logoUrl:'/logos/miami-championship.svg',
+    primary:'#0a4a7c', dark:'#06365e', mid:'#1264a0', accent:'#ec6090',
+    headerBg:'linear-gradient(170deg,#06365e 0%,#1264a0 50%,#4a90c8 100%)',
+    bodyBg:'#e6eef5', cardBorder:'#b8cce0', inputBorder:'#a8bcd0', stripeBg:'#edf3f9', rowHl:'#d0deef',
+  },
+  'truist championship': {
+    // Truist Bank brand: purple/violet (Truist Purple #2E1A47) + amber accent
+    tagline:'Signature · Quail Hollow',
+    // logoUrl:'/logos/truist.svg',
+    primary:'#430098', dark:'#2e1a47', mid:'#5b1ccc', accent:'#f5b942',
+    headerBg:'linear-gradient(170deg,#2e1a47 0%,#430098 50%,#7048d4 100%)',
+    bodyBg:'#ece5f3', cardBorder:'#c8b8d8', inputBorder:'#b8a8c8', stripeBg:'#f3edf8', rowHl:'#dccced',
+  },
+  'oneflight myrtle beach classic': {
+    // Coastal SC: ocean teal + sand
+    tagline:'Coastal · Dunes Club',
+    // logoUrl:'/logos/myrtle-beach.svg',
+    primary:'#0a7ba8', dark:'#0894c4', mid:'#1ca8d8', accent:'#f5b942',
+    headerBg:'linear-gradient(170deg,#0a7ba8 0%,#1ca8d8 50%,#48c4e8 100%)',
+    bodyBg:'#e6f1f9', cardBorder:'#b8d4e4', inputBorder:'#a8c4d4', stripeBg:'#edf5fa', rowHl:'#d0e6f0',
+  },
+  'the cj cup byron nelson': {
+    // CJ Group corporate: navy + bright red (CJ logo)
+    tagline:'TPC Craig Ranch · Texas',
+    // logoUrl:'/logos/cj-cup.svg',
+    primary:'#003478', dark:'#002354', mid:'#0050a0', accent:'#e60012',
+    headerBg:'linear-gradient(170deg,#002354 0%,#0050a0 50%,#3878c0 100%)',
+    bodyBg:'#e6edf5', cardBorder:'#b8cce0', inputBorder:'#a8bcd0', stripeBg:'#edf2f9', rowHl:'#d0deef',
+  },
+  'charles schwab challenge': {
+    // Charles Schwab brand: light blue (#00A0DC) + Colonial tartan red/yellow tradition
+    tagline:'Colonial · Tartan Tradition',
+    // logoUrl:'/logos/charles-schwab.svg',
+    primary:'#00a0dc', dark:'#0085b8', mid:'#1cb4e8', accent:'#003a78',
+    headerBg:'linear-gradient(170deg,#0085b8 0%,#1cb4e8 50%,#48c8f0 100%)',
+    bodyBg:'#e6f1f9', cardBorder:'#b8d8ec', inputBorder:'#a8c8dc', stripeBg:'#edf5fa', rowHl:'#d0e6f0',
+  },
+
+  // ─── JUNE ──────────────────────────────────────────────────────────────────
+  'the memorial tournament presented by workday': {
+    // Memorial yellow tradition (Jack Nicklaus yellow shirt, Play Yellow CMN campaign)
+    tagline:"Signature · Jack's Tournament",
+    // logoUrl:'/logos/memorial.svg',
+    primary:'#fcb913', dark:'#e8a30c', mid:'#ffc828', accent:'#0a3d1f',
+    headerBg:'linear-gradient(170deg,#e8a30c 0%,#fcb913 50%,#ffd45c 100%)',
+    bodyBg:'#fcf3d8', cardBorder:'#e8d098', inputBorder:'#d8c088', stripeBg:'#fdf7e3', rowHl:'#f5e8bc',
+  },
+  'rbc canadian open': {
+    // Canadian flag red + RBC blue
+    tagline:'Oh Canada · Osprey Valley',
+    // logoUrl:'/logos/rbc-canadian.svg',
+    primary:'#ff0000', dark:'#cc0000', mid:'#e82020', accent:'#003168',
+    headerBg:'linear-gradient(170deg,#cc0000 0%,#e82020 50%,#f04848 100%)',
+    bodyBg:'#fce5e7', cardBorder:'#e8bcc0', inputBorder:'#d8acb0', stripeBg:'#fcedef', rowHl:'#f5d8db',
+  },
+  'travelers championship': {
+    // Travelers Insurance: iconic red umbrella
+    tagline:'Signature · TPC River Highlands',
+    // logoUrl:'/logos/travelers.svg',
+    primary:'#cd1e25', dark:'#a01820', mid:'#dc3030', accent:'#003366',
+    headerBg:'linear-gradient(170deg,#a01820 0%,#cd1e25 50%,#e84848 100%)',
+    bodyBg:'#fce5e7', cardBorder:'#e8bcc0', inputBorder:'#d8acb0', stripeBg:'#fcedef', rowHl:'#f5d8db',
+  },
+
+  // ─── JULY ──────────────────────────────────────────────────────────────────
+  'john deere classic': {
+    // John Deere brand: iconic green + yellow
+    tagline:'TPC Deere Run · Silvis',
+    // logoUrl:'/logos/john-deere.svg',
+    primary:'#367c2b', dark:'#2c6624', mid:'#48953a', accent:'#ffde00',
+    headerBg:'linear-gradient(170deg,#2c6624 0%,#367c2b 50%,#48953a 100%)',
+    bodyBg:'#ebf2e8', cardBorder:'#c4d4bc', inputBorder:'#b4c4ac', stripeBg:'#f0f6ec', rowHl:'#dae6d0',
+  },
+  'isco championship': {
+    // ISCO Industries: blue + orange
+    tagline:'Korn Ferry Crossover · Hurstbourne',
+    // logoUrl:'/logos/isco.svg',
+    primary:'#003a70', dark:'#0050a0', mid:'#1070c0', accent:'#f58220',
+    headerBg:'linear-gradient(170deg,#003a70 0%,#1070c0 50%,#3a90d8 100%)',
+    bodyBg:'#e6eef7', cardBorder:'#b8cce0', inputBorder:'#a8bcd0', stripeBg:'#edf3f9', rowHl:'#d0deef',
+  },
+  'corales puntacana championship': {
+    // Caribbean turquoise + sand + tropical sunset
+    tagline:'Caribbean · Punta Cana',
+    // logoUrl:'/logos/corales.svg',
+    primary:'#00a8b8', dark:'#008898', mid:'#1cbccc', accent:'#ff9433',
+    headerBg:'linear-gradient(170deg,#00a8b8 0%,#1cbccc 50%,#48d0dc 100%)',
+    bodyBg:'#e6f4f6', cardBorder:'#b8d8dc', inputBorder:'#a8c8cc', stripeBg:'#edf7f8', rowHl:'#d0eaee',
+  },
+  'genesis scottish open': {
+    // Scottish flag blue (Saltire) + Genesis luxury black accent
+    tagline:'Links Golf · Renaissance Club',
+    // logoUrl:'/logos/scottish-open.svg',
+    primary:'#005eb8', dark:'#004a96', mid:'#1278d4', accent:'#ffffff',
+    headerBg:'linear-gradient(170deg,#004a96 0%,#005eb8 50%,#3a82d4 100%)',
+    bodyBg:'#e6eef9', cardBorder:'#b8cce8', inputBorder:'#a8bcd8', stripeBg:'#edf3fa', rowHl:'#d0deef',
+  },
+  '3m open': {
+    // 3M brand: red + black
+    tagline:'TPC Twin Cities · Minnesota',
+    // logoUrl:'/logos/3m-open.svg',
+    primary:'#ed1a3b', dark:'#c41530', mid:'#f53050', accent:'#1a1a1a',
+    headerBg:'linear-gradient(170deg,#c41530 0%,#ed1a3b 50%,#f54860 100%)',
+    bodyBg:'#fce5e8', cardBorder:'#e8bcc4', inputBorder:'#d8acb4', stripeBg:'#fcedef', rowHl:'#f5d8de',
+  },
+
+  // ─── AUGUST ────────────────────────────────────────────────────────────────
+  'rocket classic': {
+    // Rocket Companies brand: red + black ("Rocket Red")
+    tagline:'Detroit Golf Club',
+    // logoUrl:'/logos/rocket-classic.svg',
+    primary:'#c8102e', dark:'#a00820', mid:'#dc1830', accent:'#1a1a1a',
+    headerBg:'linear-gradient(170deg,#a00820 0%,#c8102e 50%,#e84048 100%)',
+    bodyBg:'#fce5e7', cardBorder:'#e8bcc0', inputBorder:'#d8acb0', stripeBg:'#fcedef', rowHl:'#f5d8db',
+  },
+  'wyndham championship': {
+    // Wyndham Hotels brand: blue + yellow gold
+    tagline:'Sedgefield · Donald Ross Classic',
+    // logoUrl:'/logos/wyndham.svg',
+    primary:'#1b3a6f', dark:'#0f2855', mid:'#2c52a0', accent:'#f9a826',
+    headerBg:'linear-gradient(170deg,#0f2855 0%,#1b3a6f 50%,#3a5fa8 100%)',
+    bodyBg:'#e6eaf3', cardBorder:'#b8c2dc', inputBorder:'#a8b2cc', stripeBg:'#edf0f7', rowHl:'#d0d8eb',
+  },
+  'fedex st. jude championship': {
+    // FedEx brand: purple + orange (iconic)
+    tagline:'FedEx Cup Playoff #1',
+    // logoUrl:'/logos/fedex-st-jude.svg',
+    primary:'#4d148c', dark:'#3a0e6e', mid:'#6020a8', accent:'#ff6600',
+    headerBg:'linear-gradient(170deg,#3a0e6e 0%,#4d148c 50%,#7028a8 100%)',
+    bodyBg:'#ede5f3', cardBorder:'#cab8dc', inputBorder:'#baa8cc', stripeBg:'#f3edf8', rowHl:'#dacced',
+  },
+  'bmw championship': {
+    // BMW brand: blue + white + light blue (BMW roundel)
+    tagline:'FedEx Cup Playoff #2',
+    // logoUrl:'/logos/bmw-championship.svg',
+    primary:'#0066b1', dark:'#004080', mid:'#1c7ec8', accent:'#c8d4e0',
+    headerBg:'linear-gradient(170deg,#004080 0%,#0066b1 50%,#3a8ad4 100%)',
+    bodyBg:'#e6eef7', cardBorder:'#b8cce0', inputBorder:'#a8bcd0', stripeBg:'#edf3f9', rowHl:'#d0deef',
+  },
+  'tour championship': {
+    // East Lake/FedEx Cup gold + Atlanta colors
+    tagline:'FedEx Cup Finale · East Lake',
+    // logoUrl:'/logos/tour-championship.svg',
+    primary:'#cba135', dark:'#a8841c', mid:'#dcb848', accent:'#0a3d1f',
+    headerBg:'linear-gradient(170deg,#a8841c 0%,#cba135 50%,#dcb848 100%)',
+    bodyBg:'#f5ecd0', cardBorder:'#dccba0', inputBorder:'#ccbb90', stripeBg:'#faf3df', rowHl:'#ecdcb0',
   },
 };
 
@@ -399,7 +685,17 @@ export default function App(){
   const chatScrollRef=useRef(null);
   const timer=useRef(null);
 
-  const T = { ...THEMES[activeMajor]||THEMES.pga, ...scheduleData[activeMajor] };
+  // Build theme: base + dynamic schedule data + (if pgatour mode) per-event overrides
+  const baseTheme = THEMES[activeMajor] || THEMES.pga;
+  const scheduleOverrides = scheduleData[activeMajor] || {};
+  let eventOverrides = {};
+  if (activeMajor === 'pgatour' && scheduleOverrides.eventName) {
+    const key = scheduleOverrides.eventName.toLowerCase().trim();
+    if (PGATOUR_EVENT_THEMES[key]) {
+      eventOverrides = PGATOUR_EVENT_THEMES[key];
+    }
+  }
+  const T = { ...baseTheme, ...eventOverrides, ...scheduleOverrides };
   const TEE_TIME = new Date(T.teeTime).getTime();
   const TOURNAMENT_END = TEE_TIME + 6 * 24 * 60 * 60 * 1000; // 6 days after tee-off
   const effectivePurse = (dynamicPurses && dynamicPurses[activeMajor]) || T.purse;
