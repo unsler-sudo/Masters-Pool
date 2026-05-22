@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-event-themes-verified-v10-20260521-2200
+// build: cloudinary-event-logos-v12-20260522-0210
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -808,7 +808,7 @@ export default function App(){
           if(ptRes.ok){
             const ptData = await ptRes.json();
             const eventName = ptData.event_name || ptData.name || 'PGA Tour Event';
-            // Find this event in the schedule to get course/location/start_date
+            // Find this event in the schedule to get course/location/start_date/event_id
             const currentEvent = events.find(e => 
               (e.event_name||'').toLowerCase() === eventName.toLowerCase()
             );
@@ -817,12 +817,18 @@ export default function App(){
               : 'PGA Tour';
             const teeDate = currentEvent?.start_date ? new Date(currentEvent.start_date + 'T11:00:00Z') : null;
             const teeTime = teeDate ? teeDate.toISOString() : null;
+            // Build official PGA Tour logo URL from event_id (Cloudinary CDN, CORS-enabled)
+            const eventId = currentEvent?.event_id;
+            const logoUrl = eventId
+              ? `https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:R000.png/tournaments/logos/R${String(eventId).padStart(3,'0')}.png`
+              : null;
             setScheduleData(prev => ({
               ...prev,
               pgatour: {
                 eventName,
                 courseName,
                 ...(teeTime && { teeTime }),
+                ...(logoUrl && { logoUrl, logoNoBg: false, logoHeight: 80 }),
               },
             }));
           }
