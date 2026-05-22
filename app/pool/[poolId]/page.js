@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-teetimes-v17-20260522-0345
+// build: pgatour-teetimes-actually-attached-v18-20260522-0410
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -867,6 +867,44 @@ export default function App(){
         // Sort players by win odds (highest first = best players)
         const sorted = [...players].sort((a, b) => (b.win || 0) - (a.win || 0));
 
+        // Fetch tee times from field-updates endpoint
+        const teeTimeMap = {};
+        try {
+          const fuRes = await fetch('/api/scores?endpoint=field-updates');
+          if(fuRes.ok){
+            const fd = await fuRes.json();
+            const fieldPlayers = fd.field || fd.players || [];
+            const currentRound = fd.current_round || 1;
+            fieldPlayers.forEach(p=>{
+              const pname = (p.player_name||'').toLowerCase().trim();
+              if(!pname) return;
+              const teetimes = p.teetimes || [];
+              const nextRound = teetimes
+                .filter(t => t.round_num >= currentRound)
+                .sort((a,b) => a.round_num - b.round_num)[0];
+              if(!nextRound?.teetime) return;
+              const tt = nextRound.teetime;
+              const timePart = tt.split(' ')[1] || '';
+              const [hStr,mStr] = timePart.split(':');
+              const h = parseInt(hStr,10);
+              const m = mStr || '00';
+              const ampm = h >= 12 ? 'PM' : 'AM';
+              const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+              const teeTime = `${h12}:${m} ${ampm}`;
+              const data = { teeTime, startHole: nextRound.start_hole, roundNum: nextRound.round_num };
+              teeTimeMap[pname] = data;
+              // Also store name variants
+              if(pname.includes(',')){
+                const parts = pname.split(',').map(s=>s.trim());
+                if(parts.length===2) teeTimeMap[`${parts[1]} ${parts[0]}`] = data;
+              } else {
+                const pts = pname.split(' ');
+                if(pts.length>=2) teeTimeMap[`${pts[pts.length-1]}, ${pts.slice(0,-1).join(' ')}`] = data;
+              }
+            });
+          }
+        } catch(e){ console.warn('pgatour tee times unavailable:', e.message); }
+
         // Build enriched player list
         const enriched = sorted.map((p, i) => {
           const name = p.player_name || p.name || '';
@@ -876,6 +914,10 @@ export default function App(){
           const odds = win > 0.001 ? `+${Math.round((1/win)*100-100)}` : 'n/a';
           // Tier cuts: Top 12 favorites, 13-56 contenders, 57+ longshots
           const tier = i < 12 ? 1 : i < 56 ? 2 : 3;
+          // Look up tee time
+          const nameKey = (p.player_name || '').toLowerCase().trim();
+          const displayKey = displayName.toLowerCase().trim();
+          const teeInfo = teeTimeMap[nameKey] || teeTimeMap[displayKey];
           return {
             name: displayName,
             country: p.country || 'USA',
@@ -886,6 +928,9 @@ export default function App(){
             win,
             confirmed: true,
             onTrack: true,
+            teeTime: teeInfo?.teeTime || null,
+            startHole: teeInfo?.startHole || null,
+            teeRoundNum: teeInfo?.roundNum || null,
             pos: '-',
             score: 'E',
             today: '',
