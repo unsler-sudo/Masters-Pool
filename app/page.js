@@ -1,3 +1,4 @@
+
 'use client';
 import { useState } from 'react';
 
@@ -172,9 +173,16 @@ export default function LandingPage() {
         <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:42,fontWeight:900,marginBottom:12,letterSpacing:-1}}>
           Tuna Golf Pool
         </h1>
-        <p style={{fontSize:18,opacity:.75,maxWidth:480,margin:'0 auto 24px',lineHeight:1.6}}>
-          Create a private golf pool for your friends, office, or group. Pick 10 golfers across 3 tiers and track live earnings during every major.
+        <p style={{fontSize:18,opacity:.75,maxWidth:480,margin:'0 auto 20px',lineHeight:1.6}}>
+          Create a private golf pool for your friends, office, or group. Pick 10 golfers across 3 tiers and track live earnings during the majors — and now <b style={{color:'#fff'}}>every PGA Tour event</b>.
         </p>
+        <div style={{maxWidth:440,margin:'0 auto 16px',padding:'12px 18px',background:'linear-gradient(135deg,rgba(80,140,255,.22),rgba(80,140,255,.10))',borderRadius:12,border:'1px solid rgba(120,160,255,.4)'}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#7aa8ff',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🏌️ New Feature</div>
+          <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:4}}>PGA Tour Mode</div>
+          <div style={{fontSize:12,opacity:.75,lineHeight:1.5}}>
+            Run your pool on any PGA Tour event — not just the majors. Live scoring, payouts, and dynamic event branding all rotate weekly.
+          </div>
+        </div>
         <div style={{maxWidth:440,margin:'0 auto 28px',padding:'14px 18px',background:'linear-gradient(135deg,rgba(201,168,76,.18),rgba(201,168,76,.08))',borderRadius:12,border:'1px solid rgba(201,168,76,.4)'}}>
           <div style={{fontSize:11,fontWeight:700,color:'#c9a84c',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🎁 Limited Time</div>
           <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:6}}>Free Pool for the U.S. Open</div>
