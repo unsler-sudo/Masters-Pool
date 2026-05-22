@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-teetimes-actually-attached-v18-20260522-0410
+// build: r2-sort-by-position-v19-20260522-0430
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1597,7 +1597,18 @@ export default function App(){
         const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
-        // Between rounds: sort by tee time DESCENDING (latest at top, earliest at bottom)
+        // Between rounds: if R2 is upcoming, sort by leaderboard position (R1 results visible)
+        // For R3/R4 (after cut), sort by tee time DESC so players closest to teeing off are at top
+        const upcomingRound = a.teeRoundNum || b.teeRoundNum || 0;
+        if (upcomingRound <= 2) {
+          // R1 just finished, R2 upcoming — sort by current position (leader on top)
+          const pa=parsePos(a.pos),pb=parsePos(b.pos);
+          if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
+          if(!pa)return 1;
+          if(!pb)return -1;
+          return pa-pb;
+        }
+        // R3 or R4 upcoming: sort by tee time DESCENDING (latest at top, earliest at bottom)
         const ta = parseTeeTime(a.teeTime);
         const tb = parseTeeTime(b.teeTime);
         if (ta !== tb) return tb - ta;
