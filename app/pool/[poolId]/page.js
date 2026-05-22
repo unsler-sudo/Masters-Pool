@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-hole-scores-v6-20260521-1950
+// build: flag-map-v8-20260521-2010
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -264,7 +264,10 @@ const FLAG_MAP = {
   ITA:'🇮🇹',POR:'🇵🇹',CZE:'🇨🇿',SVK:'🇸🇰',POL:'🇵🇱',
   ZIM:'🇿🇼',NAM:'🇳🇦',PAR:'🇵🇾',URU:'🇺🇾',PER:'🇵🇪',
   ECU:'🇪🇨',BRA:'🇧🇷',PHI:'🇵🇭',IND:'🇮🇳',TPE:'🇹🇼',
-  MAS:'🇲🇾',SIN:'🇸🇬',PNG:'🇵🇬',
+  MAS:'🇲🇾',SIN:'🇸🇬',PNG:'🇵🇬',PUR:'🇵🇷',NED:'🇳🇱',
+  SUI:'🇨🇭',ISL:'🇮🇸',JAM:'🇯🇲',BAH:'🇧🇸',IRN:'🇮🇷',
+  ISR:'🇮🇱',RUS:'🇷🇺',UKR:'🇺🇦',TUR:'🇹🇷',VIE:'🇻🇳',
+  INA:'🇮🇩',HKG:'🇭🇰',
 };
 const Flag = ({c}) => FLAG_MAP[c] ? <span>{FLAG_MAP[c]}</span> : null;
 
