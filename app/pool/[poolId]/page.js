@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-archives-v15-20260522-0300
+// build: pgatour-teetimes-v16-20260522-0330
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -931,7 +931,10 @@ export default function App(){
       // current week's odds, so applying them to non-active majors is incorrect
       const oddsMap = {};
       const teeTimeMap = {};
-      const teeT = new Date(THEMES[major]?.teeTime || 0).getTime();
+      // Use the dynamically populated tee time (works for both majors and pgatour mode)
+      // Falls back to the static theme tee time if schedule data hasn't loaded yet
+      const dynamicTeeTime = scheduleData[major]?.teeTime || THEMES[major]?.teeTime;
+      const teeT = new Date(dynamicTeeTime || 0).getTime();
       const cutoff = teeT + 6 * 24 * 60 * 60 * 1000;
       const nowMs = Date.now();
       const isThisMajorInWindow = nowMs >= teeT && nowMs <= cutoff;
