@@ -1,5 +1,5 @@
 'use client';
-// build: scorecard-sg-stats-v58-20260525-0400
+// build: dg-profile-link-v60-20260525-0500
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2120,6 +2120,18 @@ export default function App(){
                         ))}
                       </div>
                     </div>
+                  );
+                })()}
+                {(() => {
+                  // DataGolf profile link — uses dgId from player object, falls back to live-stats lookup
+                  const stats = liveStatsRef.current?.[(p.name||'').toLowerCase().trim()];
+                  const dgId = p.dgId || stats?.dg_id;
+                  if (!dgId) return null;
+                  return (
+                    <a href={`https://datagolf.com/player-profiles?dg_id=${dgId}`} target="_blank" rel="noopener noreferrer"
+                       style={{display:'block',textAlign:'center',padding:'8px 12px',marginBottom:14,fontSize:11,fontWeight:600,color:T.primary,background:'#fff',border:`1px solid ${T.primary}40`,borderRadius:8,textDecoration:'none'}}>
+                      📊 View full profile on DataGolf →
+                    </a>
                   );
                 })()}
                 <div style={{marginBottom:4}}>
