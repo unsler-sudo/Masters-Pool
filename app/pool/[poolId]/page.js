@@ -1,5 +1,5 @@
 'use client';
-// build: f-asterisk-back9-v62-20260525-0545
+// build: sticky-header-and-favorites-v63-20260525-0600
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -779,6 +779,28 @@ export default function App(){
   const liveStatsRef=useRef(null); // Cache live-stats map by player_name
   const [liveStatsLoaded,setLiveStatsLoaded]=useState(false);
   const [openCard,setOpenCard]=useState(null);
+  // Player favorites — per-device using localStorage, scoped per pool
+  const [favorites,setFavorites]=useState(new Set());
+  // Load favorites from localStorage on mount
+  useEffect(()=>{
+    if(typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem(`tuna-favorites-${poolId}`);
+      if(stored) setFavorites(new Set(JSON.parse(stored)));
+    } catch(e) {}
+  },[poolId]);
+  // Save favorites to localStorage whenever they change
+  const toggleFavorite = (name) => {
+    setFavorites(prev => {
+      const next = new Set(prev);
+      if(next.has(name)) next.delete(name);
+      else next.add(name);
+      try {
+        localStorage.setItem(`tuna-favorites-${poolId}`, JSON.stringify([...next]));
+      } catch(e) {}
+      return next;
+    });
+  };
   const [activeTier,setActiveTier]=useState(1);
   const [submitting,setSubmitting]=useState(false);
   const [now,setNow]=useState(Date.now());
@@ -2526,8 +2548,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <span>Tap player for scorecard</span>
           </div>}
           {pastTeeTime&&<div style={{fontSize:10,color:'#8a9580',textAlign:'center',marginBottom:8}}>Tap player for scorecard</div>}
-          <div style={{borderRadius:9,overflow:'hidden',border:`1px solid ${T.cardBorder}`}}>
-            <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5}}>
+          <div style={{borderRadius:9,border:`1px solid ${T.cardBorder}`,position:'relative'}}>
+            <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.15)',borderTopLeftRadius:9,borderTopRightRadius:9}}>
               {pastTeeTime
                 ?<><span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee/Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span></>
                 :<><span style={{width:40,textAlign:'center'}}>#</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>DG Rank</span></>
@@ -2571,10 +2593,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               {isPairingGroupStart && myPairTime && <div style={{display:'flex',padding:'4px 10px',background:`${T.primary}10`,fontSize:10,fontWeight:700,color:T.primary,letterSpacing:.5,borderTop:i===0?'none':`2px solid ${T.primary}`,borderBottom:`1px solid ${T.primary}30`}}>
                 <span>⏰ {myPairTime}{myStartHole !== 1 ? ` · Hole ${myStartHole}` : ''}</span>
               </div>}
-              <div onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',borderTop:(fieldSort!=='pairings' && (isNewPairingGroup||isCutTransition))?`2px solid ${T.primary}`:(isCutTransition?`2px solid ${T.primary}`:'none'),background:isCut&&isLive?'#fafafa':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&isLive?.6:1}}>
+              <div onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',borderTop:(fieldSort!=='pairings' && (isNewPairingGroup||isCutTransition))?`2px solid ${T.primary}`:(isCutTransition?`2px solid ${T.primary}`:'none'),background:isCut&&isLive?'#fafafa':favorites.has(p.name)?'#fff8d6':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&isLive?.6:1,borderLeft:favorites.has(p.name)?`3px solid #d4a017`:'3px solid transparent'}}>
                 <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&isLive?'#999':T.primary,fontSize:12}}>{isLive?(isCut?(/WD/i.test(p.pos)?'🚑':/DQ/i.test(p.pos)?'🚫':'✂️'):p.pos):(i+1)}</span>
                 <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
                   <div style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
+                    <span onClick={(e)=>{e.stopPropagation();toggleFavorite(p.name);}} style={{marginRight:5,cursor:'pointer',fontSize:13,verticalAlign:'middle',userSelect:'none'}}>{favorites.has(p.name)?'⭐':'☆'}</span>
                     <span style={{marginRight:3}}><Flag c={p.country}/></span>
                     <span style={{fontWeight:600,fontSize:12,textDecoration:isCut&&isLive?'line-through':'none',color:isCut&&isLive?'#999':'inherit'}}>{flip(p.name)}</span>
                     {p.confirmed&&!isLive&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8,border:'1px solid #2d7a1e40'}}>✓</span>}
