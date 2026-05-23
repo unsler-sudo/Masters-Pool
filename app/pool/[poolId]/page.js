@@ -1,5 +1,5 @@
 'use client';
-// build: dg-profile-link-v60-20260525-0500
+// build: gate-on-merged-data-v61-20260525-0530
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2533,7 +2533,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 :<><span style={{width:40,textAlign:'center'}}>#</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>DG Rank</span></>
               }
             </div>
-            {field.length === 0 || (isLive && !rawScoresRef.current)
+            {field.length === 0 || (isLive && (!rawScoresRef.current || !field.some(p => p.pos && p.pos !== '-')))
               ? <div style={{padding:'40px 20px',textAlign:'center',color:'#8a9580',fontSize:13}}>
                   <div style={{display:'inline-block',width:24,height:24,border:`3px solid ${T.primary}30`,borderTop:`3px solid ${T.primary}`,borderRadius:'50%',animation:'spin 0.8s linear infinite',marginBottom:10}}/>
                   <div>Loading field...</div>
