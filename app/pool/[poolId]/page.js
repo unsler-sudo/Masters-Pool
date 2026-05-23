@@ -1,5 +1,5 @@
 'use client';
-// build: wd-dq-emojis-v49-20260525-0000
+// build: cut-sort-by-rounds-completed-v50-20260525-0015
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1729,6 +1729,11 @@ export default function App(){
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
         if (aCut && bCut) {
+          // Within cut/WD/DQ group: players who completed MORE rounds sort higher
+          const aRounds = (a.r1!=null?1:0) + (a.r2!=null?1:0) + (a.r3!=null?1:0) + (a.r4!=null?1:0);
+          const bRounds = (b.r1!=null?1:0) + (b.r2!=null?1:0) + (b.r3!=null?1:0) + (b.r4!=null?1:0);
+          if (aRounds !== bRounds) return bRounds - aRounds;
+          // Same rounds completed: by score (best first)
           const sa = parseScoreToNum(a.score);
           const sb = parseScoreToNum(b.score);
           if (sa !== sb) return sa - sb;
