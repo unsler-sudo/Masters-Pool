@@ -1,5 +1,5 @@
 'use client';
-// build: cut-detect-by-teetime-v25-20260523-2045
+// build: position-then-teetime-v26-20260523-2100
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1614,17 +1614,33 @@ export default function App(){
         return pa-pb;
       })
     : [...field].sort((a,b)=>{
-        // Between rounds: always sort by leaderboard position (cut players at bottom)
-        // Tee time still shown in the column but doesn't drive the sort
+        // Between rounds: sort by leaderboard position, then by tee time (latest first within ties),
+        // then by start hole (front 9 before back 9 within same time)
         const aCut = /CUT|WD|DQ|MC/i.test(a.pos);
         const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
+        // Primary: position
         const pa=parsePos(a.pos),pb=parsePos(b.pos);
-        if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
-        if(!pa)return 1;
-        if(!pb)return -1;
-        return pa-pb;
+        if(pa&&pb){
+          if(pa!==pb) return pa-pb;
+        } else if(!pa&&pb){
+          return 1;
+        } else if(pa&&!pb){
+          return -1;
+        } else {
+          return (a.rank??999)-(b.rank??999);
+        }
+        // Tied position — sort by tee time DESC (latest first, since final pairings lead)
+        const ta = parseTeeTime(a.teeTime);
+        const tb = parseTeeTime(b.teeTime);
+        if (ta !== tb) return tb - ta;
+        // Same tee time — front 9 (start hole 1) before back 9 (start hole 10)
+        const ah = a.startHole || 1;
+        const bh = b.startHole || 1;
+        if (ah !== bh) return ah - bh;
+        // Final tiebreaker: alphabetical
+        return a.name.localeCompare(b.name);
       });
   const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>a.name.localeCompare(b.name));
   const filteredTier=tierField.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
