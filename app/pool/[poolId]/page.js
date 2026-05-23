@@ -1,5 +1,5 @@
 'use client';
-// build: pairing-data-refresh-during-round-v36-20260524-2000
+// build: pairings-honored-during-rounds-v38-20260524-2045
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1708,7 +1708,7 @@ export default function App(){
         if (ra !== rb) return ra - rb;
         return a.name.localeCompare(b.name);
       })
-    : (aRoundIsLive || tournamentComplete)
+    : ((aRoundIsLive || tournamentComplete) && fieldSort !== 'pairings')
     ? [...field].sort((a,b)=>{
         // Cut players always at bottom
         const aCut = /CUT|WD|DQ|MC/i.test(a.pos);
