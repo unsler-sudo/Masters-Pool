@@ -1,5 +1,6 @@
+
 'use client';
-// build: position-then-teetime-v26-20260523-2100
+// build: cut-shows-score-v28-20260523-2145
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2287,12 +2288,14 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 {isLive
                   ?<>
                     <span style={{width:50,textAlign:'center',fontSize:showTeeTime?9:11,color:showTeeTime?T.primary:'#888',fontWeight:showTeeTime?600:400,lineHeight:1.15}}>
-                      {showTeeTime
-                        ? <>{p.teeTime}{p.startHole && p.startHole !== 1 ? <><br/><span style={{fontSize:8,opacity:.75}}>·H{p.startHole}</span></> : null}</>
-                        : (p.thru || '-')
+                      {isCut
+                        ? '—'
+                        : showTeeTime
+                          ? <>{p.teeTime}{p.startHole && p.startHole !== 1 ? <><br/><span style={{fontSize:8,opacity:.75}}>·H{p.startHole}</span></> : null}</>
+                          : (p.thru || '-')
                       }
                     </span>
-                    <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{isCut?'CUT':p.score}</span>
+                    <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{p.score}</span>
                     <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmt(p.earnings)}</span>
                   </>
                   :<span style={{width:50,textAlign:'center',fontSize:11,color:'#888'}}>{p.dgRank||'-'}</span>
