@@ -1,3 +1,4 @@
+
 export const dynamic = 'force-dynamic';
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
@@ -1098,6 +1099,15 @@ export async function POST(request) {
       if (body.password!=='auto' && !await checkAdmin(body.password))
         return Response.json({ error:'Wrong password' }, { status:401 });
       const { major, year, earnings } = body;
+      // GUARD: refuse to save empty earnings — would blank out existing data
+      if (!earnings || Object.keys(earnings).length === 0) {
+        return Response.json({ ok:true, skipped:'empty earnings' });
+      }
+      // GUARD: refuse to overwrite if all values are $0 — likely a stale closure or wrong-major call
+      const hasNonZero = Object.values(earnings).some(v => v > 0);
+      if (!hasNonZero) {
+        return Response.json({ ok:true, skipped:'all zeros' });
+      }
       const archiveKey = k(poolId, `archive:${major}_${year}`);
       try {
         const r = await redis('GET', archiveKey);
