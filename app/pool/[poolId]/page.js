@@ -1452,7 +1452,8 @@ export default function App(){
     timer.current=setInterval(()=>{
       fetchScores(true);
       loadEntries();
-      if(!pastTeeTime)fetchAllFields();
+      // Refresh field every minute to pick up new round tee times once published
+      fetchAllFields();
       setNow(Date.now());
     },60000);
     const clock=setInterval(()=>setNow(Date.now()),1000);
@@ -1462,7 +1463,7 @@ export default function App(){
       if(document.visibilityState==='visible'){
         fetchScores(true);
         loadEntries();
-        if(!pastTeeTime)fetchAllFields();
+        fetchAllFields();
         setNow(Date.now());
       }
     };
