@@ -1,5 +1,5 @@
 'use client';
-// build: pairings-h10-divider-v32-20260523-2300
+// build: pairings-persist-during-round-v33-20260523-2330
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -940,6 +940,9 @@ export default function App(){
             teeTime: teeInfo?.teeTime || null,
             startHole: teeInfo?.startHole || null,
             teeRoundNum: teeInfo?.roundNum || null,
+            pairingTeeTime: teeInfo?.teeTime || null,
+            pairingStartHole: teeInfo?.startHole || null,
+            pairingRoundNum: teeInfo?.roundNum || null,
             pos: '-',
             score: 'E',
             today: '',
@@ -1109,6 +1112,9 @@ export default function App(){
           teeTime: teeInfo?.teeTime || null,
           startHole: teeInfo?.startHole || null,
           teeRoundNum: teeInfo?.roundNum || null,
+          pairingTeeTime: teeInfo?.teeTime || null,
+          pairingStartHole: teeInfo?.startHole || null,
+          pairingRoundNum: teeInfo?.roundNum || null,
           pos:'-',score:'E',today:'',thru:'',earnings:0,r1:null,r2:null,r3:null,r4:null,
         };
       });
@@ -1636,12 +1642,12 @@ export default function App(){
         }
         if (fieldSort === 'pairings') {
           // Pairings mode: group players physically teeing off together
-          // Sort by tee time DESC, then by start hole, then by position
-          const ta = parseTeeTime(a.teeTime);
-          const tb = parseTeeTime(b.teeTime);
+          // Uses pairingTeeTime/pairingStartHole which stay locked once published, even mid-round
+          const ta = parseTeeTime(a.pairingTeeTime || a.teeTime);
+          const tb = parseTeeTime(b.pairingTeeTime || b.teeTime);
           if (ta !== tb) return tb - ta;
-          const ah = a.startHole || 1;
-          const bh = b.startHole || 1;
+          const ah = a.pairingStartHole || a.startHole || 1;
+          const bh = b.pairingStartHole || b.startHole || 1;
           if (ah !== bh) return ah - bh;
           const pa=parsePos(a.pos),pb=parsePos(b.pos);
           if(pa&&pb)return pa-pb;
@@ -2267,7 +2273,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
 
         {tab==='Field'&&<>
           <input style={{...inp,marginBottom:6}} placeholder="Search players..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          {isLive && !aRoundIsLive && !tournamentComplete && field.some(p=>p.teeTime) && <div style={{display:'flex',gap:6,marginBottom:8,justifyContent:'center'}}>
+          {isLive && !tournamentComplete && field.some(p=>p.pairingTeeTime||p.teeTime) && <div style={{display:'flex',gap:6,marginBottom:8,justifyContent:'center'}}>
             <button onClick={()=>setFieldSort('leaderboard')} style={{
               padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
               border:`1px solid ${fieldSort==='leaderboard'?T.primary:'#d0d4d0'}`,
@@ -2309,14 +2315,17 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             const roundScore = teeRound===1?p.r1 : teeRound===2?p.r2 : teeRound===3?p.r3 : p.r4;
             const teeRoundAlreadyPlayed = roundScore != null;
             // In Pairings mode, mark start of a new pairing group (tee time + start hole changes)
+            // Uses pairingTeeTime which stays locked across the round
             const prev = fieldVis[i-1];
-            const prevStartHole = prev?.startHole || 1;
-            const myStartHole = p.startHole || 1;
+            const prevPairTime = prev?.pairingTeeTime || prev?.teeTime;
+            const myPairTime = p.pairingTeeTime || p.teeTime;
+            const prevStartHole = prev?.pairingStartHole || prev?.startHole || 1;
+            const myStartHole = p.pairingStartHole || p.startHole || 1;
             const isNewPairingGroup = fieldSort === 'pairings'
               && i > 0
               && !isCut
               && !/CUT|WD|DQ|MC/i.test(prev?.pos||'')
-              && (prev?.teeTime !== p.teeTime || prevStartHole !== myStartHole);
+              && (prevPairTime !== myPairTime || prevStartHole !== myStartHole);
             const isCutTransition = fieldSort === 'pairings'
               && i > 0
               && isCut
