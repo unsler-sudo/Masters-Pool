@@ -1,5 +1,5 @@
 'use client';
-// build: back-nine-asterisk-v40-20260524-2115
+// build: pairings-all-front-then-all-back-v45-20260524-2300
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1735,14 +1735,15 @@ export default function App(){
           return a.name.localeCompare(b.name);
         }
         if (fieldSort === 'pairings') {
-          // Pairings mode: group players physically teeing off together
-          // Uses pairingTeeTime/pairingStartHole which stay locked once published, even mid-round
+          // Pairings mode: ALL front-9 starters first (in tee time order),
+          // then ALL back-9 starters at the bottom (in tee time order)
+          const ah = a.pairingStartHole || a.startHole || 1;
+          const bh = b.pairingStartHole || b.startHole || 1;
+          if (ah !== bh) return ah - bh; // front 9 (1) before back 9 (10)
+          // Within same start hole group, sort by tee time DESC
           const ta = parseTeeTime(a.pairingTeeTime || a.teeTime);
           const tb = parseTeeTime(b.pairingTeeTime || b.teeTime);
           if (ta !== tb) return tb - ta;
-          const ah = a.pairingStartHole || a.startHole || 1;
-          const bh = b.pairingStartHole || b.startHole || 1;
-          if (ah !== bh) return ah - bh;
           const pa=parsePos(a.pos),pb=parsePos(b.pos);
           if(pa&&pb)return pa-pb;
           return (a.rank??999)-(b.rank??999);
@@ -2447,12 +2448,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 {isLive
                   ?<>
                     <span style={{width:50,textAlign:'center',fontSize:showTeeTime?9:11,color:showTeeTime?T.primary:'#888',fontWeight:showTeeTime?600:400,lineHeight:1.15}}>
-                      {isCut
-                        ? '—'
-                        : showTeeTime
-                          ? <>{p.teeTime}{p.startHole && p.startHole !== 1 ? <><br/><span style={{fontSize:8,opacity:.75}}>·H{p.startHole}</span></> : null}</>
-                          : (p.thru ? <>{p.thru}{(p.pairingStartHole||p.startHole)===10 && p.thru !== 'F' && p.thru !== '18' ? <span style={{color:T.primary,fontWeight:700}}>*</span> : null}</> : '-')
-                      }
+                      {(() => {
+                        if (isCut) return '—';
+                        if (showTeeTime) return <>{p.teeTime}{p.startHole && p.startHole !== 1 ? <><br/><span style={{fontSize:8,opacity:.75}}>·H{p.startHole}</span></> : null}</>;
+                        if (!p.thru) return '-';
+                        // Normalize "18" to "F" (round finished)
+                        const thruDisplay = (String(p.thru) === '18' || p.thru === 18) ? 'F' : p.thru;
+                        const showAsterisk = (p.pairingStartHole||p.startHole)===10 && thruDisplay !== 'F';
+                        return <>{thruDisplay}{showAsterisk ? <span style={{color:T.primary,fontWeight:700}}>*</span> : null}</>;
+                      })()}
                     </span>
                     <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{p.score}</span>
                     <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmt(p.earnings)}</span>
