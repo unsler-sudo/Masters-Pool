@@ -1,5 +1,5 @@
 'use client';
-// build: r2-sort-by-position-v19-20260522-0430
+// build: cut-sort-fix-v21-20260523-1900
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1597,6 +1597,19 @@ export default function App(){
         const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
+        // If neither player has an upcoming tee time, sort by position (leader on top)
+        const aHasTime = !!a.teeTime;
+        const bHasTime = !!b.teeTime;
+        if (!aHasTime && !bHasTime) {
+          const pa=parsePos(a.pos),pb=parsePos(b.pos);
+          if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
+          if(!pa)return 1;
+          if(!pb)return -1;
+          return pa-pb;
+        }
+        // One has tee time, one doesn't — put the one without (likely still in prev round or no R3 yet) at bottom
+        if (!aHasTime) return 1;
+        if (!bHasTime) return -1;
         // Between rounds: if R2 is upcoming, sort by leaderboard position (R1 results visible)
         // For R3/R4 (after cut), sort by tee time DESC so players closest to teeing off are at top
         const upcomingRound = a.teeRoundNum || b.teeRoundNum || 0;
