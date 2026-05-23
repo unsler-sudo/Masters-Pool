@@ -1,6 +1,5 @@
-
 'use client';
-// build: cut-shows-score-v28-20260523-2145
+// build: cut-sort-by-score-v29-20260523-2200
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -572,6 +571,14 @@ const PAYOUT_OLD_REMOVED = null; // (old single PAYOUT table replaced by per-maj
 
 const fmt=n=>'$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
 const parsePos=s=>{if(!s||s==='-'||/CUT|WD|DQ|MC/i.test(s))return null;return parseInt(String(s).replace('T',''),10);};
+// Parse score like "-5", "+3", "E" to a number for sorting (lower = better)
+const parseScoreToNum = s => {
+  if (s == null || s === '' || s === '-') return 9999;
+  const str = String(s).trim();
+  if (str === 'E' || str === 'e') return 0;
+  const n = parseInt(str, 10);
+  return isNaN(n) ? 9999 : n;
+};
 const flip=n=>n.includes(', ')?n.split(', ').reverse().join(' '):n;
 const fmtScore=n=>{if(n==null)return null;if(n===0)return'E';return n>0?`+${n}`:String(n);};
 const toLastFirst=name=>{const p=name.trim().split(' ');if(p.length<2)return name;const last=p.pop();return`${last}, ${p.join(' ')}`;};
@@ -1621,6 +1628,13 @@ export default function App(){
         const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
+        // Both cut: sort by score ascending (best score among cuts on top)
+        if (aCut && bCut) {
+          const sa = parseScoreToNum(a.score);
+          const sb = parseScoreToNum(b.score);
+          if (sa !== sb) return sa - sb;
+          return a.name.localeCompare(b.name);
+        }
         // Primary: position
         const pa=parsePos(a.pos),pb=parsePos(b.pos);
         if(pa&&pb){
