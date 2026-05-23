@@ -1716,7 +1716,7 @@ export default function App(){
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
         if (aCut && bCut) {
-          // FINGERPRINT_V54_CUTROUNDS - sort cut/WD by rounds completed, then score
+          const _fp = "FINGERPRINT_V54_CUTROUNDS";  // survives minification
           const aRounds = (a.r1!=null?1:0) + (a.r2!=null?1:0) + (a.r3!=null?1:0) + (a.r4!=null?1:0);
           const bRounds = (b.r1!=null?1:0) + (b.r2!=null?1:0) + (b.r3!=null?1:0) + (b.r4!=null?1:0);
           if (aRounds !== bRounds) return bRounds - aRounds;
