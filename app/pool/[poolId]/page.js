@@ -1,5 +1,5 @@
 'use client';
-// build: sort-toggle-v30-20260523-2230
+// build: pairings-h10-divider-v32-20260523-2300
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2308,9 +2308,22 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             const teeRound = p.teeRoundNum || 1;
             const roundScore = teeRound===1?p.r1 : teeRound===2?p.r2 : teeRound===3?p.r3 : p.r4;
             const teeRoundAlreadyPlayed = roundScore != null;
+            // In Pairings mode, mark start of a new pairing group (tee time + start hole changes)
+            const prev = fieldVis[i-1];
+            const prevStartHole = prev?.startHole || 1;
+            const myStartHole = p.startHole || 1;
+            const isNewPairingGroup = fieldSort === 'pairings'
+              && i > 0
+              && !isCut
+              && !/CUT|WD|DQ|MC/i.test(prev?.pos||'')
+              && (prev?.teeTime !== p.teeTime || prevStartHole !== myStartHole);
+            const isCutTransition = fieldSort === 'pairings'
+              && i > 0
+              && isCut
+              && !/CUT|WD|DQ|MC/i.test(prev?.pos||'');
             const showTeeTime = p.teeTime && !isActivelyPlaying && !isCut && !teeRoundAlreadyPlayed;
             return(
-              <div key={p.name} onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',background:isCut&&isLive?'#fafafa':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&isLive?.6:1}}>
+              <div key={p.name} onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',borderTop:(isNewPairingGroup||isCutTransition)?`2px solid ${T.primary}`:'none',background:isCut&&isLive?'#fafafa':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&isLive?.6:1}}>
                 <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&isLive?'#999':T.primary,fontSize:12}}>{isLive?(isCut?'✂️':p.pos):(i+1)}</span>
                 <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
                   <div style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
