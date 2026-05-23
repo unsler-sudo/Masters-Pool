@@ -1,5 +1,5 @@
 'use client';
-// build: gate-on-merged-data-v61-20260525-0530
+// build: f-asterisk-back9-v62-20260525-0545
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2592,7 +2592,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         if (!p.thru) return '-';
                         // Normalize "18" to "F" (round finished)
                         const thruDisplay = (String(p.thru) === '18' || p.thru === 18) ? 'F' : p.thru;
-                        const showAsterisk = (p.pairingStartHole||p.startHole)===10 && thruDisplay !== 'F';
+                        const showAsterisk = (p.pairingStartHole||p.startHole)===10;
                         return <>{thruDisplay}{showAsterisk ? <span style={{color:T.primary,fontWeight:700}}>*</span> : null}</>;
                       })()}
                     </span>
