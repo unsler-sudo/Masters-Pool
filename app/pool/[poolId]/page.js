@@ -1,5 +1,5 @@
 'use client';
-// build: live-cut-sort-rounds-v54-20260525-0200
+// build: beyond-maxpos-min-payout-v55-20260525-0230
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -525,7 +525,12 @@ const PAYOUT_PGATOUR = {
   46:0.00315, 47:0.00295, 48:0.00279, 49:0.00265, 50:0.00257,
   51:0.00251, 52:0.00245, 53:0.00241, 54:0.00237, 55:0.00235,
   56:0.00233, 57:0.00231, 58:0.00229, 59:0.00227, 60:0.00225,
-  61:0.00223, 62:0.00221, 63:0.00219, 64:0.00217, 65:0.00215
+  61:0.00223, 62:0.00221, 63:0.00219, 64:0.00217, 65:0.00215,
+  // Tour adds extra purse for players beyond 65 — decreases by 0.002% per position
+  66:0.00213, 67:0.00211, 68:0.00209, 69:0.00207, 70:0.00205,
+  71:0.00203, 72:0.00201, 73:0.00199, 74:0.00197, 75:0.00195,
+  76:0.00193, 77:0.00191, 78:0.00189, 79:0.00187, 80:0.00185,
+  81:0.00183, 82:0.00181, 83:0.00179, 84:0.00177, 85:0.00175
 };
 
 const PAYOUT_BY_MAJOR = {
@@ -663,7 +668,22 @@ function formatTeeTimeForUser(date) {
 function calcEarnings(players, purse, major, tournamentComplete){
   const payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
   const maxPos = Math.max(...Object.keys(payoutTable).map(Number));
-  const g={};players.forEach(p=>{const pos=parsePos(p.pos);if(pos&&pos<=maxPos){if(!g[pos])g[pos]=[];g[pos].push(p.name);}});
+  // Build groups for positions within the table
+  const g={};
+  // Track players who made cut but finished beyond the payout table (still earn min payout)
+  const beyondMaxPos=[];
+  players.forEach(p=>{
+    const pos=parsePos(p.pos);
+    if(pos){
+      if(pos<=maxPos){
+        if(!g[pos])g[pos]=[];
+        g[pos].push(p.name);
+      } else {
+        // Made cut + finished tournament but ranked > maxPos: gets minimum cut-line payout
+        beyondMaxPos.push(p.name);
+      }
+    }
+  });
   const m={};
   Object.entries(g).forEach(([ps,pls])=>{
     const pos=+ps;
@@ -680,6 +700,12 @@ function calcEarnings(players, purse, major, tournamentComplete){
     const e=Math.round(t/pls.length*purse);
     pls.forEach(n=>{m[n]=e;});
   });
+  // Pay anyone beyond maxPos at the cut-line rate (last paid position)
+  // PGA Tour rule: every player who makes the cut gets at least the minimum payout
+  if (beyondMaxPos.length > 0) {
+    const minPayout = Math.round((payoutTable[maxPos]||0)*purse);
+    beyondMaxPos.forEach(n=>{m[n]=minPayout;});
+  }
   return m;
 }
 
