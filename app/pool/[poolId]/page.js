@@ -1,5 +1,5 @@
 'use client';
-// build: pairings-r3plus-only-v46-20260524-2315
+// build: pairings-back9-asc-v47-20260524-2330
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1743,12 +1743,21 @@ export default function App(){
             const ah = a.pairingStartHole || a.startHole || 1;
             const bh = b.pairingStartHole || b.startHole || 1;
             if (ah !== bh) return ah - bh;
+            // Within front-9: tee time DESC (latest/final pairings on top)
+            // Within back-9: tee time ASC (earliest first, since they go off first physically)
+            const ta = parseTeeTime(a.pairingTeeTime || a.teeTime);
+            const tb = parseTeeTime(b.pairingTeeTime || b.teeTime);
+            if (ta !== tb) {
+              return ah === 10 ? ta - tb : tb - ta;
+            }
+            const pa=parsePos(a.pos),pb=parsePos(b.pos);
+            if(pa&&pb)return pa-pb;
+            return (a.rank??999)-(b.rank??999);
           }
-          // Within same start hole group (or R1/R2), sort by tee time DESC
+          // R1/R2: standard tee time DESC then start hole, then position
           const ta = parseTeeTime(a.pairingTeeTime || a.teeTime);
           const tb = parseTeeTime(b.pairingTeeTime || b.teeTime);
           if (ta !== tb) return tb - ta;
-          // Fallback within same tee time: start hole, then position
           const ah = a.pairingStartHole || a.startHole || 1;
           const bh = b.pairingStartHole || b.startHole || 1;
           if (ah !== bh) return ah - bh;
