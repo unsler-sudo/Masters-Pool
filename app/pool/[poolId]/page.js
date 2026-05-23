@@ -1,5 +1,5 @@
 'use client';
-// build: pairings-persist-during-round-v33-20260523-2330
+// build: teetime-tz-venue-refetch-v35-20260524-1930
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -957,9 +957,24 @@ export default function App(){
         // Sort players by win odds (highest first = best players)
         const sorted = [...players].sort((a, b) => (b.win || 0) - (a.win || 0));
 
-        // Get venue coordinates from schedule data for timezone conversion
-        const venueLat = scheduleData?.pgatour?.venueLat;
-        const venueLng = scheduleData?.pgatour?.venueLng;
+        // Get venue coordinates by re-fetching the schedule (don't depend on state being populated)
+        let venueLat = scheduleData?.pgatour?.venueLat;
+        let venueLng = scheduleData?.pgatour?.venueLng;
+        if (venueLat == null || venueLng == null) {
+          try {
+            const year = new Date().getFullYear();
+            const schedRes = await fetch(`/api/scores?endpoint=schedule&season=${year}`);
+            if (schedRes.ok) {
+              const schedData = await schedRes.json();
+              const events = schedData.schedule || schedData.events || [];
+              const eventName = ptData.event_name || '';
+              const ev = events.find(e => (e.event_name||'').toLowerCase() === eventName.toLowerCase());
+              venueLat = ev?.latitude;
+              venueLng = ev?.longitude;
+            }
+          } catch {}
+        }
+        console.log('[pgatour] Using venue coords:', venueLat, venueLng);
 
         // Fetch tee times from field-updates endpoint
         const teeTimeMap = {};
@@ -1098,6 +1113,10 @@ export default function App(){
             const fieldPlayers = fd.field || fd.players || [];
             // Determine current tournament round (default to 1 if not specified)
             const currentRound = fd.current_round || 1;
+            // Get venue coords for this major
+            const venue = MAJOR_VENUE_COORDS[major];
+            const venueLat = venue?.lat;
+            const venueLng = venue?.lng;
             fieldPlayers.forEach(p=>{
               const pname = (p.player_name||'').toLowerCase().trim();
               if(!pname) return;
@@ -1108,15 +1127,9 @@ export default function App(){
                 .filter(t => t.round_num >= currentRound)
                 .sort((a,b) => a.round_num - b.round_num)[0];
               if(!nextRound?.teetime) return;
-              // Parse "2026-05-14 08:18" and format to "8:18 AM"
-              const tt = nextRound.teetime;
-              const timePart = tt.split(' ')[1] || ''; // "08:18"
-              const [hStr,mStr] = timePart.split(':');
-              const h = parseInt(hStr,10);
-              const m = mStr || '00';
-              const ampm = h >= 12 ? 'PM' : 'AM';
-              const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-              const teeTime = `${h12}:${m} ${ampm}`;
+              // Convert tournament-local time to user's local time
+              const userDate = convertTeeTimeToUserTZ(nextRound.teetime, venueLat, venueLng);
+              const teeTime = userDate ? formatTeeTimeForUser(userDate) : nextRound.teetime;
               const startHole = nextRound.start_hole;
               const roundNum = nextRound.round_num;
               const data = { teeTime, startHole, roundNum };
