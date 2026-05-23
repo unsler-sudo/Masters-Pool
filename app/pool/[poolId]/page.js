@@ -1,5 +1,5 @@
 'use client';
-// build: cut-sort-fix-v21-20260523-1900
+// build: split-tee-display-v22-20260523-1930
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1625,7 +1625,11 @@ export default function App(){
         const ta = parseTeeTime(a.teeTime);
         const tb = parseTeeTime(b.teeTime);
         if (ta !== tb) return tb - ta;
-        // Tiebreaker: by position (leader on top)
+        // Same tee time: split-tee day — sort by start_hole (front 9 first, back 9 second)
+        const ah = a.startHole || 1;
+        const bh = b.startHole || 1;
+        if (ah !== bh) return ah - bh;
+        // Same group: by leaderboard position (leader on top)
         const pa=parsePos(a.pos),pb=parsePos(b.pos);
         if(pa&&pb)return pa-pb;
         return (a.rank??999) - (b.rank??999);
@@ -2274,7 +2278,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <span style={{width:30,textAlign:'center'}}><span style={{fontSize:9,fontWeight:700,color:t?.color,background:t?.color+'18',padding:'1px 5px',borderRadius:3}}>{String.fromCharCode(64+p.tier)}</span></span>
                 {isLive
                   ?<>
-                    <span style={{width:50,textAlign:'center',fontSize:showTeeTime?9:11,color:showTeeTime?T.primary:'#888',fontWeight:showTeeTime?600:400}}>{showTeeTime?p.teeTime:(p.thru||'-')}</span>
+                    <span style={{width:50,textAlign:'center',fontSize:showTeeTime?9:11,color:showTeeTime?T.primary:'#888',fontWeight:showTeeTime?600:400,lineHeight:1.15}}>
+                      {showTeeTime
+                        ? <>{p.teeTime}{p.startHole && p.startHole !== 1 ? <><br/><span style={{fontSize:8,opacity:.75}}>·H{p.startHole}</span></> : null}</>
+                        : (p.thru || '-')
+                      }
+                    </span>
                     <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{isCut?'CUT':p.score}</span>
                     <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmt(p.earnings)}</span>
                   </>
