@@ -570,6 +570,15 @@ function holeStyle(toPar) {
 const PAYOUT_OLD_REMOVED = null; // (old single PAYOUT table replaced by per-major tables above)
 
 const fmt=n=>'$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0});
+// Major venue coordinates for tee time timezone conversion
+const MAJOR_VENUE_COORDS = {
+  players: { lat: 30.20, lng: -81.39 },  // TPC Sawgrass, Ponte Vedra FL (ET)
+  masters: { lat: 33.50, lng: -82.02 },  // Augusta National, GA (ET)
+  pga: { lat: 39.99, lng: -75.40 },      // Aronimink, PA (ET) — 2026 venue
+  usopen: { lat: 40.89, lng: -72.46 },   // Shinnecock Hills, NY (ET) — 2026 venue
+  open: { lat: 53.63, lng: -3.02 },      // Royal Birkdale, England (BST) — 2026 venue
+};
+
 const parsePos=s=>{if(!s||s==='-'||/CUT|WD|DQ|MC/i.test(s))return null;return parseInt(String(s).replace('T',''),10);};
 // Parse score like "-5", "+3", "E" to a number for sorting (lower = better)
 const parseScoreToNum = s => {
@@ -582,6 +591,74 @@ const parseScoreToNum = s => {
 const flip=n=>n.includes(', ')?n.split(', ').reverse().join(' '):n;
 const fmtScore=n=>{if(n==null)return null;if(n===0)return'E';return n>0?`+${n}`:String(n);};
 const toLastFirst=name=>{const p=name.trim().split(' ');if(p.length<2)return name;const last=p.pop();return`${last}, ${p.join(' ')}`;};
+
+// Determine the tournament's local IANA timezone based on lat/long.
+// PGA Tour events span US time zones plus a few international venues.
+// This is a lightweight approximation — for production accuracy, use tz-lookup npm package.
+function tournamentTimeZone(latitude, longitude) {
+  if (latitude == null || longitude == null) return 'America/New_York';
+  const lat = Number(latitude), lng = Number(longitude);
+  // International venues
+  if (lng > -30) {
+    // Europe / UK / Scotland / Spain / Italy
+    if (lat > 50 && lng < 2) return 'Europe/London';     // UK / Scotland / Ireland
+    if (lat > 40 && lng < 20) return 'Europe/Madrid';     // Spain / France / Germany
+    return 'Europe/London';
+  }
+  if (lng < -100 && lng > -130) {
+    // US Mountain or Pacific
+    if (lat < 37 && lng > -118) return 'America/Phoenix'; // Arizona (no DST)
+    return 'America/Los_Angeles';
+  }
+  if (lng <= -100 && lng >= -103) return 'America/Chicago'; // Texas central edge
+  if (lng < -100) return 'America/Denver';
+  if (lng < -87) return 'America/Chicago';  // Central
+  if (lng < -67) return 'America/New_York'; // Eastern
+  if (lat < 20) return 'America/Puerto_Rico'; // Caribbean
+  return 'America/New_York';
+}
+
+// Convert a DataGolf tee time string ("2026-05-22 12:43") to user's local time
+// venueLat/venueLng specify the tournament location for source-tz interpretation
+function convertTeeTimeToUserTZ(teetimeStr, venueLat, venueLng) {
+  if (!teetimeStr) return null;
+  const sourceTZ = tournamentTimeZone(venueLat, venueLng);
+  // Parse "YYYY-MM-DD HH:MM" as if in the source tz
+  // Trick: format the parsed time AS source-tz to get the UTC offset, then build a proper Date
+  const [datePart, timePart] = teetimeStr.split(' ');
+  if (!datePart || !timePart) return null;
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, min] = timePart.split(':').map(Number);
+  if (!year || !month || !day || hour == null) return null;
+  // Construct ISO string treating it as that timezone — using formatToParts to figure out offset
+  // Simpler: assume local time matches the venue's offset on that date
+  // Build a naive Date, then determine source-tz offset at that date and adjust.
+  const naiveUTC = new Date(Date.UTC(year, month - 1, day, hour, min || 0));
+  const localStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: sourceTZ,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(naiveUTC);
+  // localStr is what naive UTC time looks like AT source-tz. The offset is the diff.
+  const m = localStr.match(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const [, lm, ld, ly, lh, lmin] = m.map(Number);
+  const naiveAsLocal = Date.UTC(ly, lm - 1, ld, lh, lmin);
+  const offsetMs = naiveAsLocal - naiveUTC.getTime();
+  const actualUTC = naiveUTC.getTime() - offsetMs;
+  return new Date(actualUTC);
+}
+
+// Format a Date object as "h:MM AM/PM" in user's local time zone
+function formatTeeTimeForUser(date) {
+  if (!date) return null;
+  const h = date.getHours();
+  const m = String(date.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${m} ${ampm}`;
+}
+
 
 function calcEarnings(players, purse, major, tournamentComplete){
   const payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
@@ -831,6 +908,9 @@ export default function App(){
             const logoUrl = eventId
               ? `https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:R000.png/tournaments/logos/R${String(eventId).padStart(3,'0')}.png`
               : null;
+            // Venue coordinates for tee time timezone conversion
+            const venueLat = currentEvent?.latitude;
+            const venueLng = currentEvent?.longitude;
             setScheduleData(prev => ({
               ...prev,
               pgatour: {
@@ -838,6 +918,7 @@ export default function App(){
                 courseName,
                 ...(teeTime && { teeTime }),
                 ...(logoUrl && { logoUrl, logoNoBg: false, logoHeight: 80 }),
+                ...(venueLat != null && { venueLat, venueLng }),
               },
             }));
           }
@@ -876,6 +957,10 @@ export default function App(){
         // Sort players by win odds (highest first = best players)
         const sorted = [...players].sort((a, b) => (b.win || 0) - (a.win || 0));
 
+        // Get venue coordinates from schedule data for timezone conversion
+        const venueLat = scheduleData?.pgatour?.venueLat;
+        const venueLng = scheduleData?.pgatour?.venueLng;
+
         // Fetch tee times from field-updates endpoint
         const teeTimeMap = {};
         try {
@@ -892,14 +977,9 @@ export default function App(){
                 .filter(t => t.round_num >= currentRound)
                 .sort((a,b) => a.round_num - b.round_num)[0];
               if(!nextRound?.teetime) return;
-              const tt = nextRound.teetime;
-              const timePart = tt.split(' ')[1] || '';
-              const [hStr,mStr] = timePart.split(':');
-              const h = parseInt(hStr,10);
-              const m = mStr || '00';
-              const ampm = h >= 12 ? 'PM' : 'AM';
-              const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
-              const teeTime = `${h12}:${m} ${ampm}`;
+              // Convert tournament-local time to user's local time
+              const userDate = convertTeeTimeToUserTZ(nextRound.teetime, venueLat, venueLng);
+              const teeTime = userDate ? formatTeeTimeForUser(userDate) : nextRound.teetime;
               const data = { teeTime, startHole: nextRound.start_hole, roundNum: nextRound.round_num };
               teeTimeMap[pname] = data;
               // Also store name variants
