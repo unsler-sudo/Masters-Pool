@@ -1,5 +1,5 @@
 'use client';
-// build: cut-sort-by-score-v29-20260523-2200
+// build: sort-toggle-v30-20260523-2230
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -663,6 +663,7 @@ export default function App(){
   const [showClaimModal,setShowClaimModal]=useState(null);
   const [picks,setPicks]=useState({1:[],2:[],3:[]});
   const [search,setSearch]=useState('');
+  const [fieldSort,setFieldSort]=useState('leaderboard'); // 'leaderboard' or 'pairings'
   const [toast,setToast]=useState('');
   const [adminPw,setAdminPw]=useState('');
   const [adminOk,setAdminOk]=useState(false);
@@ -1622,20 +1623,31 @@ export default function App(){
         return pa-pb;
       })
     : [...field].sort((a,b)=>{
-        // Between rounds: sort by leaderboard position, then by tee time (latest first within ties),
-        // then by start hole (front 9 before back 9 within same time)
+        // Cut players always at bottom regardless of mode
         const aCut = /CUT|WD|DQ|MC/i.test(a.pos);
         const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
-        // Both cut: sort by score ascending (best score among cuts on top)
         if (aCut && bCut) {
           const sa = parseScoreToNum(a.score);
           const sb = parseScoreToNum(b.score);
           if (sa !== sb) return sa - sb;
           return a.name.localeCompare(b.name);
         }
-        // Primary: position
+        if (fieldSort === 'pairings') {
+          // Pairings mode: group players physically teeing off together
+          // Sort by tee time DESC, then by start hole, then by position
+          const ta = parseTeeTime(a.teeTime);
+          const tb = parseTeeTime(b.teeTime);
+          if (ta !== tb) return tb - ta;
+          const ah = a.startHole || 1;
+          const bh = b.startHole || 1;
+          if (ah !== bh) return ah - bh;
+          const pa=parsePos(a.pos),pb=parsePos(b.pos);
+          if(pa&&pb)return pa-pb;
+          return (a.rank??999)-(b.rank??999);
+        }
+        // Default: Leaderboard mode — sort by position, then tee time DESC within ties
         const pa=parsePos(a.pos),pb=parsePos(b.pos);
         if(pa&&pb){
           if(pa!==pb) return pa-pb;
@@ -1646,15 +1658,12 @@ export default function App(){
         } else {
           return (a.rank??999)-(b.rank??999);
         }
-        // Tied position — sort by tee time DESC (latest first, since final pairings lead)
         const ta = parseTeeTime(a.teeTime);
         const tb = parseTeeTime(b.teeTime);
         if (ta !== tb) return tb - ta;
-        // Same tee time — front 9 (start hole 1) before back 9 (start hole 10)
         const ah = a.startHole || 1;
         const bh = b.startHole || 1;
         if (ah !== bh) return ah - bh;
-        // Final tiebreaker: alphabetical
         return a.name.localeCompare(b.name);
       });
   const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>a.name.localeCompare(b.name));
@@ -2258,6 +2267,20 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
 
         {tab==='Field'&&<>
           <input style={{...inp,marginBottom:6}} placeholder="Search players..." value={search} onChange={e=>setSearch(e.target.value)}/>
+          {isLive && !aRoundIsLive && !tournamentComplete && field.some(p=>p.teeTime) && <div style={{display:'flex',gap:6,marginBottom:8,justifyContent:'center'}}>
+            <button onClick={()=>setFieldSort('leaderboard')} style={{
+              padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
+              border:`1px solid ${fieldSort==='leaderboard'?T.primary:'#d0d4d0'}`,
+              background:fieldSort==='leaderboard'?T.primary:'#fff',
+              color:fieldSort==='leaderboard'?'#fff':'#5a6555',
+            }}>Leaderboard</button>
+            <button onClick={()=>setFieldSort('pairings')} style={{
+              padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
+              border:`1px solid ${fieldSort==='pairings'?T.primary:'#d0d4d0'}`,
+              background:fieldSort==='pairings'?T.primary:'#fff',
+              color:fieldSort==='pairings'?'#fff':'#5a6555',
+            }}>Pairings</button>
+          </div>}
           {!pastTeeTime&&<div style={{marginBottom:8,textAlign:'center'}}>
             {fieldSource&&<div style={{fontSize:10,color:T.primary,background:`${T.primary}0a`,padding:'4px 10px',borderRadius:20,display:'inline-block',marginBottom:4}}>{fieldSource}</div>}
             {fieldLastUpdated&&<div style={{fontSize:10,color:'#8a9580',marginTop:2}}>Field last updated: {fieldLastUpdated} · auto-refreshes every 60s</div>}
