@@ -1,5 +1,5 @@
 'use client';
-// build: pairings-all-front-then-all-back-v45-20260524-2300
+// build: pairings-r3plus-only-v46-20260524-2315
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1735,15 +1735,23 @@ export default function App(){
           return a.name.localeCompare(b.name);
         }
         if (fieldSort === 'pairings') {
-          // Pairings mode: ALL front-9 starters first (in tee time order),
-          // then ALL back-9 starters at the bottom (in tee time order)
-          const ah = a.pairingStartHole || a.startHole || 1;
-          const bh = b.pairingStartHole || b.startHole || 1;
-          if (ah !== bh) return ah - bh; // front 9 (1) before back 9 (10)
-          // Within same start hole group, sort by tee time DESC
+          // Pairings mode: physical pairing grouping
+          // For R3+: ALL front-9 starters first (in tee time order), then ALL back-9 at bottom
+          // For R1/R2: standard tee time order (everyone usually starts hole 1)
+          const round = a.pairingRoundNum || a.teeRoundNum || b.pairingRoundNum || b.teeRoundNum || 1;
+          if (round >= 3) {
+            const ah = a.pairingStartHole || a.startHole || 1;
+            const bh = b.pairingStartHole || b.startHole || 1;
+            if (ah !== bh) return ah - bh;
+          }
+          // Within same start hole group (or R1/R2), sort by tee time DESC
           const ta = parseTeeTime(a.pairingTeeTime || a.teeTime);
           const tb = parseTeeTime(b.pairingTeeTime || b.teeTime);
           if (ta !== tb) return tb - ta;
+          // Fallback within same tee time: start hole, then position
+          const ah = a.pairingStartHole || a.startHole || 1;
+          const bh = b.pairingStartHole || b.startHole || 1;
+          if (ah !== bh) return ah - bh;
           const pa=parsePos(a.pos),pb=parsePos(b.pos);
           if(pa&&pb)return pa-pb;
           return (a.rank??999)-(b.rank??999);
