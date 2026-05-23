@@ -1,5 +1,5 @@
 'use client';
-// build: beyond-maxpos-min-payout-v55-20260525-0230
+// build: field-loading-state-v57-20260525-0330
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1699,7 +1699,12 @@ export default function App(){
   };
 
   const teamE=e=>e.picks.reduce((s,n)=>s+(field.find(f=>f.name===n)?.earnings||0),0);
-  const ranked=[...entries].sort((a,b)=>teamE(b)-teamE(a));
+  // Only re-rank entries once field has earnings data, otherwise keep stable order
+  // This eliminates the loading flicker where rankings briefly shift as data streams in
+  const fieldHasEarnings = field.some(f => f.earnings > 0);
+  const ranked = fieldHasEarnings
+    ? [...entries].sort((a,b)=>teamE(b)-teamE(a))
+    : entries;
   const owners=n=>entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
   // Parse "8:18 AM" → 818, "1:43 PM" → 1343 for sorting
   const parseTeeTime = (tt) => {
@@ -2459,7 +2464,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 :<><span style={{width:40,textAlign:'center'}}>#</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>DG Rank</span></>
               }
             </div>
-            {fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);
+            {field.length === 0 || (isLive && !rawScoresRef.current)
+              ? <div style={{padding:'40px 20px',textAlign:'center',color:'#8a9580',fontSize:13}}>
+                  <div style={{display:'inline-block',width:24,height:24,border:`3px solid ${T.primary}30`,borderTop:`3px solid ${T.primary}`,borderRadius:'50%',animation:'spin 0.8s linear infinite',marginBottom:10}}/>
+                  <div>Loading field...</div>
+                  <style>{`@keyframes spin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }`}</style>
+                </div>
+              : fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);
             const thruNum = parseInt(p.thru, 10);
             const isActivelyPlaying = thruNum > 0 && thruNum < 18;
             // Has player completed the round their tee time is scheduled for?
