@@ -1,5 +1,5 @@
 'use client';
-// build: cut-sort-rounds-v52-20260525-0100
+// build: live-cut-sort-rounds-v54-20260525-0200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1715,6 +1715,16 @@ export default function App(){
         const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
+        if (aCut && bCut) {
+          // FINGERPRINT_V54_CUTROUNDS - sort cut/WD by rounds completed, then score
+          const aRounds = (a.r1!=null?1:0) + (a.r2!=null?1:0) + (a.r3!=null?1:0) + (a.r4!=null?1:0);
+          const bRounds = (b.r1!=null?1:0) + (b.r2!=null?1:0) + (b.r3!=null?1:0) + (b.r4!=null?1:0);
+          if (aRounds !== bRounds) return bRounds - aRounds;
+          const sa = parseScoreToNum(a.score);
+          const sb = parseScoreToNum(b.score);
+          if (sa !== sb) return sa - sb;
+          return a.name.localeCompare(b.name);
+        }
         // Live mode OR tournament complete: sort by position (leaderboard order)
         const pa=parsePos(a.pos),pb=parsePos(b.pos);
         if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
