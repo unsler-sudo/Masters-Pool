@@ -1,5 +1,5 @@
 'use client';
-// build: split-tee-display-v22-20260523-1930
+// build: cut-detect-by-teetime-v25-20260523-2045
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1232,6 +1232,28 @@ export default function App(){
       }
       return f;
     });
+
+    // ── MISSED CUT DETECTION ─────────────────────────────────────────────
+    // After R2, anyone without an upcoming tee time is cut.
+    // GUARD: only flip CUT status if R3 tee times have actually been published.
+    // We confirm publication by checking that a meaningful number of players have
+    // upcoming tee times. If DataGolf is lagging and no one has R3 tees yet,
+    // we leave everyone in their R2 position rather than marking the whole field CUT.
+    const playersWithFutureTee = updated.filter(p => !!p.teeTime).length;
+    const r3TeeTimesPublished = playersWithFutureTee >= 50;
+    if (r3TeeTimesPublished) {
+      updated.forEach(p => {
+        const r1Done = p.r1 != null;
+        const r2Done = p.r2 != null;
+        const r3NotStarted = p.r3 == null;
+        const noUpcomingTee = !p.teeTime;
+        const notAlreadyMarked = !/CUT|WD|DQ|MC/i.test(p.pos||'');
+        if (r1Done && r2Done && r3NotStarted && noUpcomingTee && notAlreadyMarked) {
+          p.pos = 'CUT';
+        }
+      });
+    }
+
     // Tournament is complete when every non-cut player has an r4 score
     const isComplete = updated.length > 0 && updated.every(p => {
       const isCut = /CUT|WD|DQ|MC/i.test(p.pos||'');
@@ -1592,47 +1614,17 @@ export default function App(){
         return pa-pb;
       })
     : [...field].sort((a,b)=>{
-        // Cut players always at bottom
+        // Between rounds: always sort by leaderboard position (cut players at bottom)
+        // Tee time still shown in the column but doesn't drive the sort
         const aCut = /CUT|WD|DQ|MC/i.test(a.pos);
         const bCut = /CUT|WD|DQ|MC/i.test(b.pos);
         if (aCut && !bCut) return 1;
         if (bCut && !aCut) return -1;
-        // If neither player has an upcoming tee time, sort by position (leader on top)
-        const aHasTime = !!a.teeTime;
-        const bHasTime = !!b.teeTime;
-        if (!aHasTime && !bHasTime) {
-          const pa=parsePos(a.pos),pb=parsePos(b.pos);
-          if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
-          if(!pa)return 1;
-          if(!pb)return -1;
-          return pa-pb;
-        }
-        // One has tee time, one doesn't — put the one without (likely still in prev round or no R3 yet) at bottom
-        if (!aHasTime) return 1;
-        if (!bHasTime) return -1;
-        // Between rounds: if R2 is upcoming, sort by leaderboard position (R1 results visible)
-        // For R3/R4 (after cut), sort by tee time DESC so players closest to teeing off are at top
-        const upcomingRound = a.teeRoundNum || b.teeRoundNum || 0;
-        if (upcomingRound <= 2) {
-          // R1 just finished, R2 upcoming — sort by current position (leader on top)
-          const pa=parsePos(a.pos),pb=parsePos(b.pos);
-          if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
-          if(!pa)return 1;
-          if(!pb)return -1;
-          return pa-pb;
-        }
-        // R3 or R4 upcoming: sort by tee time DESCENDING (latest at top, earliest at bottom)
-        const ta = parseTeeTime(a.teeTime);
-        const tb = parseTeeTime(b.teeTime);
-        if (ta !== tb) return tb - ta;
-        // Same tee time: split-tee day — sort by start_hole (front 9 first, back 9 second)
-        const ah = a.startHole || 1;
-        const bh = b.startHole || 1;
-        if (ah !== bh) return ah - bh;
-        // Same group: by leaderboard position (leader on top)
         const pa=parsePos(a.pos),pb=parsePos(b.pos);
-        if(pa&&pb)return pa-pb;
-        return (a.rank??999) - (b.rank??999);
+        if(!pa&&!pb)return (a.rank??999)-(b.rank??999);
+        if(!pa)return 1;
+        if(!pb)return -1;
+        return pa-pb;
       });
   const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>a.name.localeCompare(b.name));
   const filteredTier=tierField.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
