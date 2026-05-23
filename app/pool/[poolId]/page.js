@@ -1,5 +1,5 @@
 'use client';
-// build: field-loading-state-v57-20260525-0330
+// build: scorecard-sg-stats-v58-20260525-0400
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -776,6 +776,8 @@ export default function App(){
   const [paymentsHidden,setPaymentsHidden]=useState(false);
   const [lastUp,setLastUp]=useState(null);
   const rawScoresRef=useRef(null);
+  const liveStatsRef=useRef(null); // Cache live-stats map by player_name
+  const [liveStatsLoaded,setLiveStatsLoaded]=useState(false);
   const [openCard,setOpenCard]=useState(null);
   const [activeTier,setActiveTier]=useState(1);
   const [submitting,setSubmitting]=useState(false);
@@ -1051,6 +1053,7 @@ export default function App(){
           return {
             name: displayName,
             country: p.country || 'USA',
+            dgId: p.dg_id || null,
             odds,
             tier,
             rank: i,
@@ -1223,7 +1226,7 @@ export default function App(){
         const rank = (useOdds && oddsRank[key] !== undefined) ? oddsRank[key] : baseRank;
         const teeInfo = teeTimeMap[key] || null;
         return {
-          name:p.name, country:p.country||'USA',
+          name:p.name, country:p.country||'USA', dgId: p.dg_id || p.dgId || null,
           odds, tier:rank<cuts[0]?1:rank<cuts[1]?2:3,
           rank, dgRank:p.dgRank, win,
           confirmed:p.confirmed,
@@ -1465,6 +1468,32 @@ export default function App(){
   };
 
   const closeScorecard=()=>{setSelectedPlayer(null);setHoleData({round:null,holes:[],loading:false,error:null});};
+
+  // Fetch DataGolf live tournament stats (SG breakdown) — cached for the session
+  const fetchLiveStats=async()=>{
+    if(liveStatsRef.current) return liveStatsRef.current;
+    try{
+      const r=await fetch('/api/scores?endpoint=live-stats');
+      if(!r.ok)return null;
+      const data=await r.json();
+      const stats=data.live_stats||data.players||data.stats||[];
+      const map={};
+      stats.forEach(s=>{
+        const name=(s.player_name||'').toLowerCase().trim();
+        if(name)map[name]=s;
+      });
+      liveStatsRef.current=map;
+      setLiveStatsLoaded(true);
+      return map;
+    }catch(e){return null;}
+  };
+
+  // Fetch live stats when scorecard opens
+  useEffect(()=>{
+    if(selectedPlayer && !liveStatsRef.current){
+      fetchLiveStats();
+    }
+  },[selectedPlayer]);
 
   useEffect(()=>{
     fetchSchedule();
@@ -2065,6 +2094,34 @@ export default function App(){
                     <div style={{fontSize:12,color:'#8a9580'}}>Pos <b style={{color:'#333'}}>{p.pos}</b></div>
                   </div>
                 </div>
+                {(() => {
+                  // liveStatsLoaded triggers re-render when stats arrive
+                  if (!liveStatsLoaded) return null;
+                  const stats = liveStatsRef.current?.[(p.name||'').toLowerCase().trim()];
+                  if (!stats || stats.sg_total == null) return null;
+                  const fmtSG = (v) => v == null ? '—' : (v > 0 ? `+${v.toFixed(2)}` : v.toFixed(2));
+                  const sgColor = (v) => v == null ? '#888' : v > 0 ? '#1a6b1a' : v < 0 ? '#b02020' : '#555';
+                  const cats = [
+                    {label:'Total',val:stats.sg_total},
+                    {label:'OTT',val:stats.sg_ott},
+                    {label:'APP',val:stats.sg_app},
+                    {label:'ARG',val:stats.sg_arg},
+                    {label:'PUTT',val:stats.sg_putt},
+                  ];
+                  return (
+                    <div style={{marginBottom:14,padding:'10px 12px',background:`${T.primary}08`,borderRadius:9,border:`1px solid ${T.primary}20`}}>
+                      <div style={{fontSize:10,fontWeight:700,color:T.primary,letterSpacing:1,marginBottom:6}}>STROKES GAINED · per round</div>
+                      <div style={{display:'flex',justifyContent:'space-between',gap:4}}>
+                        {cats.map(c => (
+                          <div key={c.label} style={{flex:1,textAlign:'center'}}>
+                            <div style={{fontSize:9,color:'#8a9580',fontWeight:600,letterSpacing:.5}}>{c.label}</div>
+                            <div style={{fontSize:14,fontWeight:800,color:sgColor(c.val),marginTop:2}}>{fmtSG(c.val)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div style={{marginBottom:4}}>
                   <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:1,marginBottom:8}}>ROUNDS — tap any started round for hole scores</div>
                   <div style={{display:'flex',gap:8}}>
