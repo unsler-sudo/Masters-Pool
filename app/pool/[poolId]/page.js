@@ -1,5 +1,5 @@
 'use client';
-// build: pairing-headers-v39-20260524-2100
+// build: back-nine-asterisk-v40-20260524-2115
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2451,7 +2451,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         ? '—'
                         : showTeeTime
                           ? <>{p.teeTime}{p.startHole && p.startHole !== 1 ? <><br/><span style={{fontSize:8,opacity:.75}}>·H{p.startHole}</span></> : null}</>
-                          : (p.thru || '-')
+                          : (p.thru ? <>{p.thru}{(p.pairingStartHole||p.startHole)===10 && p.thru !== 'F' && p.thru !== '18' ? <span style={{color:T.primary,fontWeight:700}}>*</span> : null}</> : '-')
                       }
                     </span>
                     <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{p.score}</span>
