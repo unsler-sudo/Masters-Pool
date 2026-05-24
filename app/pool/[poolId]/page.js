@@ -1,5 +1,5 @@
 'use client';
-// build: sticky-header-and-favorites-v63-20260525-0600
+// build: favorites-filter-button-v64-20260525-0615
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -781,6 +781,7 @@ export default function App(){
   const [openCard,setOpenCard]=useState(null);
   // Player favorites — per-device using localStorage, scoped per pool
   const [favorites,setFavorites]=useState(new Set());
+  const [showOnlyFavorites,setShowOnlyFavorites]=useState(false);
   // Load favorites from localStorage on mount
   useEffect(()=>{
     if(typeof window === 'undefined') return;
@@ -1883,7 +1884,11 @@ export default function App(){
       });
   const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>a.name.localeCompare(b.name));
   const filteredTier=tierField.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
-  const fieldVis=sortF.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
+  const fieldVis=sortF.filter(p=>{
+    if(!p.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if(showOnlyFavorites && !favorites.has(p.name)) return false;
+    return true;
+  });
 
   const adminAction=async(action,extra={})=>{
     try{
@@ -2522,20 +2527,28 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
 
         {tab==='Field'&&<>
           <input style={{...inp,marginBottom:6}} placeholder="Search players..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          {isLive && !tournamentComplete && field.some(p=>p.pairingTeeTime||p.teeTime) && <div style={{display:'flex',gap:6,marginBottom:8,justifyContent:'center'}}>
-            <button onClick={()=>setFieldSort('leaderboard')} style={{
+          <div style={{display:'flex',gap:6,marginBottom:8,justifyContent:'center',flexWrap:'wrap'}}>
+            {isLive && !tournamentComplete && field.some(p=>p.pairingTeeTime||p.teeTime) && <>
+              <button onClick={()=>setFieldSort('leaderboard')} style={{
+                padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
+                border:`1px solid ${fieldSort==='leaderboard'?T.primary:'#d0d4d0'}`,
+                background:fieldSort==='leaderboard'?T.primary:'#fff',
+                color:fieldSort==='leaderboard'?'#fff':'#5a6555',
+              }}>Leaderboard</button>
+              <button onClick={()=>setFieldSort('pairings')} style={{
+                padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
+                border:`1px solid ${fieldSort==='pairings'?T.primary:'#d0d4d0'}`,
+                background:fieldSort==='pairings'?T.primary:'#fff',
+                color:fieldSort==='pairings'?'#fff':'#5a6555',
+              }}>Pairings</button>
+            </>}
+            {favorites.size > 0 && <button onClick={()=>setShowOnlyFavorites(v=>!v)} style={{
               padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
-              border:`1px solid ${fieldSort==='leaderboard'?T.primary:'#d0d4d0'}`,
-              background:fieldSort==='leaderboard'?T.primary:'#fff',
-              color:fieldSort==='leaderboard'?'#fff':'#5a6555',
-            }}>Leaderboard</button>
-            <button onClick={()=>setFieldSort('pairings')} style={{
-              padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
-              border:`1px solid ${fieldSort==='pairings'?T.primary:'#d0d4d0'}`,
-              background:fieldSort==='pairings'?T.primary:'#fff',
-              color:fieldSort==='pairings'?'#fff':'#5a6555',
-            }}>Pairings</button>
-          </div>}
+              border:`1px solid ${showOnlyFavorites?'#d4a017':'#d0d4d0'}`,
+              background:showOnlyFavorites?'#d4a017':'#fff',
+              color:showOnlyFavorites?'#fff':'#5a6555',
+            }}>⭐ Favorites ({favorites.size})</button>}
+          </div>
           {!pastTeeTime&&<div style={{marginBottom:8,textAlign:'center'}}>
             {fieldSource&&<div style={{fontSize:10,color:T.primary,background:`${T.primary}0a`,padding:'4px 10px',borderRadius:20,display:'inline-block',marginBottom:4}}>{fieldSource}</div>}
             {fieldLastUpdated&&<div style={{fontSize:10,color:'#8a9580',marginTop:2}}>Field last updated: {fieldLastUpdated} · auto-refreshes every 60s</div>}
