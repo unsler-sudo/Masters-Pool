@@ -1,5 +1,5 @@
 'use client';
-// build: schedule-loading-gate-v65-20260525-0630
+// build: schedule-gate-majors-too-v66-20260525-0700
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -833,9 +833,14 @@ export default function App(){
     }
   }
   const T = { ...baseTheme, ...eventOverrides, ...scheduleOverrides };
-  // Detect if schedule data hasn't loaded yet for pgatour (no teeTime means we don't know event timing)
-  // Without this gate, UI defaults to "tournament hasn't started" mode and could allow entries mid-tournament
-  const scheduleNotReady = activeMajor === 'pgatour' && !T.teeTime;
+  // Detect if schedule data hasn't loaded yet — without this gate the UI can default to wrong state:
+  // - pgatour: no teeTime default → "not started" mode → could allow late entries
+  // - majors in 2027+: hardcoded teeTime is 2026 → "tournament is over" → blocks legitimate entries
+  // The check: schedule hasn't loaded if scheduleOverrides is empty (no eventName) AND we're past last year's date
+  const hardcodedDate = new Date(baseTheme.teeTime || 0);
+  const hardcodedTooOld = baseTheme.teeTime && (Date.now() - hardcodedDate.getTime() > 60 * 24 * 60 * 60 * 1000); // 60 days past
+  const scheduleNotReady = (activeMajor === 'pgatour' && !T.teeTime)
+    || (activeMajor !== 'pgatour' && hardcodedTooOld && !scheduleOverrides.eventName);
   const TEE_TIME = new Date(T.teeTime).getTime();
   const TOURNAMENT_END = TEE_TIME + 6 * 24 * 60 * 60 * 1000; // 6 days after tee-off
   const effectivePurse = (dynamicPurses && dynamicPurses[activeMajor]) || T.purse;
