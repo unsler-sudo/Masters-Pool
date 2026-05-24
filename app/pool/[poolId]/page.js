@@ -1,5 +1,5 @@
 'use client';
-// build: live-round-score-in-card-v67-20260525-0730
+// build: schedule-retry-button-v69-20260525-0800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -562,6 +562,23 @@ const FLAG_MAP = {
 };
 const Flag = ({c}) => FLAG_MAP[c] ? <span>{FLAG_MAP[c]}</span> : null;
 
+// Schedule retry button — shows after 5 seconds of loading so user isn't stuck
+function ScheduleRetry({onRetry, primary}) {
+  const [showRetry, setShowRetry] = useState(false);
+  useEffect(()=>{
+    const t = setTimeout(()=>setShowRetry(true), 5000);
+    return ()=>clearTimeout(t);
+  },[]);
+  if(!showRetry) return null;
+  return (
+    <div style={{marginTop:24,textAlign:'center'}}>
+      <p style={{fontSize:12,color:'#888',marginBottom:8}}>Taking longer than expected.</p>
+      <button onClick={onRetry} style={{padding:'8px 16px',fontSize:13,fontWeight:600,background:primary,color:'#fff',border:'none',borderRadius:6,cursor:'pointer'}}>Try Again</button>
+    </div>
+  );
+}
+
+
 function holeStyle(toPar) {
   if (toPar == null) return { bg:'#f0f0f0', text:'#ccc',  ring:'#ddd' };
   if (toPar <= -2)   return { bg:'#1565c0', text:'#fff',  ring:'#0d47a1', label:'🦅' };
@@ -836,7 +853,6 @@ export default function App(){
   // Detect if schedule data hasn't loaded yet — without this gate the UI can default to wrong state:
   // - pgatour: no teeTime default → "not started" mode → could allow late entries
   // - majors in 2027+: hardcoded teeTime is 2026 → "tournament is over" → blocks legitimate entries
-  // The check: schedule hasn't loaded if scheduleOverrides is empty (no eventName) AND we're past last year's date
   const hardcodedDate = new Date(baseTheme.teeTime || 0);
   const hardcodedTooOld = baseTheme.teeTime && (Date.now() - hardcodedDate.getTime() > 60 * 24 * 60 * 60 * 1000); // 60 days past
   const scheduleNotReady = (activeMajor === 'pgatour' && !T.teeTime)
@@ -1949,10 +1965,11 @@ export default function App(){
   // Show loading state if PGA Tour Mode schedule data hasn't loaded yet
   // Without this, the UI would default to "tournament hasn't started" mode and could allow late entries
   if(scheduleNotReady)return(
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:T.bodyBg,fontFamily:'sans-serif'}}>
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:T.bodyBg,fontFamily:'sans-serif',padding:20}}>
       <style>{`@keyframes sp{to{transform:rotate(360deg)}}`}</style>
       <div style={{width:28,height:28,border:`3px solid ${T.primary}20`,borderTopColor:T.primary,borderRadius:'50%',animation:'sp .7s linear infinite',marginBottom:12}}/>
-      <p style={{color:T.primary,fontSize:15}}>Loading tournament info...</p>
+      <p style={{color:T.primary,fontSize:15,marginBottom:6}}>Loading tournament info...</p>
+      <ScheduleRetry onRetry={()=>{fetchSchedule();}} primary={T.primary}/>
     </div>
   );
 
