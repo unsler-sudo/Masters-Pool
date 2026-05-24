@@ -1,5 +1,5 @@
 'use client';
-// build: schedule-gate-majors-too-v66-20260525-0700
+// build: live-round-score-in-card-v67-20260525-0730
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2205,7 +2205,10 @@ export default function App(){
                       return(<button key={r.label} type="button" onClick={()=>clickable&&fetchHoleScores(p.name,r.num)} disabled={!clickable||holeData.loading}
                         style={{flex:1,textAlign:'center',background:active?T.primary:done?'#f5f5f5':clickable?'#fafafa':'#fafafa',borderRadius:12,padding:'10px 4px',border:`2px solid ${active?T.primary:done?col+'44':clickable?'#ccc':'#eee'}`,cursor:clickable?'pointer':'default',transition:'all .15s'}}>
                         <div style={{fontSize:10,color:active?'#fff99a':'#888',fontWeight:600,marginBottom:4}}>{r.label}</div>
-                        {done?<div style={{fontSize:22,fontWeight:800,color:active?'#fff':col}}>{r.raw}</div>:<div style={{fontSize:20,fontWeight:800,color:clickable?'#666':'#ddd'}}>{clickable?'•••':'-'}</div>}
+                        {done?<div style={{fontSize:22,fontWeight:800,color:active?'#fff':col}}>{r.raw}</div>:isInProgress?(() => {
+                          const liveCol = p.today && p.today.startsWith('-') ? '#1a6b1a' : p.today === 'E' ? '#555' : p.today ? '#b02020' : '#666';
+                          return <div style={{fontSize:22,fontWeight:800,color:active?'#fff':liveCol}}>{p.today||'E'}</div>;
+                        })():<div style={{fontSize:20,fontWeight:800,color:clickable?'#666':'#ddd'}}>{clickable?'•••':'-'}</div>}
                         {(done||clickable)&&<div style={{fontSize:9,color:active?'#ffffff99':'#aaa',marginTop:2}}>{active?'▲ hide':isInProgress?'live':'tap'}</div>}
                       </button>);
                     })}
