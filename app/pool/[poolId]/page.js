@@ -1,5 +1,5 @@
 'use client';
-// build: favorites-filter-button-v64-20260525-0615
+// build: schedule-loading-gate-v65-20260525-0630
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -833,6 +833,9 @@ export default function App(){
     }
   }
   const T = { ...baseTheme, ...eventOverrides, ...scheduleOverrides };
+  // Detect if schedule data hasn't loaded yet for pgatour (no teeTime means we don't know event timing)
+  // Without this gate, UI defaults to "tournament hasn't started" mode and could allow entries mid-tournament
+  const scheduleNotReady = activeMajor === 'pgatour' && !T.teeTime;
   const TEE_TIME = new Date(T.teeTime).getTime();
   const TOURNAMENT_END = TEE_TIME + 6 * 24 * 60 * 60 * 1000; // 6 days after tee-off
   const effectivePurse = (dynamicPurses && dynamicPurses[activeMajor]) || T.purse;
@@ -1935,6 +1938,16 @@ export default function App(){
       <style>{`@keyframes sp{to{transform:rotate(360deg)}}`}</style>
       <div style={{width:28,height:28,border:`3px solid ${T.primary}20`,borderTopColor:T.primary,borderRadius:'50%',animation:'sp .7s linear infinite',marginBottom:12}}/>
       <p style={{color:T.primary,fontSize:15}}>Loading pool...</p>
+    </div>
+  );
+
+  // Show loading state if PGA Tour Mode schedule data hasn't loaded yet
+  // Without this, the UI would default to "tournament hasn't started" mode and could allow late entries
+  if(scheduleNotReady)return(
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:T.bodyBg,fontFamily:'sans-serif'}}>
+      <style>{`@keyframes sp{to{transform:rotate(360deg)}}`}</style>
+      <div style={{width:28,height:28,border:`3px solid ${T.primary}20`,borderTopColor:T.primary,borderRadius:'50%',animation:'sp .7s linear infinite',marginBottom:12}}/>
+      <p style={{color:T.primary,fontSize:15}}>Loading tournament info...</p>
     </div>
   );
 
