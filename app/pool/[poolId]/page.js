@@ -1,5 +1,5 @@
 'use client';
-// build: schedule-retry-button-v69-20260525-0800
+// build: stale-inplay-blocked-v71-20260525-0930
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1356,6 +1356,21 @@ export default function App(){
       const data=await r.json();
       const raw=data.data||data.players||data||[];
       if(!Array.isArray(raw)||raw.length===0)throw new Error('No live scores yet');
+
+      // In pgatour mode, verify in-play event matches the active pgatour event.
+      // DataGolf's in-play feed lags behind pre-tournament during between-event days (Mon-Wed).
+      // If they mismatch, in-play has stale data from the prior event — don't merge it.
+      if (currentMajor === 'pgatour') {
+        const activeEventName = (scheduleData?.pgatour?.eventName||'').toLowerCase().trim();
+        const ipEventName = (data.event_name||'').toLowerCase().trim();
+        if (activeEventName && ipEventName && activeEventName !== ipEventName) {
+          // Stale in-play data — don't merge, clear any prior cache
+          rawScoresRef.current = null;
+          setRefreshing(false);
+          return;
+        }
+      }
+
       rawScoresRef.current=raw; // Cache for re-merge when field updates
 
       setField(currentField=>{
