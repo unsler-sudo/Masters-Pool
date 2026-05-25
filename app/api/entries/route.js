@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dual-signal-rotation-v27-diagnose-20260525-1030
+// build: dual-signal-rotation-v28-sort-by-pos-20260525-1100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -159,7 +159,18 @@ async function autoManage(poolId) {
             const ipRes = await fetch(inPlayUrl, { cache:'no-store', signal: AbortSignal.timeout(5000) });
             if (ipRes.ok) {
               const ipData = await ipRes.json();
-              const topPlayers = (ipData.data || ipData.players || []).slice(0, 10); // Check top 10
+              // Filter to players who made the cut (have valid position, didn't WD/DQ/MC) then sort by position
+              const madeCut = (ipData.data || ipData.players || []).filter(p => {
+                const pos = String(p.current_pos || '').replace('T','');
+                const posNum = parseInt(pos, 10);
+                return !isNaN(posNum) && posNum > 0;
+              });
+              madeCut.sort((a, b) => {
+                const ap = parseInt(String(a.current_pos||'').replace('T',''), 10) || 999;
+                const bp = parseInt(String(b.current_pos||'').replace('T',''), 10) || 999;
+                return ap - bp;
+              });
+              const topPlayers = madeCut.slice(0, 10);
               const allR4Done = topPlayers.length >= 5 && topPlayers.every(p =>
                 p.R4 != null // R4 stroke count recorded (player completed R4)
               );
@@ -439,7 +450,17 @@ export async function GET(request) {
       ]);
       const ptData = ptRes.ok ? await ptRes.json() : null;
       const ipData = ipRes.ok ? await ipRes.json() : null;
-      const topPlayers = (ipData?.data || ipData?.players || []).slice(0, 10);
+      const madeCut = (ipData?.data || ipData?.players || []).filter(p => {
+        const pos = String(p.current_pos || '').replace('T','');
+        const posNum = parseInt(pos, 10);
+        return !isNaN(posNum) && posNum > 0;
+      });
+      madeCut.sort((a, b) => {
+        const ap = parseInt(String(a.current_pos||'').replace('T',''), 10) || 999;
+        const bp = parseInt(String(b.current_pos||'').replace('T',''), 10) || 999;
+        return ap - bp;
+      });
+      const topPlayers = madeCut.slice(0, 10);
       const allR4Done = topPlayers.length >= 5 && topPlayers.every(p => p.R4 != null);
       const lastUpdated = ipData?.last_updated ? new Date(ipData.last_updated).getTime() : 0;
       const hoursStale = lastUpdated > 0 ? (Date.now() - lastUpdated) / 3600000 : null;
@@ -457,7 +478,7 @@ export async function GET(request) {
         ipLastUpdated: ipData?.last_updated,
         hoursStale,
         dataIsStale,
-        topPlayerR4Status: topPlayers.map(p => ({ name: p.player_name, R4: p.R4 })),
+        topPlayerR4Status: topPlayers.map(p => ({ name: p.player_name, pos: p.current_pos, R4: p.R4 })),
         allR4Done,
         inTuesdayWindow: isTuesday && isMorning,
         priorEventConcluded: allR4Done || dataIsStale,
