@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dual-signal-rotation-v26-dgkey-fix-20260525-1000
+// build: dual-signal-rotation-v27-diagnose-20260525-1030
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -424,7 +424,51 @@ async function autoManage(poolId) {
 
 // ─── GET ─────────────────────────────────────────────────────────────────────
 export async function GET(request) {
-  const poolId = new URL(request.url).searchParams.get('poolId') || 'default';
+  const url = new URL(request.url);
+  const poolId = url.searchParams.get('poolId') || 'default';
+  const diagnose = url.searchParams.get('diagnose') === '1';
+
+  // Diagnostic mode: report what the rotation logic sees without running it
+  if (diagnose) {
+    try {
+      const meta = await getPoolMeta(poolId);
+      const year = new Date().getFullYear();
+      const [ptRes, ipRes] = await Promise.all([
+        fetch(`https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`, { cache:'no-store' }),
+        fetch(`https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`, { cache:'no-store' }),
+      ]);
+      const ptData = ptRes.ok ? await ptRes.json() : null;
+      const ipData = ipRes.ok ? await ipRes.json() : null;
+      const topPlayers = (ipData?.data || ipData?.players || []).slice(0, 10);
+      const allR4Done = topPlayers.length >= 5 && topPlayers.every(p => p.R4 != null);
+      const lastUpdated = ipData?.last_updated ? new Date(ipData.last_updated).getTime() : 0;
+      const hoursStale = lastUpdated > 0 ? (Date.now() - lastUpdated) / 3600000 : null;
+      const dataIsStale = lastUpdated > 0 && hoursStale > 12;
+      const now = new Date();
+      const etHour = (now.getUTCHours() - 4 + 24) % 24;
+      const isTuesday = now.getUTCDay() === 2;
+      const isMorning = etHour >= 6 && etHour < 12;
+      return Response.json({
+        diagnose: true,
+        poolEventName: meta?.currentPgatourEvent,
+        dgPreTournamentEvent: ptData?.event_name,
+        dgInPlayEvent: ipData?.event_name,
+        eventsMatch: (ptData?.event_name||'').toLowerCase() === (meta?.currentPgatourEvent||'').toLowerCase(),
+        ipLastUpdated: ipData?.last_updated,
+        hoursStale,
+        dataIsStale,
+        topPlayerR4Status: topPlayers.map(p => ({ name: p.player_name, R4: p.R4 })),
+        allR4Done,
+        inTuesdayWindow: isTuesday && isMorning,
+        priorEventConcluded: allR4Done || dataIsStale,
+        wouldRotate: ((ptData?.event_name||'').toLowerCase() !== (meta?.currentPgatourEvent||'').toLowerCase())
+                     && ((isTuesday && isMorning) || allR4Done || dataIsStale),
+      });
+    } catch (e) {
+      return Response.json({ diagnose: true, error: e.message });
+    }
+  }
+
   try {
     await autoManage(poolId);
     const [entries, locked, picksHidden, paymentsHidden, payments, major, meta] = await Promise.all([
