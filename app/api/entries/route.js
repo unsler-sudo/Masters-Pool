@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dual-signal-rotation-v24-20260525-0830
+// build: dual-signal-rotation-v25-20260525-0945
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -152,7 +152,7 @@ async function autoManage(poolId) {
           const inTuesdayWindow = isTuesday && isMorning;
 
           // Check if prior event is fully concluded via in-play
-          // Conditions: all top players have thru:18 for R4 (or last_updated is 12+ hours stale)
+          // Conditions: top players have R4 strokes recorded, OR in-play data is stale (>12 hr since update)
           let priorEventConcluded = false;
           try {
             const inPlayUrl = `https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${dgKey}`;
@@ -161,7 +161,7 @@ async function autoManage(poolId) {
               const ipData = await ipRes.json();
               const topPlayers = (ipData.data || ipData.players || []).slice(0, 10); // Check top 10
               const allR4Done = topPlayers.length >= 5 && topPlayers.every(p =>
-                p.R4 != null && p.R4 !== 0 // R4 score is populated (not still teeing off)
+                p.R4 != null // R4 stroke count recorded (player completed R4)
               );
               // Also check timestamp — if last_updated > 12 hours ago, event is definitely over
               const lastUpdated = ipData.last_updated ? new Date(ipData.last_updated).getTime() : 0;
