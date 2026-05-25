@@ -2691,7 +2691,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <span>⏰ {myPairTime}{myStartHole !== 1 ? ` · Hole ${myStartHole}` : ''}</span>
               </div>}
               <div onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',borderTop:(fieldSort!=='pairings' && (isNewPairingGroup||isCutTransition))?`2px solid ${T.primary}`:(isCutTransition?`2px solid ${T.primary}`:'none'),background:isCut&&isLive?'#fafafa':favorites.has(p.name)?'#fff8d6':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&isLive?.6:1,borderLeft:favorites.has(p.name)?`3px solid #d4a017`:'3px solid transparent'}}>
-                <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&isLive?'#999':T.primary,fontSize:12}}>{isLive?(isCut?(/WD/i.test(p.pos)?'🚑':/DQ/i.test(p.pos)?'🚫':'✂️'):p.pos):(i+1)}</span>
+                <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&isLive?'#999':T.primary,fontSize:12}}>{(isLive && !isPreTournament)?(isCut?(/WD/i.test(p.pos)?'🚑':/DQ/i.test(p.pos)?'🚫':'✂️'):p.pos):(i+1)}</span>
                 <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
                   <div style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
                     <span onClick={(e)=>{e.stopPropagation();toggleFavorite(p.name);}} style={{marginRight:5,cursor:'pointer',fontSize:13,verticalAlign:'middle',userSelect:'none'}}>{favorites.has(p.name)?'⭐':'☆'}</span>
@@ -2703,7 +2703,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   {!picksHidden&&ow.length>0&&<div style={{fontSize:9,color:'#8b6914',marginTop:1,whiteSpace:'normal',wordBreak:'break-word',lineHeight:1.3}}>({ow.join(', ')})</div>}
                 </div>
                 <span style={{width:30,textAlign:'center'}}><span style={{fontSize:9,fontWeight:700,color:t?.color,background:t?.color+'18',padding:'1px 5px',borderRadius:3}}>{String.fromCharCode(64+p.tier)}</span></span>
-                {isLive
+                {isLive && !isPreTournament
                   ?<>
                     <span style={{width:50,textAlign:'center',fontSize:showTeeTime?9:11,color:showTeeTime?T.primary:'#888',fontWeight:showTeeTime?600:400,lineHeight:1.15}}>
                       {(() => {
