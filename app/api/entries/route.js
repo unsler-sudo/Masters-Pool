@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dual-signal-rotation-v25-20260525-0945
+// build: dual-signal-rotation-v26-dgkey-fix-20260525-1000
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -155,8 +155,8 @@ async function autoManage(poolId) {
           // Conditions: top players have R4 strokes recorded, OR in-play data is stale (>12 hr since update)
           let priorEventConcluded = false;
           try {
-            const inPlayUrl = `https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${dgKey}`;
-            const ipRes = await fetch(inPlayUrl);
+            const inPlayUrl = `https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`;
+            const ipRes = await fetch(inPlayUrl, { cache:'no-store', signal: AbortSignal.timeout(5000) });
             if (ipRes.ok) {
               const ipData = await ipRes.json();
               const topPlayers = (ipData.data || ipData.players || []).slice(0, 10); // Check top 10
@@ -166,11 +166,12 @@ async function autoManage(poolId) {
               // Also check timestamp — if last_updated > 12 hours ago, event is definitely over
               const lastUpdated = ipData.last_updated ? new Date(ipData.last_updated).getTime() : 0;
               const hoursStale = (now - lastUpdated) / (1000 * 60 * 60);
-              const dataIsStale = hoursStale > 12;
+              const dataIsStale = lastUpdated > 0 && hoursStale > 12;
               priorEventConcluded = allR4Done || dataIsStale;
+              console.log(`[pgatour rotation] event ${dgCurrentEventName} ≠ pool ${poolEventName}, R4done=${allR4Done}, stale=${dataIsStale}, concluded=${priorEventConcluded}`);
             }
           } catch (e) {
-            // If in-play check fails, fall back to strict Tuesday-only behavior
+            console.log('[pgatour rotation] in-play check failed:', e.message);
             priorEventConcluded = false;
           }
 
