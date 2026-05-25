@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dual-signal-rotation-v28-sort-by-pos-20260525-1100
+// build: protect-paid-pools-from-deletion-v29-20260525-1130
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -96,14 +96,16 @@ async function autoManage(poolId) {
     const now = Date.now();
 
     // ── Auto-delete abandoned unpaid pools older than 24 hours ────────────────
+    // Only deletes pools that have NEVER been paid (no paidAt history).
+    // Pools that paid for a previous event and need to repay for current event are NOT deleted.
     const meta = await getPoolMeta(poolId);
-    if (meta && !meta.paid) {
+    if (meta && !meta.paid && !meta.paidAt && !meta.everPaid) {
       const age = now - new Date(meta.createdAt).getTime();
       if (age > 24 * 60 * 60 * 1000) {
         const keys = ['meta','entries','payments','locked','picks_hidden','major'];
         await Promise.all(keys.map(k2 => redis('DEL', `pool:${poolId}:${k2}`)));
         await redis('SREM', 'pools:index', poolId);
-        console.log(`[autoManage] Deleted abandoned pool ${poolId}`);
+        console.log(`[autoManage] Deleted abandoned pool ${poolId} (never paid)`);
         return null;
       }
     }
@@ -204,9 +206,11 @@ async function autoManage(poolId) {
           }
 
           // Reset pool: locked, unpaid, new event tracked
+          // everPaid stays true to prevent abandoned-pool cleanup from deleting it
           meta.paid = false;
           meta.paidAt = null;
           meta.reminderSent = false;
+          meta.everPaid = true;
           meta.currentPgatourEvent = ptData.event_name;
           await Promise.all([
             redis('SET', k(poolId,'meta'),         JSON.stringify(meta)),
@@ -307,6 +311,7 @@ async function autoManage(poolId) {
         meta.major = nextKey;
         meta.paidAt = null;
         meta.reminderSent = false;
+        meta.everPaid = true;
         await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
       }
       await Promise.all([
