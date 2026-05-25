@@ -1,5 +1,5 @@
 'use client';
-// build: clean-field-on-event-change-v75-20260525-2100
+// build: fetchfield-skip-monwed-v76-20260525-2130
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1128,21 +1128,31 @@ export default function App(){
           setField(enriched);
           const evName = ptData.event_name || 'PGA Tour Event';
           setFieldSource(`📡 datagolf.com · ${enriched.length} in ${evName} field`);
-          // Immediately fetch and merge live scores (pgatour always has a live event)
-          try {
-            const liveRes = await fetch('/api/scores?endpoint=in-play');
-            if(liveRes.ok){
-              const liveData = await liveRes.json();
-              const liveRaw = liveData.data || liveData.players || [];
-              if(liveRaw.length > 0){
-                rawScoresRef.current = liveRaw;
-                const merged = mergeScoresIntoField(enriched, liveRaw);
-                setField(merged);
-                setFields(prev => ({...prev, [major]: merged}));
-                setLastUp(new Date().toLocaleTimeString());
+          // FINGERPRINT_V76_FETCHFIELDSKIP
+          // Immediately fetch and merge live scores — but skip Mon-Wed in pgatour mode
+          // (in-play has stale prior-event data during that window)
+          const dowFF = new Date().getUTCDay();
+          const isMonWedPgatour = major === 'pgatour' && dowFF >= 1 && dowFF <= 3;
+          if (!isMonWedPgatour) {
+            try {
+              const liveRes = await fetch('/api/scores?endpoint=in-play');
+              if(liveRes.ok){
+                const liveData = await liveRes.json();
+                const liveRaw = liveData.data || liveData.players || [];
+                const liveEvName = (liveData.event_name||'').toLowerCase().trim();
+                const expectedEv = (ptData.event_name||'').toLowerCase().trim();
+                // Only merge if in-play event matches pre-tournament event (avoids stale prior-week data)
+                const eventsMatch = !expectedEv || !liveEvName || liveEvName === expectedEv;
+                if(liveRaw.length > 0 && eventsMatch){
+                  rawScoresRef.current = liveRaw;
+                  const merged = mergeScoresIntoField(enriched, liveRaw);
+                  setField(merged);
+                  setFields(prev => ({...prev, [major]: merged}));
+                  setLastUp(new Date().toLocaleTimeString());
+                }
               }
-            }
-          } catch(e) { console.warn('pgatour scores fetch failed:', e.message); }
+            } catch(e) { console.warn('pgatour scores fetch failed:', e.message); }
+          }
         }
         return;
       }
