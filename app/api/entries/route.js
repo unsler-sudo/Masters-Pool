@@ -1,5 +1,5 @@
-
 export const dynamic = 'force-dynamic';
+// build: dual-signal-rotation-v24-20260525-0830
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -142,12 +142,39 @@ async function autoManage(poolId) {
 
         // If DataGolf's current event ≠ pool's locked-in event, time to rotate
         if (dgCurrentEventName && poolEventName && dgCurrentEventName !== poolEventName) {
-          // STRICT WINDOW: only rotate Tuesday morning (6-11 AM ET) — matches majors
+          // Allow rotation under either condition:
+          //   (A) Tuesday morning 6-11 AM ET (default safe window)
+          //   (B) The prior event is definitively concluded per in-play (all leaders done, no live data)
           const nowDate = new Date(now);
           const etHour = (nowDate.getUTCHours() - 4 + 24) % 24;
           const isTuesday = nowDate.getUTCDay() === 2;
           const isMorning = etHour >= 6 && etHour < 12;
-          if (!isTuesday || !isMorning) return 'pgatour';
+          const inTuesdayWindow = isTuesday && isMorning;
+
+          // Check if prior event is fully concluded via in-play
+          // Conditions: all top players have thru:18 for R4 (or last_updated is 12+ hours stale)
+          let priorEventConcluded = false;
+          try {
+            const inPlayUrl = `https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${dgKey}`;
+            const ipRes = await fetch(inPlayUrl);
+            if (ipRes.ok) {
+              const ipData = await ipRes.json();
+              const topPlayers = (ipData.data || ipData.players || []).slice(0, 10); // Check top 10
+              const allR4Done = topPlayers.length >= 5 && topPlayers.every(p =>
+                p.R4 != null && p.R4 !== 0 // R4 score is populated (not still teeing off)
+              );
+              // Also check timestamp — if last_updated > 12 hours ago, event is definitely over
+              const lastUpdated = ipData.last_updated ? new Date(ipData.last_updated).getTime() : 0;
+              const hoursStale = (now - lastUpdated) / (1000 * 60 * 60);
+              const dataIsStale = hoursStale > 12;
+              priorEventConcluded = allR4Done || dataIsStale;
+            }
+          } catch (e) {
+            // If in-play check fails, fall back to strict Tuesday-only behavior
+            priorEventConcluded = false;
+          }
+
+          if (!inTuesdayWindow && !priorEventConcluded) return 'pgatour';
 
           // Archive results for the prior event
           const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
