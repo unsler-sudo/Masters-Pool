@@ -57,6 +57,7 @@ export async function POST(request) {
         const meta = JSON.parse(metaRaw);
         meta.paid   = true;
         meta.active = true;
+        meta.everPaid = true;
         meta.paidAt = new Date().toISOString();
         meta.stripeSessionId = session.id;
 
