@@ -1,5 +1,5 @@
 'use client';
-// build: hide-scores-pretournament-v78-clean-20260525-2300
+// build: chat-poll-5s-v79-20260525-2330
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1777,11 +1777,14 @@ export default function App(){
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[activeMajor]);
 
-  // Poll chat every 1 second when Chat tab is active (only active when tab is open)
+  // Poll chat every 5 seconds when Chat tab is active AND window is visible
+  // FINGERPRINT_V79_CHATPOLL_SLOWED
   useEffect(()=>{
     if(tab!=='Chat')return;
     fetchChat();
-    const interval=setInterval(fetchChat,1000);
+    const interval=setInterval(()=>{
+      if(document.visibilityState === 'visible') fetchChat();
+    }, 5000);
     return()=>clearInterval(interval);
   },[tab]);
 
