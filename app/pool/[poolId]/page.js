@@ -1,5 +1,5 @@
 'use client';
-// build: pretournament-no-spinner-v77-20260525-2200
+// build: hide-scores-pretournament-v78-clean-20260525-2300
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1313,21 +1313,8 @@ export default function App(){
             return mergeScoresIntoField(enriched, rawScoresRef.current);
           }
           // FINGERPRINT_V75_NEVENTRESET
-          // If we just loaded a new event (no cached rawScores), DON'T preserve old scores.
-          // This handles the pgatour transition: old field had CJ Cup scores, new field is Charles Schwab.
-          if(isThisMajorActive && prev && prev.length > 0 && rawScoresRef.current){
-            // Preserve existing live data ONLY if we still have valid rawScores
-            return enriched.map(newP=>{
-              const existing=prev.find(p=>p.name===newP.name);
-              if(existing&&(existing.thru||existing.pos!=='-'||existing.earnings>0)){
-                return{...newP,pos:existing.pos,score:existing.score,today:existing.today,
-                  thru:existing.thru,earnings:existing.earnings,
-                  r1:existing.r1,r2:existing.r2,r3:existing.r3,r4:existing.r4};
-              }
-              return newP;
-            });
-          }
           // No cached rawScores or not active — return clean field
+          // (Don't preserve old scores; they might be from a prior event in pgatour mode.)
           return enriched;
         });
         const confirmed = enriched.filter(p=>p.confirmed).length;
@@ -2647,7 +2634,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           {pastTeeTime&&<div style={{fontSize:10,color:'#8a9580',textAlign:'center',marginBottom:8}}>Tap player for scorecard</div>}
           <div style={{borderRadius:9,border:`1px solid ${T.cardBorder}`,position:'relative'}}>
             <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.15)',borderTopLeftRadius:9,borderTopRightRadius:9}}>
-              {pastTeeTime
+              {pastTeeTime && !isPreTournament
                 ?<><span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee/Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span></>
                 :<><span style={{width:40,textAlign:'center'}}>#</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>DG Rank</span></>
               }
