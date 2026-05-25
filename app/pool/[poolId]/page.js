@@ -1,5 +1,5 @@
 'use client';
-// build: pretournament-sort-v74-20260525-2030
+// build: clean-field-on-event-change-v75-20260525-2100
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1302,8 +1302,11 @@ export default function App(){
           if(isThisMajorActive && rawScoresRef.current){
             return mergeScoresIntoField(enriched, rawScoresRef.current);
           }
-          if(isThisMajorActive && prev && prev.length > 0){
-            // Preserve existing live data for the active tournament
+          // FINGERPRINT_V75_NEVENTRESET
+          // If we just loaded a new event (no cached rawScores), DON'T preserve old scores.
+          // This handles the pgatour transition: old field had CJ Cup scores, new field is Charles Schwab.
+          if(isThisMajorActive && prev && prev.length > 0 && rawScoresRef.current){
+            // Preserve existing live data ONLY if we still have valid rawScores
             return enriched.map(newP=>{
               const existing=prev.find(p=>p.name===newP.name);
               if(existing&&(existing.thru||existing.pos!=='-'||existing.earnings>0)){
@@ -1314,7 +1317,7 @@ export default function App(){
               return newP;
             });
           }
-          // Not the active tournament — return clean field with no score data
+          // No cached rawScores or not active — return clean field
           return enriched;
         });
         const confirmed = enriched.filter(p=>p.confirmed).length;
