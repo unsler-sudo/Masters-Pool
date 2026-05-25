@@ -1359,12 +1359,14 @@ export default function App(){
 
       // In pgatour mode, verify in-play event matches the active pgatour event.
       // DataGolf's in-play feed lags behind pre-tournament during between-event days (Mon-Wed).
-      // If they mismatch, in-play has stale data from the prior event — don't merge it.
+      // If they mismatch — OR if in-play has no event_name at all — don't merge stale data.
+      // FINGERPRINT_V72_IPGUARD
       if (currentMajor === 'pgatour') {
         const activeEventName = (scheduleData?.pgatour?.eventName||'').toLowerCase().trim();
         const ipEventName = (data.event_name||'').toLowerCase().trim();
-        if (activeEventName && ipEventName && activeEventName !== ipEventName) {
-          // Stale in-play data — don't merge, clear any prior cache
+        // Missing ipEventName = between-event window where DG hasn't refreshed in-play yet.
+        // Treat as stale — skip merge entirely.
+        if (activeEventName && (!ipEventName || activeEventName !== ipEventName)) {
           rawScoresRef.current = null;
           setRefreshing(false);
           return;
