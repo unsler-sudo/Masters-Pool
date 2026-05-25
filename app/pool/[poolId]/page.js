@@ -1349,6 +1349,15 @@ export default function App(){
       rawScoresRef.current=null;
       return;
     }
+    // PGA Tour mode: skip in-play entirely Mon-Wed (it's always stale from prior week)
+    // FINGERPRINT_V73_MONWEDSKIP
+    if (currentMajor === 'pgatour') {
+      const dow = new Date().getUTCDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu
+      if (dow >= 1 && dow <= 3) {
+        rawScoresRef.current = null;
+        return;
+      }
+    }
     setRefreshing(true);
     try{
       const r=await fetch('/api/scores?endpoint=in-play');
@@ -1823,9 +1832,16 @@ export default function App(){
     const isCut = /CUT|WD|DQ|MC/i.test(p.pos);
     return isCut || p.r4 != null;
   });
-  const sortF = !isActiveMajor
+  // Detect pre-tournament state: pgatour mode with no live data (no positions, no thru values)
+  // FINGERPRINT_V74_PRETOURNSORT
+  const isPreTournament = activeMajor === 'pgatour' && !aRoundIsLive && !tournamentComplete
+    && !field.some(p => {
+      const pn = parsePos(p.pos);
+      return pn && pn > 0;
+    });
+  const sortF = (!isActiveMajor || isPreTournament)
     ? [...field].sort((a,b)=>{
-        // Not in tournament window — sort by DG rank
+        // Not in tournament window OR pre-tournament — sort by DG rank (odds-based)
         // Players without dgRank go to the bottom
         const ra = a.dgRank && a.dgRank < 9999 ? a.dgRank : 99999;
         const rb = b.dgRank && b.dgRank < 9999 ? b.dgRank : 99999;
