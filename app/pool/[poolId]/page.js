@@ -1,5 +1,5 @@
 'use client';
-// build: chat-poll-5s-v79-20260525-2330
+// build: pairings-pretournament-v81-20260526-0000
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1842,10 +1842,26 @@ export default function App(){
       const pn = parsePos(p.pos);
       return pn && pn > 0;
     });
+  // FINGERPRINT_V80_TEETIMESVISIBLE
+  // Pre-tournament has TWO sub-states: with-tee-times (Wed-Thu morning) and no-tee-times (Mon-Tue)
+  // When tee times are available, show them. When not, show DG odds rank.
+  const hasTeeTimes = isPreTournament && field.some(p => p.teeTime);
   const sortF = (!isActiveMajor || isPreTournament)
     ? [...field].sort((a,b)=>{
-        // Not in tournament window OR pre-tournament — sort by DG rank (odds-based)
-        // Players without dgRank go to the bottom
+        // Pre-tournament: if tee times available, sort by tee time
+        if (hasTeeTimes) {
+          // If user has Pairings selected, group front-9 vs back-9 (for split tees)
+          const isPairingsMode = fieldSort === 'pairings';
+          const ah = a.startHole || 1;
+          const bh = b.startHole || 1;
+          if (isPairingsMode && ah !== bh) return ah - bh;
+          const ta = a.teeTime ? parseTeeTime(a.teeTime) : 99999;
+          const tb = b.teeTime ? parseTeeTime(b.teeTime) : 99999;
+          if (ta !== tb) return ta - tb;
+          if (ah !== bh) return ah - bh;
+          return a.name.localeCompare(b.name);
+        }
+        // No tee times — sort by DG rank (odds-based)
         const ra = a.dgRank && a.dgRank < 9999 ? a.dgRank : 99999;
         const rb = b.dgRank && b.dgRank < 9999 ? b.dgRank : 99999;
         if (ra !== rb) return ra - rb;
@@ -2639,6 +2655,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.15)',borderTopLeftRadius:9,borderTopRightRadius:9}}>
               {pastTeeTime && !isPreTournament
                 ?<><span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee/Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span></>
+                : hasTeeTimes
+                ?<><span style={{width:40,textAlign:'center'}}>#</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:62,textAlign:'center'}}>R1 Tee</span><span style={{width:40,textAlign:'center'}}>DG#</span></>
                 :<><span style={{width:40,textAlign:'center'}}>#</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>DG Rank</span></>
               }
             </div>
@@ -2708,6 +2726,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     </span>
                     <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{p.score}</span>
                     <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmt(p.earnings)}</span>
+                  </>
+                  : hasTeeTimes
+                  ?<>
+                    <span style={{width:62,textAlign:'center',fontSize:10,color:T.primary,fontWeight:600,lineHeight:1.15}}>
+                      {p.teeTime ? <>{p.teeTime}{p.startHole && p.startHole !== 1 ? <><br/><span style={{fontSize:8,opacity:.75}}>·H{p.startHole}</span></> : null}</> : '-'}
+                    </span>
+                    <span style={{width:40,textAlign:'center',fontSize:11,color:'#888'}}>{p.dgRank||'-'}</span>
                   </>
                   :<span style={{width:50,textAlign:'center',fontSize:11,color:'#888'}}>{p.dgRank||'-'}</span>
                 }
