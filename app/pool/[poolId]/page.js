@@ -1,5 +1,5 @@
 'use client';
-// build: r1r2-pairings-asc-v82-20260526-0030
+// build: small-pool-winner-takes-all-v83-20260526-0100
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2430,9 +2430,13 @@ export default function App(){
             const shareLink=typeof window!=='undefined'?window.location.origin+'/pool/'+poolId:'';
             const fee=poolMeta?.entryFee||0;
             const pot=entries.length*fee;
-            const first=pot>0?pot-fee*3:0;
-            const payoutLine=fee>0&&entries.length>=3
+            // FINGERPRINT_V83_SMALLPOOL_WINNERTAKESALL
+            // <4 entries: winner takes entire pot. 4+ entries: 1st/2nd/3rd split (pot-3fee / 2fee / 1fee)
+            const first=pot>0?(entries.length<4?pot:pot-fee*3):0;
+            const payoutLine=fee>0&&entries.length>=4
               ?`🏆 Pot: $${pot} ($${fee} entry × ${entries.length} entries)\n🥇 1st: $${first}  🥈 2nd: $${fee*2}  🥉 3rd: $${fee}\n\n`
+              :fee>0&&entries.length>0
+              ?`🏆 Pot: $${pot} ($${fee} entry × ${entries.length} entries)\n🥇 Winner takes all: $${first}\n\n`
               :fee>0
                 ?`💵 Entry: $${fee} per person\n\n`
                 :'';
@@ -2513,9 +2517,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             {ranked.map((e,i)=>{const tot=teamE(e),op=openCard===e.name,paid=!!payments[e.name];const isLast=i===ranked.length-1&&ranked.length>1&&!picksHidden;
             // Compute prize amounts for top 3
             const fee=poolMeta?.entryFee||0;
-            const showPrizes=!picksHidden&&fee>0&&ranked.length>=3;
+            const showPrizes=!picksHidden&&fee>0&&ranked.length>=1;
             const pot=ranked.length*fee;
-            const prizes=[pot-fee*3, fee*2, fee];
+            // <4 entries: winner takes entire pot (1st only). 4+ entries: 1st/2nd/3rd split.
+            const prizes = ranked.length<4 ? [pot, 0, 0] : [pot-fee*3, fee*2, fee];
             const prize=showPrizes&&i<3?prizes[i]:0;
             return(
               <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:`1px solid ${T.cardBorder}`,animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
@@ -3136,16 +3141,19 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   if(d?.ok){loadEntries();msg(val>0?`Entry fee set to $${val}`:'Entry fee cleared');}
                 }}>Save</button>
               </div>
-              {poolMeta?.entryFee>0&&entries.length>=3&&(()=>{
+              {poolMeta?.entryFee>0&&entries.length>=1&&(()=>{
                 const fee=poolMeta.entryFee;
                 const pot=entries.length*fee;
-                const first=pot-fee*3;
+                const first = entries.length<4 ? pot : pot-fee*3;
                 return <div style={{background:`${T.primary}0a`,borderRadius:8,padding:'10px 12px',fontSize:12,color:T.primary}}>
                   <div style={{fontWeight:700,marginBottom:4}}>Current Pot: ${pot} ({entries.length} × ${fee})</div>
-                  <div>🥇 1st: <b>${first}</b> · 🥈 2nd: <b>${fee*2}</b> · 🥉 3rd: <b>${fee}</b></div>
+                  {entries.length<4
+                    ? <div>🥇 Winner takes all: <b>${first}</b></div>
+                    : <div>🥇 1st: <b>${first}</b> · 🥈 2nd: <b>${fee*2}</b> · 🥉 3rd: <b>${fee}</b></div>
+                  }
                 </div>;
               })()}
-              {poolMeta?.entryFee>0&&entries.length<3&&<div style={{fontSize:11,color:'#888'}}>Payouts will show once you have 3+ entries.</div>}
+              {poolMeta?.entryFee>0&&entries.length===0&&<div style={{fontSize:11,color:'#888'}}>Payouts will show once entries are submitted.</div>}
             </div>
             <div style={sec}>
               <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
