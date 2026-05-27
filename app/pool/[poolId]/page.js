@@ -1,5 +1,5 @@
 'use client';
-// build: pairings-pretournament-v81-20260526-0000
+// build: r1r2-pairings-asc-v82-20260526-0030
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1848,16 +1848,14 @@ export default function App(){
   const hasTeeTimes = isPreTournament && field.some(p => p.teeTime);
   const sortF = (!isActiveMajor || isPreTournament)
     ? [...field].sort((a,b)=>{
-        // Pre-tournament: if tee times available, sort by tee time
+        // Pre-tournament: if tee times available, sort by tee time ASC (earliest first)
+        // R1/R2 mix front/back 9 starters by time (no grouping). Pre-tournament is R1, so no grouping.
         if (hasTeeTimes) {
-          // If user has Pairings selected, group front-9 vs back-9 (for split tees)
-          const isPairingsMode = fieldSort === 'pairings';
-          const ah = a.startHole || 1;
-          const bh = b.startHole || 1;
-          if (isPairingsMode && ah !== bh) return ah - bh;
           const ta = a.teeTime ? parseTeeTime(a.teeTime) : 99999;
           const tb = b.teeTime ? parseTeeTime(b.teeTime) : 99999;
           if (ta !== tb) return ta - tb;
+          const ah = a.startHole || 1;
+          const bh = b.startHole || 1;
           if (ah !== bh) return ah - bh;
           return a.name.localeCompare(b.name);
         }
@@ -1928,10 +1926,11 @@ export default function App(){
             if(pa&&pb)return pa-pb;
             return (a.rank??999)-(b.rank??999);
           }
-          // R1/R2: standard tee time DESC then start hole, then position
+          // R1/R2: standard tee time ASC (earliest first), interleave H1/H10 starters by time
+          // FINGERPRINT_V82_R1R2_PAIRINGS_ASC
           const ta = parseTeeTime(a.pairingTeeTime || a.teeTime);
           const tb = parseTeeTime(b.pairingTeeTime || b.teeTime);
-          if (ta !== tb) return tb - ta;
+          if (ta !== tb) return ta - tb;
           const ah = a.pairingStartHole || a.startHole || 1;
           const bh = b.pairingStartHole || b.startHole || 1;
           if (ah !== bh) return ah - bh;
