@@ -1,5 +1,5 @@
 'use client';
-// build: small-pool-winner-takes-all-v83-20260526-0100
+// build: standings-prize-box-fix-v84-20260526-0130
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2402,25 +2402,28 @@ export default function App(){
       <main style={{padding:'12px 12px 80px',maxWidth:660,margin:'0 auto',animation:'fu .35s ease'}}>
 
         {tab==='Standings'&&(<>
-          {!pastTeeTime&&poolMeta?.entryFee>0&&entries.length>=3&&(()=>{
+          {!pastTeeTime&&poolMeta?.entryFee>0&&entries.length>=1&&(()=>{
             const fee=poolMeta.entryFee;
             const pot=entries.length*fee;
-            const third=fee;
-            const second=fee*2;
-            const first=pot-third-second;
+            const winnerTakesAll = entries.length < 4;
+            const first = winnerTakesAll ? pot : pot - fee*3;
+            const second = winnerTakesAll ? 0 : fee*2;
+            const third = winnerTakesAll ? 0 : fee;
             return <div style={{background:'#fff',border:`1px solid ${T.cardBorder}`,borderRadius:11,padding:'10px 14px',marginBottom:10,display:'flex',alignItems:'center',gap:10,justifyContent:'space-around'}}>
               <div style={{textAlign:'center'}}>
                 <div style={{fontSize:18,fontWeight:800,color:T.primary}}>🥇 ${first}</div>
-                <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>1st place</div>
+                <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>{winnerTakesAll?'Winner takes all':'1st place'}</div>
               </div>
-              <div style={{textAlign:'center',opacity:.7}}>
-                <div style={{fontSize:14,fontWeight:700,color:T.primary}}>🥈 ${second}</div>
-                <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>2nd</div>
-              </div>
-              <div style={{textAlign:'center',opacity:.55}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.primary}}>🥉 ${third}</div>
-                <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>3rd</div>
-              </div>
+              {!winnerTakesAll && <>
+                <div style={{textAlign:'center',opacity:.7}}>
+                  <div style={{fontSize:14,fontWeight:700,color:T.primary}}>🥈 ${second}</div>
+                  <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>2nd</div>
+                </div>
+                <div style={{textAlign:'center',opacity:.55}}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.primary}}>🥉 ${third}</div>
+                  <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>3rd</div>
+                </div>
+              </>}
               <div style={{textAlign:'center',marginLeft:'auto',borderLeft:`1px solid ${T.cardBorder}`,paddingLeft:10}}>
                 <div style={{fontSize:13,fontWeight:700,color:'#555'}}>${pot}</div>
                 <div style={{fontSize:9,color:'#8a9580',marginTop:1}}>total pot</div>
