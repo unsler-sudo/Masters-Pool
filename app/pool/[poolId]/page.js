@@ -1,5 +1,5 @@
 'use client';
-// build: history-auto-load-v86-20260526-0200
+// build: schedule-verbiage-v87-20260526-0215
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -3044,9 +3044,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               <div style={{background:'#f8f9ff',borderRadius:8,padding:'10px 12px',border:'1px solid #e0e4f0'}}>
                 <div style={{fontSize:10,fontWeight:700,color:'#555',letterSpacing:.5,marginBottom:6}}>⏰ AUTO-MANAGEMENT SCHEDULE</div>
                 <div style={{fontSize:11,color:'#6b7c5e',lineHeight:1.7}}>
-                  <div>🔓 <b>7 days before tee-off</b> — entries auto-unlock for next major</div>
-                  <div>🔒 <b>At tee time</b> — entries lock for the tournament</div>
-                  <div>🔄 <b>Tuesday morning (6 AM – 12 PM ET)</b> — auto-rotates to next major, archives current results</div>
+                  <div>🔓 <b>7 days before tee-off</b> (majors) or <b>Sun night/Mon morning</b> (PGA Tour mode) — entries auto-unlock for next event</div>
+                  <div>🔒 <b>At first tee time Thursday</b> — entries lock, picks reveal</div>
+                  <div>🔄 <b>Sunday R4 finish OR Tuesday 6–11 AM ET</b> — auto-rotates to next event, archives current results</div>
+                  <div>💵 <b>Commissioner pays per event</b> to unlock for new entries</div>
                 </div>
               </div>
             </div>
