@@ -1,5 +1,5 @@
 'use client';
-// build: winner-takes-all-4-or-less-v85-20260526-0145
+// build: history-auto-load-v86-20260526-0200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1793,6 +1793,20 @@ export default function App(){
     if(pastTeeTime&&tab==='Enter Pool')setTab('Standings');
   },[pastTeeTime,tab]);
 
+  // Auto-load past results when History tab opened
+  // FINGERPRINT_V86_AUTOLOADHISTORY
+  useEffect(()=>{
+    if(tab!=='History'||historyLoaded)return;
+    (async()=>{
+      try{
+        const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'get-archives-public'})});
+        const d=await r.json();
+        if(d?.archives){setPublicArchives(d.archives);}
+      }catch(e){console.warn('history load failed:',e.message);}
+      setHistoryLoaded(true);
+    })();
+  },[tab,historyLoaded,poolId]);
+
   const deleteOwnEntry=async(name)=>{
     if(!confirm(`Remove your entry "${name}"?`))return;
     try{
@@ -2913,13 +2927,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={{fontSize:12,color:'#8a9580'}}>Final standings from previous majors</div>
           </div>
           {!historyLoaded
-            ?<div style={{textAlign:'center',padding:40}}>
-              <button type="button" style={pri} onClick={async()=>{
-                const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'get-archives-public'})});
-                const d=await r.json();
-                if(d?.archives){setPublicArchives(d.archives);setHistoryLoaded(true);}
-              }}>Load Past Results</button>
-            </div>
+            ?<div style={{textAlign:'center',padding:40,color:'#8a9580',fontSize:13}}>Loading past results...</div>
             :publicArchives.length===0
               ?<div style={bx}><div style={{fontSize:44,marginBottom:10}}>🏆</div><p style={{color:'#8a9580'}}>No past results yet — check back after the first major!</p></div>
               :publicArchives.map(a=>{
