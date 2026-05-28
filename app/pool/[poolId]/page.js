@@ -1,5 +1,5 @@
 'use client';
-// build: just-finished-shows-F-v95-20260528-2200
+// build: per-player-display-round-v96-20260528-2230
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1067,23 +1067,29 @@ export default function App(){
               const pname = (p.player_name||'').toLowerCase().trim();
               if(!pname) return;
               const teetimes = p.teetimes || [];
-              // For UI display, show the next upcoming round's tee time
-              const nextRound = teetimes
-                .filter(t => t.round_num >= currentRound)
-                .sort((a,b) => a.round_num - b.round_num)[0];
-              // FINGERPRINT_V94_R1_GATE
+              // FINGERPRINT_V96_ALLROUNDS_TEETIMES
+              // Store tee times for ALL rounds, keyed by round number. Display logic picks the
+              // right round based on the player's completed-round scores (don't trust current_round).
+              const byRound = {};
+              teetimes.forEach(t => {
+                if(!t.teetime) return;
+                const userDate = convertTeeTimeToUserTZ(t.teetime, venueLat, venueLng);
+                byRound[t.round_num] = {
+                  teeTime: userDate ? formatTeeTimeForUser(userDate) : t.teetime,
+                  startHole: t.start_hole,
+                  roundNum: t.round_num,
+                };
+              });
               // For the IN-PLAY GATE, always look at R1 specifically — R1 is event start and never moves.
-              // Tracking R2+ would push the gate forward to tomorrow once R1 finishes, blocking live scores.
               const r1 = teetimes.find(t => t.round_num === 1);
               if (r1?.teetime) {
                 const r1Ms = new Date(r1.teetime).getTime();
                 if (r1Ms > 0 && (earliestTeeMs === 0 || r1Ms < earliestTeeMs)) earliestTeeMs = r1Ms;
               }
-              if(!nextRound?.teetime) return;
-              // Convert tournament-local time to user's local time
-              const userDate = convertTeeTimeToUserTZ(nextRound.teetime, venueLat, venueLng);
-              const teeTime = userDate ? formatTeeTimeForUser(userDate) : nextRound.teetime;
-              const data = { teeTime, startHole: nextRound.start_hole, roundNum: nextRound.round_num };
+              // Default display = lowest round we have a tee time for (R1 at start)
+              const lowestRound = Object.keys(byRound).map(Number).sort((a,b)=>a-b)[0];
+              const data = { ...byRound[lowestRound], allRounds: byRound };
+              if(!data.teeTime) return;
               teeTimeMap[pname] = data;
               // Also store name variants
               if(pname.includes(',')){
@@ -1124,6 +1130,7 @@ export default function App(){
             teeTime: teeInfo?.teeTime || null,
             startHole: teeInfo?.startHole || null,
             teeRoundNum: teeInfo?.roundNum || null,
+            allRoundsTees: teeInfo?.allRounds || null,
             pairingTeeTime: teeInfo?.teeTime || null,
             pairingStartHole: teeInfo?.startHole || null,
             pairingRoundNum: teeInfo?.roundNum || null,
@@ -2696,22 +2703,29 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               : fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);
             const thruNum = parseInt(p.thru, 10);
             const isActivelyPlaying = thruNum > 0 && thruNum < 18;
-            // Has player completed the round their tee time is scheduled for?
-            // teeRoundNum tells us what round the tee time refers to (1, 2, 3, or 4)
-            const teeRound = p.teeRoundNum || 1;
-            const roundScore = teeRound===1?p.r1 : teeRound===2?p.r2 : teeRound===3?p.r3 : p.r4;
+            // FINGERPRINT_V96_DISPLAY_ROUND
+            // Determine which round to DISPLAY for this player based on rounds they've completed.
+            // Don't trust field-updates current_round (it bumps to 2 while R1 still in progress).
+            // The player's "active round" = first round without a recorded score.
+            const completedRounds = (p.r1!=null?1:0)+(p.r2!=null?1:0)+(p.r3!=null?1:0)+(p.r4!=null?1:0);
+            const activeRoundNum = Math.min(completedRounds + 1, 4); // round they're playing or about to play
+            const allTees = p.allRoundsTees || null;
+            const displayTee = allTees?.[activeRoundNum] || (p.teeRoundNum===activeRoundNum ? {teeTime:p.teeTime, startHole:p.startHole, roundNum:p.teeRoundNum} : null);
+            const dispTeeTime = displayTee?.teeTime || (activeRoundNum===p.teeRoundNum ? p.teeTime : null);
+            const dispStartHole = displayTee?.startHole ?? p.startHole;
+            // Round score for the round whose tee time we'd show
+            const roundScore = activeRoundNum===1?p.r1 : activeRoundNum===2?p.r2 : activeRoundNum===3?p.r3 : p.r4;
             const teeRoundAlreadyPlayed = roundScore != null;
-            // FINGERPRINT_V95_JUSTFINISHED
-            // If player has thru=18 (just finished current round) but next round's tee time is in p.teeTime,
-            // show "F" rather than the next round's tee time. Their "today" is done.
+            // If player just finished their current round (thru=18), show "F" not next tee time
             const justFinishedRound = thruNum === 18 || String(p.thru) === 'F';
             // In Pairings mode, mark start of a new pairing group (tee time + start hole changes)
-            // Uses pairingTeeTime which stays locked across the round
+            // Use the active round's tee time (computed above) so groups reflect the round in play
             const prev = fieldVis[i-1];
-            const prevPairTime = prev?.pairingTeeTime || prev?.teeTime;
-            const myPairTime = p.pairingTeeTime || p.teeTime;
+            const prevDispTee = prev ? (prev.allRoundsTees?.[Math.min(((prev.r1!=null?1:0)+(prev.r2!=null?1:0)+(prev.r3!=null?1:0)+(prev.r4!=null?1:0))+1,4)]?.teeTime || prev.pairingTeeTime || prev.teeTime) : null;
+            const prevPairTime = prevDispTee;
+            const myPairTime = dispTeeTime || p.pairingTeeTime || p.teeTime;
             const prevStartHole = prev?.pairingStartHole || prev?.startHole || 1;
-            const myStartHole = p.pairingStartHole || p.startHole || 1;
+            const myStartHole = dispStartHole || p.pairingStartHole || p.startHole || 1;
             const isNewPairingGroup = fieldSort === 'pairings'
               && i > 0
               && !isCut
@@ -2724,7 +2738,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             // Show group header before first player in each pairing (during Pairings mode)
             const isPairingGroupStart = fieldSort === 'pairings' && !isCut
               && (i === 0 || isNewPairingGroup);
-            const showTeeTime = p.teeTime && !isActivelyPlaying && !isCut && !teeRoundAlreadyPlayed && !justFinishedRound;
+            const showTeeTime = dispTeeTime && !isActivelyPlaying && !isCut && !teeRoundAlreadyPlayed && !justFinishedRound;
             return(<React.Fragment key={p.name}>
               {isPairingGroupStart && myPairTime && <div style={{display:'flex',padding:'4px 10px',background:`${T.primary}10`,fontSize:10,fontWeight:700,color:T.primary,letterSpacing:.5,borderTop:i===0?'none':`2px solid ${T.primary}`,borderBottom:`1px solid ${T.primary}30`}}>
                 <span>⏰ {myPairTime}{myStartHole !== 1 ? ` · Hole ${myStartHole}` : ''}</span>
@@ -2747,7 +2761,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <span style={{width:50,textAlign:'center',fontSize:showTeeTime?9:11,color:showTeeTime?T.primary:'#888',fontWeight:showTeeTime?600:400,lineHeight:1.15}}>
                       {(() => {
                         if (isCut) return '—';
-                        if (showTeeTime) return <>{p.teeTime}{p.startHole && p.startHole !== 1 ? <><br/><span style={{fontSize:8,opacity:.75}}>·H{p.startHole}</span></> : null}</>;
+                        if (showTeeTime) return <>{dispTeeTime}{dispStartHole && dispStartHole !== 1 ? <><br/><span style={{fontSize:8,opacity:.75}}>·H{dispStartHole}</span></> : null}</>;
                         if (!p.thru) return '-';
                         // Normalize "18" to "F" (round finished)
                         const thruDisplay = (String(p.thru) === '18' || p.thru === 18) ? 'F' : p.thru;
