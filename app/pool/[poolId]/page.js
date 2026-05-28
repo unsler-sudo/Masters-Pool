@@ -1,5 +1,5 @@
 'use client';
-// build: schedule-verbiage-monday-9am-v88-20260526-0230
+// build: teetime-gate-not-utc-day-v90-20260527-0058
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1128,12 +1128,11 @@ export default function App(){
           setField(enriched);
           const evName = ptData.event_name || 'PGA Tour Event';
           setFieldSource(`📡 datagolf.com · ${enriched.length} in ${evName} field`);
-          // FINGERPRINT_V76_FETCHFIELDSKIP
-          // Immediately fetch and merge live scores — but skip Mon-Wed in pgatour mode
-          // (in-play has stale prior-event data during that window)
-          const dowFF = new Date().getUTCDay();
-          const isMonWedPgatour = major === 'pgatour' && dowFF >= 1 && dowFF <= 3;
-          if (!isMonWedPgatour) {
+          // FINGERPRINT_V90_FETCHFIELD_TEETIME_GATE
+          // Skip in-play merge if we're before R1 tees off (in-play has stale prior-event data)
+          const teeTimeMs = ptData.tee_time ? new Date(ptData.tee_time).getTime() : 0;
+          const preTeeOff = major === 'pgatour' && teeTimeMs > 0 && Date.now() < teeTimeMs;
+          if (!preTeeOff) {
             try {
               const liveRes = await fetch('/api/scores?endpoint=in-play');
               if(liveRes.ok){
@@ -1349,11 +1348,11 @@ export default function App(){
       rawScoresRef.current=null;
       return;
     }
-    // PGA Tour mode: skip in-play entirely Mon-Wed (it's always stale from prior week)
-    // FINGERPRINT_V73_MONWEDSKIP
+    // PGA Tour mode: skip in-play entirely until R1 tees off
+    // FINGERPRINT_V90_TEETIME_GATE
     if (currentMajor === 'pgatour') {
-      const dow = new Date().getUTCDay(); // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu
-      if (dow >= 1 && dow <= 3) {
+      const teeT = T?.teeTime ? new Date(T.teeTime).getTime() : 0;
+      if (!teeT || Date.now() < teeT) {
         rawScoresRef.current = null;
         return;
       }
@@ -2448,7 +2447,7 @@ export default function App(){
             const fee=poolMeta?.entryFee||0;
             const pot=entries.length*fee;
             // FINGERPRINT_V83_SMALLPOOL_WINNERTAKESALL
-            // <4 entries: winner takes entire pot. 4+ entries: 1st/2nd/3rd split (pot-3fee / 2fee / 1fee)
+            // ≤4 entries: winner takes entire pot. 5+ entries: 1st/2nd/3rd split (pot-3fee / 2fee / 1fee)
             const first=pot>0?(entries.length<=4?pot:pot-fee*3):0;
             const payoutLine=fee>0&&entries.length>=5
               ?`🏆 Pot: $${pot} ($${fee} entry × ${entries.length} entries)\n🥇 1st: $${first}  🥈 2nd: $${fee*2}  🥉 3rd: $${fee}\n\n`
