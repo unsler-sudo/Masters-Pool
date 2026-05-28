@@ -1,5 +1,5 @@
 'use client';
-// build: t-teetime-gate-everywhere-v91-20260527-0115
+// build: strict-event-match-v92-20260527-0135
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1141,8 +1141,10 @@ export default function App(){
                 const liveRaw = liveData.data || liveData.players || [];
                 const liveEvName = (liveData.event_name||'').toLowerCase().trim();
                 const expectedEv = (ptData.event_name||'').toLowerCase().trim();
-                // Only merge if in-play event matches pre-tournament event (avoids stale prior-week data)
-                const eventsMatch = !expectedEv || !liveEvName || liveEvName === expectedEv;
+                // FINGERPRINT_V92_STRICT_EVENTMATCH
+                // STRICT: require in-play to have an event_name AND it must match pre-tournament.
+                // Missing in-play event_name = between-event window where DG hasn't updated yet → stale data
+                const eventsMatch = liveEvName && expectedEv && liveEvName === expectedEv;
                 if(liveRaw.length > 0 && eventsMatch){
                   rawScoresRef.current = liveRaw;
                   const merged = mergeScoresIntoField(enriched, liveRaw);
@@ -1366,16 +1368,25 @@ export default function App(){
       const raw=data.data||data.players||data||[];
       if(!Array.isArray(raw)||raw.length===0)throw new Error('No live scores yet');
 
+      // FINGERPRINT_V92_FETCHSCORES_STRICT
       // In pgatour mode, verify in-play event matches the active pgatour event.
-      // DataGolf's in-play feed lags behind pre-tournament during between-event days (Mon-Wed).
-      // If they mismatch — OR if in-play has no event_name at all — don't merge stale data.
-      // FINGERPRINT_V72_IPGUARD
+      // Fetch pre-tournament to get the truth (schedule data may be stale or missing).
       if (currentMajor === 'pgatour') {
-        const activeEventName = (scheduleData?.pgatour?.eventName||'').toLowerCase().trim();
+        let expectedEvName = '';
+        try {
+          const ptR = await fetch('/api/scores?endpoint=pre-tournament');
+          if (ptR.ok) {
+            const pt = await ptR.json();
+            expectedEvName = (pt.event_name||'').toLowerCase().trim();
+          }
+        } catch {}
+        // Also fall back to scheduleData if pre-tournament fetch failed
+        if (!expectedEvName) {
+          expectedEvName = (scheduleData?.pgatour?.eventName||'').toLowerCase().trim();
+        }
         const ipEventName = (data.event_name||'').toLowerCase().trim();
-        // Missing ipEventName = between-event window where DG hasn't refreshed in-play yet.
-        // Treat as stale — skip merge entirely.
-        if (activeEventName && (!ipEventName || activeEventName !== ipEventName)) {
+        // STRICT: in-play must have event_name AND it must match. Empty or mismatch = skip.
+        if (!ipEventName || (expectedEvName && ipEventName !== expectedEvName)) {
           rawScoresRef.current = null;
           setRefreshing(false);
           return;
