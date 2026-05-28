@@ -1,5 +1,5 @@
 'use client';
-// build: r1-gate-locked-v94-20260528-2100
+// build: just-finished-shows-F-v95-20260528-2200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2701,6 +2701,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             const teeRound = p.teeRoundNum || 1;
             const roundScore = teeRound===1?p.r1 : teeRound===2?p.r2 : teeRound===3?p.r3 : p.r4;
             const teeRoundAlreadyPlayed = roundScore != null;
+            // FINGERPRINT_V95_JUSTFINISHED
+            // If player has thru=18 (just finished current round) but next round's tee time is in p.teeTime,
+            // show "F" rather than the next round's tee time. Their "today" is done.
+            const justFinishedRound = thruNum === 18 || String(p.thru) === 'F';
             // In Pairings mode, mark start of a new pairing group (tee time + start hole changes)
             // Uses pairingTeeTime which stays locked across the round
             const prev = fieldVis[i-1];
@@ -2720,7 +2724,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             // Show group header before first player in each pairing (during Pairings mode)
             const isPairingGroupStart = fieldSort === 'pairings' && !isCut
               && (i === 0 || isNewPairingGroup);
-            const showTeeTime = p.teeTime && !isActivelyPlaying && !isCut && !teeRoundAlreadyPlayed;
+            const showTeeTime = p.teeTime && !isActivelyPlaying && !isCut && !teeRoundAlreadyPlayed && !justFinishedRound;
             return(<React.Fragment key={p.name}>
               {isPairingGroupStart && myPairTime && <div style={{display:'flex',padding:'4px 10px',background:`${T.primary}10`,fontSize:10,fontWeight:700,color:T.primary,letterSpacing:.5,borderTop:i===0?'none':`2px solid ${T.primary}`,borderBottom:`1px solid ${T.primary}30`}}>
                 <span>⏰ {myPairTime}{myStartHole !== 1 ? ` · Hole ${myStartHole}` : ''}</span>
