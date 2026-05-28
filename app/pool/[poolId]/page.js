@@ -1,5 +1,5 @@
 'use client';
-// build: per-player-display-round-v96-20260528-2230
+// build: consistent-tournament-round-pairings-v97-20260528-2300
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1855,6 +1855,29 @@ export default function App(){
     const t = parseInt(p.thru, 10);
     return t > 0 && t < 18;
   });
+  // FINGERPRINT_V97_TOURNAMENT_ROUND
+  // Determine the single round the tournament is currently contesting (for pairings sort + grouping).
+  // Reliable: lowest round number where at least one non-cut player has no score yet.
+  // (Don't trust field-updates current_round — it bumps to R2 while R1 still in progress.)
+  const tournamentRound = (() => {
+    const active = field.filter(p => !/CUT|WD|DQ|MC/i.test(p.pos));
+    if (active.length === 0) return 1;
+    for (let rnd = 1; rnd <= 4; rnd++) {
+      const someoneNotDone = active.some(p => {
+        const rs = rnd===1?p.r1 : rnd===2?p.r2 : rnd===3?p.r3 : p.r4;
+        return rs == null;
+      });
+      if (someoneNotDone) return rnd;
+    }
+    return 4;
+  })();
+  // Resolve a player's tee time + start hole for the current tournament round (for pairings)
+  const pairTeeFor = (p) => {
+    const ar = p.allRoundsTees;
+    if (ar && ar[tournamentRound]) return { teeTime: ar[tournamentRound].teeTime, startHole: ar[tournamentRound].startHole };
+    // Fallback to whatever single tee time is on the player
+    return { teeTime: p.pairingTeeTime || p.teeTime, startHole: p.pairingStartHole || p.startHole || 1 };
+  };
   // Only consider this major "active" if it's actually within its tournament window
   const isActiveMajor = pastTeeTime || activeMajor === 'pgatour';
   // Detect if the tournament is fully complete: everyone has R4 score OR is cut
@@ -1934,18 +1957,19 @@ export default function App(){
           return a.name.localeCompare(b.name);
         }
         if (fieldSort === 'pairings') {
-          // Pairings mode: physical pairing grouping
+          // Pairings mode: physical pairing grouping for the CURRENT tournament round
           // For R3+: ALL front-9 starters first (in tee time order), then ALL back-9 at bottom
           // For R1/R2: standard tee time order (everyone usually starts hole 1)
-          const round = a.pairingRoundNum || a.teeRoundNum || b.pairingRoundNum || b.teeRoundNum || 1;
+          const round = tournamentRound;
+          const at = pairTeeFor(a), bt = pairTeeFor(b);
           if (round >= 3) {
-            const ah = a.pairingStartHole || a.startHole || 1;
-            const bh = b.pairingStartHole || b.startHole || 1;
+            const ah = at.startHole || 1;
+            const bh = bt.startHole || 1;
             if (ah !== bh) return ah - bh;
             // Within front-9: tee time DESC (latest/final pairings on top)
             // Within back-9: tee time ASC (earliest first, since they go off first physically)
-            const ta = parseTeeTime(a.pairingTeeTime || a.teeTime);
-            const tb = parseTeeTime(b.pairingTeeTime || b.teeTime);
+            const ta = parseTeeTime(at.teeTime);
+            const tb = parseTeeTime(bt.teeTime);
             if (ta !== tb) {
               return ah === 10 ? ta - tb : tb - ta;
             }
@@ -1955,11 +1979,11 @@ export default function App(){
           }
           // R1/R2: standard tee time ASC (earliest first), interleave H1/H10 starters by time
           // FINGERPRINT_V82_R1R2_PAIRINGS_ASC
-          const ta = parseTeeTime(a.pairingTeeTime || a.teeTime);
-          const tb = parseTeeTime(b.pairingTeeTime || b.teeTime);
+          const ta = parseTeeTime(at.teeTime);
+          const tb = parseTeeTime(bt.teeTime);
           if (ta !== tb) return ta - tb;
-          const ah = a.pairingStartHole || a.startHole || 1;
-          const bh = b.pairingStartHole || b.startHole || 1;
+          const ah = at.startHole || 1;
+          const bh = bt.startHole || 1;
           if (ah !== bh) return ah - bh;
           const pa=parsePos(a.pos),pb=parsePos(b.pos);
           if(pa&&pb)return pa-pb;
@@ -2719,13 +2743,14 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             // If player just finished their current round (thru=18), show "F" not next tee time
             const justFinishedRound = thruNum === 18 || String(p.thru) === 'F';
             // In Pairings mode, mark start of a new pairing group (tee time + start hole changes)
-            // Use the active round's tee time (computed above) so groups reflect the round in play
+            // Use pairTeeFor (current tournament round) so grouping matches the sort exactly
             const prev = fieldVis[i-1];
-            const prevDispTee = prev ? (prev.allRoundsTees?.[Math.min(((prev.r1!=null?1:0)+(prev.r2!=null?1:0)+(prev.r3!=null?1:0)+(prev.r4!=null?1:0))+1,4)]?.teeTime || prev.pairingTeeTime || prev.teeTime) : null;
-            const prevPairTime = prevDispTee;
-            const myPairTime = dispTeeTime || p.pairingTeeTime || p.teeTime;
-            const prevStartHole = prev?.pairingStartHole || prev?.startHole || 1;
-            const myStartHole = dispStartHole || p.pairingStartHole || p.startHole || 1;
+            const myPair = pairTeeFor(p);
+            const prevPair = prev ? pairTeeFor(prev) : {teeTime:null,startHole:1};
+            const prevPairTime = prevPair.teeTime;
+            const myPairTime = myPair.teeTime;
+            const prevStartHole = prevPair.startHole || 1;
+            const myStartHole = myPair.startHole || 1;
             const isNewPairingGroup = fieldSort === 'pairings'
               && i > 0
               && !isCut
