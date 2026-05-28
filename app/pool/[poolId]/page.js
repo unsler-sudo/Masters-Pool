@@ -1,5 +1,5 @@
 'use client';
-// build: fieldupdates-teetime-gate-v93-20260528-0730
+// build: r1-gate-locked-v94-20260528-2100
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1054,7 +1054,7 @@ export default function App(){
 
         // Fetch tee times from field-updates endpoint
         const teeTimeMap = {};
-        let earliestTeeMs = 0; // earliest tee time (UTC ms) for the current round — used as live gate
+        let earliestTeeMs = 0; // earliest R1 tee time (UTC ms) — event-start gate, never moves
         let fuCurrentRound = 1;
         try {
           const fuRes = await fetch('/api/scores?endpoint=field-updates');
@@ -1067,13 +1067,19 @@ export default function App(){
               const pname = (p.player_name||'').toLowerCase().trim();
               if(!pname) return;
               const teetimes = p.teetimes || [];
+              // For UI display, show the next upcoming round's tee time
               const nextRound = teetimes
                 .filter(t => t.round_num >= currentRound)
                 .sort((a,b) => a.round_num - b.round_num)[0];
+              // FINGERPRINT_V94_R1_GATE
+              // For the IN-PLAY GATE, always look at R1 specifically — R1 is event start and never moves.
+              // Tracking R2+ would push the gate forward to tomorrow once R1 finishes, blocking live scores.
+              const r1 = teetimes.find(t => t.round_num === 1);
+              if (r1?.teetime) {
+                const r1Ms = new Date(r1.teetime).getTime();
+                if (r1Ms > 0 && (earliestTeeMs === 0 || r1Ms < earliestTeeMs)) earliestTeeMs = r1Ms;
+              }
               if(!nextRound?.teetime) return;
-              // Track earliest tee time across the field for the current round (raw UTC)
-              const rawMs = new Date(nextRound.teetime).getTime();
-              if(rawMs > 0 && (earliestTeeMs === 0 || rawMs < earliestTeeMs)) earliestTeeMs = rawMs;
               // Convert tournament-local time to user's local time
               const userDate = convertTeeTimeToUserTZ(nextRound.teetime, venueLat, venueLng);
               const teeTime = userDate ? formatTeeTimeForUser(userDate) : nextRound.teetime;
@@ -1142,8 +1148,15 @@ export default function App(){
           //   - After earliest tee time → in-play data is for the current event → merge
           // If earliestTeeMs is unknown (field-updates failed), fall back to T.teeTime, then to skipping.
           const gateMs = earliestTeeMs || (T?.teeTime ? new Date(T.teeTime).getTime() : 0);
-          eventStartRef.current = gateMs; // share with fetchScores
-          const eventHasStarted = gateMs > 0 && Date.now() >= gateMs;
+          // Once the gate is set to a past time, never move it forward.
+          // This guards against field-updates losing R1 data after the round completes
+          // (e.g., DataGolf rotating to next event's data) — once event started, it stays started.
+          const prevGate = eventStartRef.current;
+          if (gateMs > 0 && (prevGate === 0 || gateMs <= Date.now() || gateMs < prevGate)) {
+            eventStartRef.current = gateMs;
+          }
+          const effectiveGate = eventStartRef.current;
+          const eventHasStarted = effectiveGate > 0 && Date.now() >= effectiveGate;
           if (major !== 'pgatour' || eventHasStarted) {
             try {
               const liveRes = await fetch('/api/scores?endpoint=in-play');
