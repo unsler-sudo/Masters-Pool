@@ -1,5 +1,5 @@
 'use client';
-// build: teetime-gate-not-utc-day-v90-20260527-0058
+// build: t-teetime-gate-everywhere-v91-20260527-0115
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1128,10 +1128,11 @@ export default function App(){
           setField(enriched);
           const evName = ptData.event_name || 'PGA Tour Event';
           setFieldSource(`📡 datagolf.com · ${enriched.length} in ${evName} field`);
-          // FINGERPRINT_V90_FETCHFIELD_TEETIME_GATE
+          // FINGERPRINT_V91_FETCHFIELD_T_TEETIME
           // Skip in-play merge if we're before R1 tees off (in-play has stale prior-event data)
-          const teeTimeMs = ptData.tee_time ? new Date(ptData.tee_time).getTime() : 0;
-          const preTeeOff = major === 'pgatour' && teeTimeMs > 0 && Date.now() < teeTimeMs;
+          // Use T.teeTime (from schedule data) — DataGolf's pre-tournament JSON doesn't include tee_time
+          const teeTimeMs = T?.teeTime ? new Date(T.teeTime).getTime() : 0;
+          const preTeeOff = major === 'pgatour' && (!teeTimeMs || Date.now() < teeTimeMs);
           if (!preTeeOff) {
             try {
               const liveRes = await fetch('/api/scores?endpoint=in-play');
