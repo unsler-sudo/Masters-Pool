@@ -1,5 +1,5 @@
 'use client';
-// build: strict-event-match-v92-20260527-0135
+// build: fieldupdates-teetime-gate-v93-20260528-0730
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -793,6 +793,7 @@ export default function App(){
   const [paymentsHidden,setPaymentsHidden]=useState(false);
   const [lastUp,setLastUp]=useState(null);
   const rawScoresRef=useRef(null);
+  const eventStartRef=useRef(0); // earliest tee time (UTC ms) of current pgatour event — set by fetchField, read by fetchScores
   const liveStatsRef=useRef(null); // Cache live-stats map by player_name
   const [liveStatsLoaded,setLiveStatsLoaded]=useState(false);
   const [openCard,setOpenCard]=useState(null);
@@ -1053,12 +1054,15 @@ export default function App(){
 
         // Fetch tee times from field-updates endpoint
         const teeTimeMap = {};
+        let earliestTeeMs = 0; // earliest tee time (UTC ms) for the current round — used as live gate
+        let fuCurrentRound = 1;
         try {
           const fuRes = await fetch('/api/scores?endpoint=field-updates');
           if(fuRes.ok){
             const fd = await fuRes.json();
             const fieldPlayers = fd.field || fd.players || [];
             const currentRound = fd.current_round || 1;
+            fuCurrentRound = currentRound;
             fieldPlayers.forEach(p=>{
               const pname = (p.player_name||'').toLowerCase().trim();
               if(!pname) return;
@@ -1067,6 +1071,9 @@ export default function App(){
                 .filter(t => t.round_num >= currentRound)
                 .sort((a,b) => a.round_num - b.round_num)[0];
               if(!nextRound?.teetime) return;
+              // Track earliest tee time across the field for the current round (raw UTC)
+              const rawMs = new Date(nextRound.teetime).getTime();
+              if(rawMs > 0 && (earliestTeeMs === 0 || rawMs < earliestTeeMs)) earliestTeeMs = rawMs;
               // Convert tournament-local time to user's local time
               const userDate = convertTeeTimeToUserTZ(nextRound.teetime, venueLat, venueLng);
               const teeTime = userDate ? formatTeeTimeForUser(userDate) : nextRound.teetime;
@@ -1128,24 +1135,22 @@ export default function App(){
           setField(enriched);
           const evName = ptData.event_name || 'PGA Tour Event';
           setFieldSource(`📡 datagolf.com · ${enriched.length} in ${evName} field`);
-          // FINGERPRINT_V91_FETCHFIELD_T_TEETIME
-          // Skip in-play merge if we're before R1 tees off (in-play has stale prior-event data)
-          // Use T.teeTime (from schedule data) — DataGolf's pre-tournament JSON doesn't include tee_time
-          const teeTimeMs = T?.teeTime ? new Date(T.teeTime).getTime() : 0;
-          const preTeeOff = major === 'pgatour' && (!teeTimeMs || Date.now() < teeTimeMs);
-          if (!preTeeOff) {
+          // FINGERPRINT_V93_FIELDUPDATES_GATE
+          // The current event has started once we're past the earliest R1 tee time (from field-updates).
+          // in-play feed NEVER includes event_name, so we can't match on it. Instead:
+          //   - Before earliest tee time → in-play data is stale (prior event) → skip merge
+          //   - After earliest tee time → in-play data is for the current event → merge
+          // If earliestTeeMs is unknown (field-updates failed), fall back to T.teeTime, then to skipping.
+          const gateMs = earliestTeeMs || (T?.teeTime ? new Date(T.teeTime).getTime() : 0);
+          eventStartRef.current = gateMs; // share with fetchScores
+          const eventHasStarted = gateMs > 0 && Date.now() >= gateMs;
+          if (major !== 'pgatour' || eventHasStarted) {
             try {
               const liveRes = await fetch('/api/scores?endpoint=in-play');
               if(liveRes.ok){
                 const liveData = await liveRes.json();
                 const liveRaw = liveData.data || liveData.players || [];
-                const liveEvName = (liveData.event_name||'').toLowerCase().trim();
-                const expectedEv = (ptData.event_name||'').toLowerCase().trim();
-                // FINGERPRINT_V92_STRICT_EVENTMATCH
-                // STRICT: require in-play to have an event_name AND it must match pre-tournament.
-                // Missing in-play event_name = between-event window where DG hasn't updated yet → stale data
-                const eventsMatch = liveEvName && expectedEv && liveEvName === expectedEv;
-                if(liveRaw.length > 0 && eventsMatch){
+                if(liveRaw.length > 0){
                   rawScoresRef.current = liveRaw;
                   const merged = mergeScoresIntoField(enriched, liveRaw);
                   setField(merged);
@@ -1351,11 +1356,13 @@ export default function App(){
       rawScoresRef.current=null;
       return;
     }
-    // PGA Tour mode: skip in-play entirely until R1 tees off
-    // FINGERPRINT_V90_TEETIME_GATE
+    // PGA Tour mode: skip in-play until the current event has actually started.
+    // FINGERPRINT_V93_FETCHSCORES_GATE
+    // Gate on earliest tee time (set by fetchField from field-updates). in-play has no event_name
+    // to match on, so the tee-time gate is the reliable discriminator against stale prior-event data.
     if (currentMajor === 'pgatour') {
-      const teeT = T?.teeTime ? new Date(T.teeTime).getTime() : 0;
-      if (!teeT || Date.now() < teeT) {
+      const gateMs = eventStartRef.current || (T?.teeTime ? new Date(T.teeTime).getTime() : 0);
+      if (!gateMs || Date.now() < gateMs) {
         rawScoresRef.current = null;
         return;
       }
@@ -1367,31 +1374,6 @@ export default function App(){
       const data=await r.json();
       const raw=data.data||data.players||data||[];
       if(!Array.isArray(raw)||raw.length===0)throw new Error('No live scores yet');
-
-      // FINGERPRINT_V92_FETCHSCORES_STRICT
-      // In pgatour mode, verify in-play event matches the active pgatour event.
-      // Fetch pre-tournament to get the truth (schedule data may be stale or missing).
-      if (currentMajor === 'pgatour') {
-        let expectedEvName = '';
-        try {
-          const ptR = await fetch('/api/scores?endpoint=pre-tournament');
-          if (ptR.ok) {
-            const pt = await ptR.json();
-            expectedEvName = (pt.event_name||'').toLowerCase().trim();
-          }
-        } catch {}
-        // Also fall back to scheduleData if pre-tournament fetch failed
-        if (!expectedEvName) {
-          expectedEvName = (scheduleData?.pgatour?.eventName||'').toLowerCase().trim();
-        }
-        const ipEventName = (data.event_name||'').toLowerCase().trim();
-        // STRICT: in-play must have event_name AND it must match. Empty or mismatch = skip.
-        if (!ipEventName || (expectedEvName && ipEventName !== expectedEvName)) {
-          rawScoresRef.current = null;
-          setRefreshing(false);
-          return;
-        }
-      }
 
       rawScoresRef.current=raw; // Cache for re-merge when field updates
 
