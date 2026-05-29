@@ -1,5 +1,5 @@
 'use client';
-// build: payout-mode-toggle-v100-20260529-1245
+// build: history-grouped-majors-tour-v101-20260529-1300
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2990,13 +2990,16 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
         {tab==='History'&&<>
           <div style={{textAlign:'center',marginBottom:16}}>
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800,color:T.primary,marginBottom:4}}>📚 Past Results</div>
-            <div style={{fontSize:12,color:'#8a9580'}}>Final standings from previous majors</div>
+            <div style={{fontSize:12,color:'#8a9580'}}>Final standings from previous events</div>
           </div>
           {!historyLoaded
             ?<div style={{textAlign:'center',padding:40,color:'#8a9580',fontSize:13}}>Loading past results...</div>
             :publicArchives.length===0
-              ?<div style={bx}><div style={{fontSize:44,marginBottom:10}}>🏆</div><p style={{color:'#8a9580'}}>No past results yet — check back after the first major!</p></div>
-              :publicArchives.map(a=>{
+              ?<div style={bx}><div style={{fontSize:44,marginBottom:10}}>🏆</div><p style={{color:'#8a9580'}}>No past results yet — check back after the first event!</p></div>
+              :(()=>{
+                // FINGERPRINT_V101_HISTORY_GROUPS
+                // Split archives: majors (players/masters/pga/usopen/open) vs PGA Tour weekly events
+                const renderArchiveCard = (a) => {
                 const THEME={...THEMES[a.major]||THEMES.pga};
                 const earnings=a.earnings||{};
                 const hasEarnings=Object.keys(earnings).length>0;
@@ -3066,7 +3069,22 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     Tap to see picks & earnings — Top 3: {ranked.slice(0,3).map(r=>r.name).join(' · ')}
                   </div>}
                 </div>;
-              })
+                };
+                const majorKeys=['players','masters','pga','usopen','open'];
+                const majorArchives=publicArchives.filter(a=>majorKeys.includes(a.major));
+                const tourArchives=publicArchives.filter(a=>a.major==='pgatour');
+                const sectionHdr=(txt)=>(<div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:800,color:T.primary,margin:'4px 0 10px',paddingBottom:6,borderBottom:`2px solid ${T.primary}22`}}>{txt}</div>);
+                return <>
+                  {majorArchives.length>0&&<div style={{marginBottom:20}}>
+                    {sectionHdr('⛳ Majors')}
+                    {majorArchives.map(renderArchiveCard)}
+                  </div>}
+                  {tourArchives.length>0&&<div>
+                    {sectionHdr('🏌️ PGA Tour Events')}
+                    {tourArchives.map(renderArchiveCard)}
+                  </div>}
+                </>;
+              })()
           }
         </>}
 
