@@ -1,5 +1,5 @@
 'use client';
-// build: history-grouped-majors-tour-v101-20260529-1300
+// build: popup-active-round-tee-v102-20260529-1320
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2261,7 +2261,20 @@ export default function App(){
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800}}>{flip(p.name)}</div>
                     <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
-                    {p.teeTime&&<div style={{fontSize:11,color:T.primary,marginTop:3,fontWeight:600}}>⏰ R{p.teeRoundNum||1} Tee: {p.teeTime}{p.startHole?` · Hole ${p.startHole}`:''}</div>}
+                    {(()=>{
+                      // FINGERPRINT_V102_POPUP_TEE
+                      // Show the tee time for the player's active round (next to play), not always R1.
+                      const completed=(p.r1!=null?1:0)+(p.r2!=null?1:0)+(p.r3!=null?1:0)+(p.r4!=null?1:0);
+                      const activeRound=Math.min(completed+1,4);
+                      const ar=p.allRoundsTees;
+                      const t=(ar&&ar[activeRound])||(p.teeRoundNum===activeRound?{teeTime:p.teeTime,startHole:p.startHole,roundNum:activeRound}:null);
+                      const thruN=parseInt(p.thru,10);
+                      const isPlaying=thruN>0&&thruN<18;
+                      const roundScore=activeRound===1?p.r1:activeRound===2?p.r2:activeRound===3?p.r3:p.r4;
+                      // Only show a tee time if they have one for the upcoming round and haven't started/finished it
+                      if(!t?.teeTime||isPlaying||roundScore!=null)return null;
+                      return <div style={{fontSize:11,color:T.primary,marginTop:3,fontWeight:600}}>⏰ R{activeRound} Tee: {t.teeTime}{t.startHole?` · Hole ${t.startHole}`:''}</div>;
+                    })()}
                   </div>
                   <div style={{textAlign:'right'}}>
                     <div style={{fontSize:26,fontWeight:800,color:T.primary}}>{p.score}</div>
