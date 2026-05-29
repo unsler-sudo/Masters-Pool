@@ -1,5 +1,5 @@
 'use client';
-// build: show-next-round-tee-v98-20260528-2330
+// build: earnings-beyond-table-fix-v99-20260529-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -683,20 +683,27 @@ function formatTeeTimeForUser(date) {
 
 
 function calcEarnings(players, purse, major, tournamentComplete){
+  // FINGERPRINT_V99_EARNINGS_FIX
+  // Projected earnings are shown during live play (pool standings need them), but:
+  //  - Cut/WD/DQ players earn $0 (never the payout table)
+  //  - Players ranked BEYOND the payout table earn $0 during live play, and only the
+  //    min cut-line payout once the tournament is COMPLETE (mirrors real PGA Tour: only
+  //    players who make the cut get paid, and the field beyond the table is the missed-cut group).
+  // The old bug: beyond-table players got the cut-line fallback mid-tournament, so a +9 player
+  // (rank 132) showed MORE than an even-par player ranked 83 inside the tail of the table.
   const payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
   const maxPos = Math.max(...Object.keys(payoutTable).map(Number));
-  // Build groups for positions within the table
   const g={};
-  // Track players who made cut but finished beyond the payout table (still earn min payout)
   const beyondMaxPos=[];
   players.forEach(p=>{
+    const isCut = /CUT|WD|DQ|MC/i.test(p.pos||'');
+    if(isCut) return; // cut/WD/DQ earn nothing
     const pos=parsePos(p.pos);
     if(pos){
       if(pos<=maxPos){
         if(!g[pos])g[pos]=[];
         g[pos].push(p.name);
       } else {
-        // Made cut + finished tournament but ranked > maxPos: gets minimum cut-line payout
         beyondMaxPos.push(p.name);
       }
     }
@@ -704,23 +711,20 @@ function calcEarnings(players, purse, major, tournamentComplete){
   const m={};
   Object.entries(g).forEach(([ps,pls])=>{
     const pos=+ps;
-    // Live tournament: if multiple players tied at the LEAD (position 1), each gets full winner share (no split)
-    // After tournament complete: revert to standard tied-split math
+    // Live tournament: multiple players tied at the LEAD each show full winner share (no split)
     if(pos===1 && pls.length>1 && !tournamentComplete){
       const winnerShare = Math.round(payoutTable[1]*purse);
       pls.forEach(n=>{m[n]=winnerShare;});
       return;
     }
-    // Standard tied-split math for everyone else (or final results)
     let t=0;
     for(let i=0;i<pls.length;i++)t+=payoutTable[pos+i]||0;
     const e=Math.round(t/pls.length*purse);
     pls.forEach(n=>{m[n]=e;});
   });
-  // Pay anyone beyond maxPos at the cut-line rate (last paid position)
-  // PGA Tour rule: every player who makes the cut gets at least the minimum payout
+  // Beyond the payout table: $0 during live play; min payout only when tournament is complete
   if (beyondMaxPos.length > 0) {
-    const minPayout = Math.round((payoutTable[maxPos]||0)*purse);
+    const minPayout = tournamentComplete ? Math.round((payoutTable[maxPos]||0)*purse) : 0;
     beyondMaxPos.forEach(n=>{m[n]=minPayout;});
   }
   return m;
