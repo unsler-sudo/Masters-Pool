@@ -1,5 +1,5 @@
 'use client';
-// build: consistent-tournament-round-pairings-v97-20260528-2300
+// build: show-next-round-tee-v98-20260528-2330
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2740,8 +2740,16 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             // Round score for the round whose tee time we'd show
             const roundScore = activeRoundNum===1?p.r1 : activeRoundNum===2?p.r2 : activeRoundNum===3?p.r3 : p.r4;
             const teeRoundAlreadyPlayed = roundScore != null;
-            // If player just finished their current round (thru=18), show "F" not next tee time
-            const justFinishedRound = thruNum === 18 || String(p.thru) === 'F';
+            // FINGERPRINT_V98_SHOW_NEXT_TEE
+            // Show the upcoming round's tee time when:
+            //   - player isn't actively playing (thru 1-17), and
+            //   - they have a tee time for their active (next-to-play) round, and
+            //   - they haven't recorded a score for that round yet.
+            // The thru=18 "F" only persists while no next-round tee time is available yet
+            // (e.g., right after finishing before DataGolf posts next round's times).
+            const hasUpcomingTee = !!dispTeeTime && !teeRoundAlreadyPlayed;
+            // "Just finished with nothing next" → show F. Otherwise show the upcoming tee time.
+            const justFinishedRound = (thruNum === 18 || String(p.thru) === 'F') && !hasUpcomingTee;
             // In Pairings mode, mark start of a new pairing group (tee time + start hole changes)
             // Use pairTeeFor (current tournament round) so grouping matches the sort exactly
             const prev = fieldVis[i-1];
