@@ -1,5 +1,5 @@
 'use client';
-// build: earnings-beyond-table-fix-v99-20260529-1200
+// build: payout-mode-toggle-v100-20260529-1245
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1835,6 +1835,12 @@ export default function App(){
   };
 
   const teamE=e=>e.picks.reduce((s,n)=>s+(field.find(f=>f.name===n)?.earnings||0),0);
+  // FINGERPRINT_V100_PAYOUTMODE
+  // Winner-take-all applies if the commissioner toggled it OR the pool has ≤4 entries (auto).
+  // Returns true/false given an entry count.
+  const isWinnerTakeAll = (count) => poolMeta?.payoutMode === 'winner-take-all' || count <= 4;
+  // Standard split prizes for a given pot/fee: [1st, 2nd, 3rd]. Winner-take-all → [pot,0,0].
+  const computePrizes = (count, pot, fee) => isWinnerTakeAll(count) ? [pot, 0, 0] : [pot-fee*3, fee*2, fee];
   // Only re-rank entries once field has earnings data, otherwise keep stable order
   // This eliminates the loading flicker where rankings briefly shift as data streams in
   const fieldHasEarnings = field.some(f => f.earnings > 0);
@@ -2460,10 +2466,8 @@ export default function App(){
           {!pastTeeTime&&poolMeta?.entryFee>0&&entries.length>=1&&(()=>{
             const fee=poolMeta.entryFee;
             const pot=entries.length*fee;
-            const winnerTakesAll = entries.length<=4;
-            const first = winnerTakesAll ? pot : pot - fee*3;
-            const second = winnerTakesAll ? 0 : fee*2;
-            const third = winnerTakesAll ? 0 : fee;
+            const winnerTakesAll = isWinnerTakeAll(entries.length);
+            const [first, second, third] = computePrizes(entries.length, pot, fee);
             return <div style={{background:'#fff',border:`1px solid ${T.cardBorder}`,borderRadius:11,padding:'10px 14px',marginBottom:10,display:'flex',alignItems:'center',gap:10,justifyContent:'space-around'}}>
               <div style={{textAlign:'center'}}>
                 <div style={{fontSize:18,fontWeight:800,color:T.primary}}>🥇 ${first}</div>
@@ -2488,12 +2492,13 @@ export default function App(){
             const shareLink=typeof window!=='undefined'?window.location.origin+'/pool/'+poolId:'';
             const fee=poolMeta?.entryFee||0;
             const pot=entries.length*fee;
-            // FINGERPRINT_V83_SMALLPOOL_WINNERTAKESALL
-            // ≤4 entries: winner takes entire pot. 5+ entries: 1st/2nd/3rd split (pot-3fee / 2fee / 1fee)
-            const first=pot>0?(entries.length<=4?pot:pot-fee*3):0;
-            const payoutLine=fee>0&&entries.length>=5
+            // FINGERPRINT_V100_SHARE_PAYOUT
+            // Winner-take-all (toggle or ≤4 entries) → 1st gets pot. Else 1st/2nd/3rd split.
+            const wta = isWinnerTakeAll(entries.length);
+            const first=pot>0?(wta?pot:pot-fee*3):0;
+            const payoutLine=fee>0&&!wta&&entries.length>0
               ?`🏆 Pot: $${pot} ($${fee} entry × ${entries.length} entries)\n🥇 1st: $${first}  🥈 2nd: $${fee*2}  🥉 3rd: $${fee}\n\n`
-              :fee>0&&entries.length>0
+              :fee>0&&wta&&entries.length>0
               ?`🏆 Pot: $${pot} ($${fee} entry × ${entries.length} entries)\n🥇 Winner takes all: $${first}\n\n`
               :fee>0
                 ?`💵 Entry: $${fee} per person\n\n`
@@ -2577,8 +2582,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             const fee=poolMeta?.entryFee||0;
             const showPrizes=!picksHidden&&fee>0&&ranked.length>=1;
             const pot=ranked.length*fee;
-            // <4 entries: winner takes entire pot (1st only). 4+ entries: 1st/2nd/3rd split.
-            const prizes = ranked.length<=4 ? [pot, 0, 0] : [pot-fee*3, fee*2, fee];
+            // Winner-take-all (toggle or ≤4 entries) → [pot,0,0]. Else 1st/2nd/3rd split.
+            const prizes = computePrizes(ranked.length, pot, fee);
             const prize=showPrizes&&i<3?prizes[i]:0;
             return(
               <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:`1px solid ${T.cardBorder}`,animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
@@ -3167,6 +3172,23 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               </div>
               <p style={{fontSize:11,color:'#888',marginTop:8}}>Current code: <strong style={{fontFamily:'monospace',color:T.primary,fontSize:13}}>{poolMeta?.joinCode||'(none set)'}</strong></p>
             </div>
+            <div style={sec}><h3 style={stl}>💰 Payout Structure</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Choose how the pot is split. <b>Standard</b> pays 1st/2nd/3rd (1st gets the pot minus two entry fees, 2nd gets two entry fees, 3rd gets one). <b>Winner-take-all</b> gives the entire pot to 1st place.</p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                {[['standard','🥇🥈🥉 Standard','1st / 2nd / 3rd split'],['winner-take-all','🏆 Winner Take All','1st place gets entire pot']].map(([mode,label,desc])=>{
+                  const current=(poolMeta?.payoutMode||'standard')===mode;
+                  return <button key={mode} type="button" onClick={async()=>{
+                    const d=await adminAction('set-payout-mode',{payoutMode:mode});
+                    if(d?.ok){msg(mode==='winner-take-all'?'Winner-take-all enabled':'Standard payouts enabled');setPoolMeta(prev=>({...prev,payoutMode:mode}));}
+                  }} style={{padding:'14px 10px',borderRadius:12,border:`2px solid ${current?T.primary:'#e0e0e0'}`,background:current?T.primary:'#fafafa',color:current?'#fff':'#555',fontWeight:current?700:500,fontSize:12,cursor:'pointer',textAlign:'center'}}>
+                    <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>{label}</div>
+                    <div style={{fontSize:10,opacity:.75}}>{desc}</div>
+                    {current&&<div style={{fontSize:10,background:'#ffffff30',borderRadius:8,padding:'2px 8px',display:'inline-block',marginTop:6}}>✓ Active</div>}
+                  </button>;
+                })}
+              </div>
+              <p style={{fontSize:11,color:'#888',marginTop:8}}>Note: pools with 4 or fewer entries are always winner-take-all regardless of this setting.</p>
+            </div>
             <div style={sec}><h3 style={stl}>🎨 Custom Pool Logo</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Override the major's default logo with your own. Paste a public image URL (PNG/JPG). Leave blank to use the default major logo.</p>
               <input style={{...inp,marginBottom:6}} type="url" placeholder="https://example.com/my-logo.png" id="customLogoInput" defaultValue={poolMeta?.customLogoUrl||''}/>
@@ -3217,10 +3239,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               {poolMeta?.entryFee>0&&entries.length>=1&&(()=>{
                 const fee=poolMeta.entryFee;
                 const pot=entries.length*fee;
-                const first = entries.length<=4 ? pot : pot-fee*3;
+                const wta = isWinnerTakeAll(entries.length);
+                const first = wta ? pot : pot-fee*3;
                 return <div style={{background:`${T.primary}0a`,borderRadius:8,padding:'10px 12px',fontSize:12,color:T.primary}}>
                   <div style={{fontWeight:700,marginBottom:4}}>Current Pot: ${pot} ({entries.length} × ${fee})</div>
-                  {entries.length<=4
+                  {wta
                     ? <div>🥇 Winner takes all: <b>${first}</b></div>
                     : <div>🥇 1st: <b>${first}</b> · 🥈 2nd: <b>${fee*2}</b> · 🥉 3rd: <b>${fee}</b></div>
                   }
