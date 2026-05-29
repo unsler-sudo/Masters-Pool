@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: protect-paid-pools-from-deletion-v29-20260525-1130
+// build: payout-mode-toggle-v30-20260529-1230
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1082,6 +1082,16 @@ export async function POST(request) {
       meta.customLogoHeight = parseInt(body.customLogoHeight,10) || 72;
       await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
       return Response.json({ ok:true, meta });
+    }
+
+    if (body.action==='set-payout-mode') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId);
+      if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
+      // 'standard' = 1st/2nd/3rd split; 'winner-take-all' = 1st gets entire pot
+      meta.payoutMode = body.payoutMode === 'winner-take-all' ? 'winner-take-all' : 'standard';
+      await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
+      return Response.json({ ok:true, payoutMode: meta.payoutMode });
     }
 
     if (body.action==='set-join-code') {
