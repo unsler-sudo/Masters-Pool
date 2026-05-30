@@ -1,5 +1,5 @@
 'use client';
-// build: popup-active-round-tee-v102-20260529-1320
+// build: cut-detection-r3tee-fix-v104-20260529-1400
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1461,21 +1461,23 @@ export default function App(){
     });
 
     // ── MISSED CUT DETECTION ─────────────────────────────────────────────
-    // After R2, anyone without an upcoming tee time is cut.
-    // GUARD: only flip CUT status if R3 tee times have actually been published.
-    // We confirm publication by checking that a meaningful number of players have
-    // upcoming tee times. If DataGolf is lagging and no one has R3 tees yet,
-    // we leave everyone in their R2 position rather than marking the whole field CUT.
-    const playersWithFutureTee = updated.filter(p => !!p.teeTime).length;
-    const r3TeeTimesPublished = playersWithFutureTee >= 50;
+    // FINGERPRINT_V104_CUT_R3TEE
+    // After R2, players who made the cut get an R3 tee time; those who missed don't.
+    // Check allRoundsTees[3] specifically (p.teeTime is the R1 time for everyone, so it
+    // can't be used to detect the cut — that was the v96 regression).
+    // GUARD: only flip CUT status once R3 tees are actually published (≥50 players have one),
+    // otherwise DataGolf lag would mark the whole field CUT.
+    const hasR3Tee = (p) => !!(p.allRoundsTees && p.allRoundsTees[3] && p.allRoundsTees[3].teeTime);
+    const playersWithR3Tee = updated.filter(hasR3Tee).length;
+    const r3TeeTimesPublished = playersWithR3Tee >= 50;
     if (r3TeeTimesPublished) {
       updated.forEach(p => {
         const r1Done = p.r1 != null;
         const r2Done = p.r2 != null;
         const r3NotStarted = p.r3 == null;
-        const noUpcomingTee = !p.teeTime;
+        const noR3Tee = !hasR3Tee(p);
         const notAlreadyMarked = !/CUT|WD|DQ|MC/i.test(p.pos||'');
-        if (r1Done && r2Done && r3NotStarted && noUpcomingTee && notAlreadyMarked) {
+        if (r1Done && r2Done && r3NotStarted && noR3Tee && notAlreadyMarked) {
           p.pos = 'CUT';
         }
       });
