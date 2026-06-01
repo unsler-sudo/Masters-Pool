@@ -1,5 +1,5 @@
 'use client';
-// build: require-published-r1-gate-v109-20260601-1330
+// build: dynamic-tiers-field-size-v110-20260601-1430
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1131,6 +1131,15 @@ export default function App(){
           }
         } catch(e){ console.warn('pgatour tee times unavailable:', e.message); }
 
+        // FINGERPRINT_V110_DYNAMIC_TIERS
+        // Tier boundaries scale to field size. Signature events have ~72 players (no cut),
+        // full-field events have ~132+. Fixed 12/56 left signature events with a tiny Tier C
+        // and full fields with an oversized Tier C. Scale: A=top 12, B≈next 45%, C=rest.
+        const fieldSize = sorted.length;
+        const tierAMax = 12; // top 12 favorites always Tier A
+        const tierBMax = fieldSize <= 80
+          ? Math.round(fieldSize * 0.55)   // ~72-player signature: A=12, B→~40, C→~20
+          : Math.min(68, Math.round(fieldSize * 0.52)); // full field: A=12, B→~68, C→rest
         // Build enriched player list
         const enriched = sorted.map((p, i) => {
           const name = p.player_name || p.name || '';
@@ -1138,8 +1147,8 @@ export default function App(){
           const displayName = name.includes(',') ? name.split(',').reverse().map(s=>s.trim()).join(' ') : name;
           const win = p.win || 0;
           const odds = win > 0.001 ? `+${Math.round((1/win)*100-100)}` : 'n/a';
-          // Tier cuts: Top 12 favorites, 13-56 contenders, 57+ longshots
-          const tier = i < 12 ? 1 : i < 56 ? 2 : 3;
+          // Tier cuts scale to field size (see above)
+          const tier = i < tierAMax ? 1 : i < tierBMax ? 2 : 3;
           // Look up tee time
           const nameKey = (p.player_name || '').toLowerCase().trim();
           const displayKey = displayName.toLowerCase().trim();
