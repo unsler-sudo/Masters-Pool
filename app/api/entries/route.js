@@ -1,7 +1,5 @@
-
-
 export const dynamic = 'force-dynamic';
-// build: pgatour-archive-slug-keys-v31-20260529-1500
+// build: import-archive-slug-key-v32-20260601-1400
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -907,13 +905,18 @@ export async function POST(request) {
 
     if (body.action === 'import-archive') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
-      const { major, year, entries, payments, earnings, entryFee, prizes, logoUrl, logoNoBg, logoHeight, tournamentDate } = body;
+      const { major, year, entries, payments, earnings, entryFee, prizes, logoUrl, logoNoBg, logoHeight, tournamentDate, eventName } = body;
       if (!major || !year || !Array.isArray(entries)) {
         return Response.json({ error:'major, year, and entries[] required' }, { status:400 });
       }
-      const archiveKey = k(poolId, `archive:${major}_${year}`);
+      // FINGERPRINT_V32_IMPORT_SLUG — pgatour archives keyed by event slug to match History read + rotation
+      const slug = (eventName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+      const archiveKey = (major === 'pgatour' && slug)
+        ? k(poolId, `archive:pgatour-${slug}_${year}`)
+        : k(poolId, `archive:${major}_${year}`);
       const archiveData = {
         major, year,
+        eventName: eventName || undefined,
         archivedAt: new Date().toISOString(),
         entries, payments: payments || {}, earnings: earnings || {},
         entryFee: entryFee || 0,
