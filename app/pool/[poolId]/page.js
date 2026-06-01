@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-tagline-theme-match-v112-20260601-1530
+// build: event-name-in-countdown-v113-20260601-1545
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2640,7 +2640,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div>
               <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',fontWeight:600,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{locked?'Tournament Tees Off In':'Entries Close In'}</div>
               <div style={{fontSize:26,fontWeight:800,color:'#fff',fontFamily:"'Playfair Display',serif",letterSpacing:-.5}}>{countdown.replace(' until entries lock','')}</div>
-              <div style={{fontSize:11,color:'rgba(255,255,255,0.55)',marginTop:3}}>{T.courseName}</div>
+              <div style={{fontSize:13,fontWeight:700,color:'#fff',fontFamily:"'Playfair Display',serif",marginTop:5}}>{T.eventName}</div>
+              <div style={{fontSize:11,color:'rgba(255,255,255,0.55)',marginTop:1}}>{T.courseName}</div>
             </div>
             <div style={{textAlign:'center'}}>
               <div style={{fontSize:36}}>{T.emoji}</div>
