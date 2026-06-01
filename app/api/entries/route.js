@@ -1,5 +1,7 @@
+
+
 export const dynamic = 'force-dynamic';
-// build: payout-mode-toggle-v30-20260529-1230
+// build: pgatour-archive-slug-keys-v31-20260529-1500
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1182,13 +1184,29 @@ export async function POST(request) {
     }
 
     if (body.action==='save-full-archive') {
-      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
-      const { major, year, earnings, logoUrl, logoNoBg, logoHeight, tournamentDate } = body;
-      const archiveKey = k(poolId, `archive:${major}_${year}`);
-      const [entries, payments, meta] = await Promise.all([getEntries(poolId), getPayments(poolId), getPoolMeta(poolId)]);
+      if (body.password!=='auto' && !await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      // For 'auto' (frontend) calls, require non-empty, non-zero earnings to avoid clobbering good data.
+      if (body.password==='auto') {
+        const e = body.earnings || {};
+        if (Object.keys(e).length === 0 || !Object.values(e).some(v => v > 0)) {
+          return Response.json({ ok:true, skipped:'auto call with no real earnings' });
+        }
+      }
+      const { major, year, earnings, logoUrl, logoNoBg, logoHeight, tournamentDate, eventName } = body;
+      // FINGERPRINT_V31_ARCHIVE_KEY
+      // pgatour archives are keyed by event slug to avoid week-to-week collisions.
+      // Major archives keep the simple major_year key.
+      const meta = await getPoolMeta(poolId);
+      const evName = eventName || meta?.currentPgatourEvent || '';
+      const slug = (evName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+      const archiveKey = (major === 'pgatour' && slug)
+        ? k(poolId, `archive:pgatour-${slug}_${year}`)
+        : k(poolId, `archive:${major}_${year}`);
+      const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
       const archiveData = {
         major,
         year,
+        eventName: evName || undefined,
         archivedAt: new Date().toISOString(),
         entries,
         payments,
@@ -1197,7 +1215,7 @@ export async function POST(request) {
         logoUrl: logoUrl || null,
         logoNoBg: logoNoBg !== undefined ? logoNoBg : null,
         logoHeight: logoHeight || null,
-        tournamentDate: tournamentDate || null,
+        tournamentDate: tournamentDate || new Date().toISOString(),
       };
       await redis('SET', archiveKey, JSON.stringify(archiveData));
       return Response.json({ ok:true, archived:{entries:entries.length, earnings:Object.keys(earnings||{}).length}});
@@ -1206,7 +1224,7 @@ export async function POST(request) {
     if (body.action==='save-archive-earnings') {
       if (body.password!=='auto' && !await checkAdmin(body.password))
         return Response.json({ error:'Wrong password' }, { status:401 });
-      const { major, year, earnings } = body;
+      const { major, year, earnings, eventName } = body;
       // GUARD: refuse to save empty earnings — would blank out existing data
       if (!earnings || Object.keys(earnings).length === 0) {
         return Response.json({ ok:true, skipped:'empty earnings' });
@@ -1216,7 +1234,13 @@ export async function POST(request) {
       if (!hasNonZero) {
         return Response.json({ ok:true, skipped:'all zeros' });
       }
-      const archiveKey = k(poolId, `archive:${major}_${year}`);
+      // FINGERPRINT_V31_EARNINGS_KEY — pgatour uses slug key to match save-full-archive + rotation
+      const meta = await getPoolMeta(poolId);
+      const evName = eventName || meta?.currentPgatourEvent || '';
+      const slug = (evName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+      const archiveKey = (major === 'pgatour' && slug)
+        ? k(poolId, `archive:pgatour-${slug}_${year}`)
+        : k(poolId, `archive:${major}_${year}`);
       try {
         const r = await redis('GET', archiveKey);
         // Only update if archive already exists — don't create empty ones
