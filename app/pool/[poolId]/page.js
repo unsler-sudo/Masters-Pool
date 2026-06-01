@@ -1,5 +1,5 @@
 'use client';
-// build: standings-cleanup-v111-20260601-1500
+// build: pgatour-tagline-theme-match-v112-20260601-1530
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -851,9 +851,18 @@ export default function App(){
   const scheduleOverrides = scheduleData[activeMajor] || {};
   let eventOverrides = {};
   if (activeMajor === 'pgatour' && scheduleOverrides.eventName) {
-    const key = scheduleOverrides.eventName.toLowerCase().trim();
-    if (PGATOUR_EVENT_THEMES[key]) {
-      eventOverrides = PGATOUR_EVENT_THEMES[key];
+    // FINGERPRINT_V112_THEME_MATCH
+    // scheduleOverrides.eventName may include a trailing year ("... Workday 2026") and casing.
+    // Theme keys are lowercase with no year. Try exact, then year-stripped, then contains-match.
+    const raw = scheduleOverrides.eventName.toLowerCase().trim();
+    const noYear = raw.replace(/\s+\d{4}$/,'').trim();
+    const themeKeys = Object.keys(PGATOUR_EVENT_THEMES);
+    const matchKey = (PGATOUR_EVENT_THEMES[raw] && raw)
+      || (PGATOUR_EVENT_THEMES[noYear] && noYear)
+      || themeKeys.find(k => noYear === k)
+      || themeKeys.find(k => noYear.includes(k) || k.includes(noYear));
+    if (matchKey && PGATOUR_EVENT_THEMES[matchKey]) {
+      eventOverrides = PGATOUR_EVENT_THEMES[matchKey];
     }
   }
   const T = { ...baseTheme, ...eventOverrides, ...scheduleOverrides };
@@ -2481,7 +2490,7 @@ export default function App(){
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
           <div style={{maxWidth:'36%'}}>
             {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,opacity:.95,letterSpacing:.5,marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{poolMeta.poolName}</div>}
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:9,fontWeight:activeMajor==='pgatour'?600:400,fontStyle:'italic',opacity:.85,letterSpacing:.6,marginBottom:3,lineHeight:1.2}}>{activeMajor==='pgatour'?T.eventName:T.tagline}</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:9,fontWeight:activeMajor==='pgatour'?600:400,fontStyle:'italic',opacity:.85,letterSpacing:.6,marginBottom:3,lineHeight:1.2}}>{activeMajor==='pgatour'?(T.tagline&&T.tagline!=='PGA Tour Event'?T.tagline:T.eventName):T.tagline}</div>
             <div style={{fontSize:10,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
           </div>
           {(()=>{
