@@ -1,5 +1,5 @@
 'use client';
-// build: schedule-resilient-tee-fallback-v107-20260601-1230
+// build: gate-reset-on-rotation-logo-fix-v108-20260601-1300
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -799,6 +799,7 @@ export default function App(){
   const [lastUp,setLastUp]=useState(null);
   const rawScoresRef=useRef(null);
   const eventStartRef=useRef(0); // earliest tee time (UTC ms) of current pgatour event — set by fetchField, read by fetchScores
+  const eventStartNameRef=useRef(''); // which event the gate belongs to — reset gate when this changes
   const liveStatsRef=useRef(null); // Cache live-stats map by player_name
   const [liveStatsLoaded,setLiveStatsLoaded]=useState(false);
   const [openCard,setOpenCard]=useState(null);
@@ -974,10 +975,21 @@ export default function App(){
           if(ptRes.ok){
             const ptData = await ptRes.json();
             const eventName = ptData.event_name || ptData.name || 'PGA Tour Event';
-            // Find this event in the schedule to get course/location/start_date/event_id
-            const currentEvent = events.find(e => 
-              (e.event_name||'').toLowerCase() === eventName.toLowerCase()
-            );
+            // Find this event in the schedule to get course/location/start_date/event_id.
+            // Use lenient matching: exact, then "contains" either direction, to handle
+            // sponsor-name variations ("the Memorial Tournament pres. by Workday" vs "the Memorial Tournament").
+            const evLower = eventName.toLowerCase().trim();
+            const normalize = (s) => (s||'').toLowerCase().replace(/\b(the|pres\.?|presented|by|presented by|championship|tournament|classic|open|invitational)\b/g,'').replace(/[^a-z0-9]/g,'').trim();
+            const evNorm = normalize(eventName);
+            const currentEvent = events.find(e => (e.event_name||'').toLowerCase().trim() === evLower)
+              || events.find(e => {
+                   const en = (e.event_name||'').toLowerCase();
+                   return en.includes(evLower) || evLower.includes(en);
+                 })
+              || events.find(e => {
+                   const en = normalize(e.event_name);
+                   return en && evNorm && (en === evNorm || en.includes(evNorm) || evNorm.includes(en));
+                 });
             const courseName = currentEvent
               ? `${currentEvent.course || ''}${currentEvent.location ? ' · ' + currentEvent.location : ''}`
               : 'PGA Tour';
@@ -1170,10 +1182,19 @@ export default function App(){
           //   - Before earliest tee time → in-play data is stale (prior event) → skip merge
           //   - After earliest tee time → in-play data is for the current event → merge
           // If earliestTeeMs is unknown (field-updates failed), fall back to T.teeTime, then to skipping.
+          // FINGERPRINT_V108_GATE_RESET_ON_EVENT
+          // Reset the gate when the pgatour event changes (rotation). Otherwise the old event's
+          // R1 gate (a past time) stays "started" and we'd merge the NEW event's stale in-play
+          // data (which is still the prior event until the new one tees off Thursday).
+          const curEvName = (ptData.event_name||'').toLowerCase().trim();
+          if (curEvName && curEvName !== eventStartNameRef.current) {
+            // New event — reset the gate
+            eventStartRef.current = 0;
+            eventStartNameRef.current = curEvName;
+          }
           const gateMs = earliestTeeMs || (T?.teeTime ? new Date(T.teeTime).getTime() : 0);
-          // Once the gate is set to a past time, never move it forward.
-          // This guards against field-updates losing R1 data after the round completes
-          // (e.g., DataGolf rotating to next event's data) — once event started, it stays started.
+          // Once set to a past time for THIS event, don't move it forward (guards against
+          // field-updates losing R1 data mid-event). Reset above handles event changes.
           const prevGate = eventStartRef.current;
           if (gateMs > 0 && (prevGate === 0 || gateMs <= Date.now() || gateMs < prevGate)) {
             eventStartRef.current = gateMs;
@@ -1397,7 +1418,15 @@ export default function App(){
     // Gate on earliest tee time (set by fetchField from field-updates). in-play has no event_name
     // to match on, so the tee-time gate is the reliable discriminator against stale prior-event data.
     if (currentMajor === 'pgatour') {
-      const gateMs = eventStartRef.current || (T?.teeTime ? new Date(T.teeTime).getTime() : 0);
+      // FINGERPRINT_V108_FETCHSCORES_FLOOR
+      // Hard floor: if the scheduled event tee time (T.teeTime) is in the future, the event
+      // hasn't started — skip regardless of eventStartRef (which may lag a tick behind rotation).
+      const schedTee = T?.teeTime ? new Date(T.teeTime).getTime() : 0;
+      if (schedTee && Date.now() < schedTee) {
+        rawScoresRef.current = null;
+        return;
+      }
+      const gateMs = eventStartRef.current || schedTee;
       if (!gateMs || Date.now() < gateMs) {
         rawScoresRef.current = null;
         return;
