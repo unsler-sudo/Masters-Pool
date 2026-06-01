@@ -1,5 +1,5 @@
 'use client';
-// build: event-name-in-countdown-v113-20260601-1545
+// build: share-text-cleanup-v114-20260601-1600
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2569,21 +2569,26 @@ export default function App(){
             const shareLink=typeof window!=='undefined'?window.location.origin+'/pool/'+poolId:'';
             const fee=poolMeta?.entryFee||0;
             const pot=entries.length*fee;
-            // FINGERPRINT_V100_SHARE_PAYOUT
+            // FINGERPRINT_V114_SHARE_TEXT
             // Winner-take-all (toggle or ≤4 entries) → 1st gets pot. Else 1st/2nd/3rd split.
             const wta = isWinnerTakeAll(entries.length);
             const first=pot>0?(wta?pot:pot-fee*3):0;
+            const entryWord = entries.length === 1 ? 'entry' : 'entries';
             const payoutLine=fee>0&&!wta&&entries.length>0
-              ?`🏆 Pot: $${pot} ($${fee} entry × ${entries.length} entries)\n🥇 1st: $${first}  🥈 2nd: $${fee*2}  🥉 3rd: $${fee}\n\n`
+              ?`🏆 Pot: $${pot} ($${fee} × ${entries.length} ${entryWord})\n🥇 1st: $${first}  🥈 2nd: $${fee*2}  🥉 3rd: $${fee}\n\n`
               :fee>0&&wta&&entries.length>0
-              ?`🏆 Pot: $${pot} ($${fee} entry × ${entries.length} entries)\n🥇 Winner takes all: $${first}\n\n`
+              ?`🏆 Pot: $${pot} ($${fee} × ${entries.length} ${entryWord})\n🥇 Winner takes all: $${first}\n\n`
               :fee>0
                 ?`💵 Entry: $${fee} per person\n\n`
                 :'';
             const countdownLine=countdown?`⏱ Entries close ${countdown.replace(' until entries lock','')}\n\n`:'';
-            const shareText=`Join my ${T.eventName} pool on Tuna Golf Pool!
+            // Pick counts from tier definitions (e.g. "2 favorites, 4 contenders, 4 longshots")
+            const picksDesc = TIER_DEFS.map(t=>`${t.picks} ${t.name.toLowerCase()}`).join(', ');
+            // Event name: strip leading "the " so "Join my the Memorial..." reads "Join my Memorial..."
+            const evNameClean = (T.eventName||'').replace(/^the\s+/i,'');
+            const shareText=`Join my ${evNameClean} pool on Tuna Golf Pool!
 
-Pick 2 favorites, 4 contenders, 3 longshots — highest combined earnings wins.
+Pick ${picksDesc} — highest combined earnings wins.
 
 ${payoutLine}${countdownLine}→ ${shareLink}`;
             const handleShare=async()=>{
