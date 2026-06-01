@@ -1,5 +1,5 @@
 'use client';
-// build: asterisk-active-round-v105-20260529-1430
+// build: schedule-resilient-tee-fallback-v107-20260601-1230
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -778,6 +778,7 @@ export default function App(){
   const [status,setStatus]=useState('');
   const activeMajorRef=useRef('pga');
   const dynamicPursesRef=useRef(null);
+  const poolMetaRef=useRef(null);
   const [refreshing,setRefreshing]=useState(false);
   const [entryName,setEntryName]=useState('');
   const [entryEmail,setEntryEmail]=useState('');
@@ -916,7 +917,7 @@ export default function App(){
       if(d.picksHidden!==undefined)setServerPicksHidden(d.picksHidden);
       if(d.paymentsHidden!==undefined)setPaymentsHidden(d.paymentsHidden);
       if(d.payments)setPayments(d.payments);
-      if(d.meta)setPoolMeta(d.meta);
+      if(d.meta){setPoolMeta(d.meta);poolMetaRef.current=d.meta;}
       if(d.purses){setDynamicPurses(d.purses); dynamicPursesRef.current=d.purses;}
       if(d.major&&THEMES[d.major]){
         const prevMajor = activeMajorRef.current;
@@ -931,44 +932,43 @@ export default function App(){
   };
 
   const fetchSchedule=async()=>{
+    let events = [];
     try{
       const year = new Date().getFullYear();
       const res = await fetch(`/api/scores?endpoint=schedule&season=${year}`);
-      if(!res.ok) return;
-      const data = await res.json();
-      const events = data.schedule || data.events || data || [];
-      const updates = {};
-
-      for(const ev of events){
-        const eventId = ev.event_id || ev.id;
-        const majorKey = DG_EVENT_IDS[eventId];
-        if(!majorKey) continue;
-
-        const course = ev.course || ev.course_name || '';
-        const city   = ev.location?.city || ev.city || '';
-        const country= ev.location?.country || ev.country || '';
-        const courseName = course ? `${course}${city?` · ${city}`:''}${country&&country!=='United States'?`, ${country}`:''}` : '';
-
-        const startDate = ev.start_date || ev.date || '';
-        const teeTime = startDate ? `${startDate}T11:00:00Z` : null;
-
-        const purse = ev.purse || ev.total_purse || null;
-
-        const evName = ev.event_name || ev.name || '';
-        const eventName = evName ? `${evName} ${year}` : '';
-
-        if(majorKey) updates[majorKey] = {
-          ...(eventName && { eventName }),
-          ...(courseName && { courseName }),
-          ...(teeTime && { teeTime }),
-          ...(purse && { purse }),
-        };
+      if(res.ok){
+        const data = await res.json();
+        events = data.schedule || data.events || data || [];
+        const updates = {};
+        for(const ev of events){
+          const eventId = ev.event_id || ev.id;
+          const majorKey = DG_EVENT_IDS[eventId];
+          if(!majorKey) continue;
+          const course = ev.course || ev.course_name || '';
+          const city   = ev.location?.city || ev.city || '';
+          const country= ev.location?.country || ev.country || '';
+          const courseName = course ? `${course}${city?` · ${city}`:''}${country&&country!=='United States'?`, ${country}`:''}` : '';
+          const startDate = ev.start_date || ev.date || '';
+          const teeTime = startDate ? `${startDate}T11:00:00Z` : null;
+          const purse = ev.purse || ev.total_purse || null;
+          const evName = ev.event_name || ev.name || '';
+          const eventName = evName ? `${evName} ${year}` : '';
+          if(majorKey) updates[majorKey] = {
+            ...(eventName && { eventName }),
+            ...(courseName && { courseName }),
+            ...(teeTime && { teeTime }),
+            ...(purse && { purse }),
+          };
+        }
+        if(Object.keys(updates).length > 0) setScheduleData(updates);
+      } else {
+        console.warn('schedule fetch returned', res.status, '— continuing to pgatour block');
       }
+    }catch(e){ console.warn('schedule fetch threw:', e.message, '— continuing'); }
 
-      if(Object.keys(updates).length > 0) setScheduleData(updates);
-
-      // When in PGA Tour mode, also fetch the current week's event info
-      if(activeMajor === 'pgatour'){
+    // When in PGA Tour mode, fetch the current week's event info.
+    // This runs even if the schedule call above failed, so the page never gets stuck.
+    if(activeMajor === 'pgatour'){
         try {
           const ptRes = await fetch(`/api/scores?endpoint=pre-tournament`);
           if(ptRes.ok){
@@ -982,7 +982,20 @@ export default function App(){
               ? `${currentEvent.course || ''}${currentEvent.location ? ' · ' + currentEvent.location : ''}`
               : 'PGA Tour';
             const teeDate = currentEvent?.start_date ? new Date(currentEvent.start_date + 'T11:00:00Z') : null;
-            const teeTime = teeDate ? teeDate.toISOString() : null;
+            // FINGERPRINT_V107_TEE_FALLBACK
+            // If the event isn't found in the schedule (name mismatch) or has no start_date,
+            // fall back to the upcoming Thursday so the page doesn't get stuck on "Loading
+            // tournament info...". PGA Tour events tee off Thursday; compute the next one.
+            const nextThursday = (() => {
+              const d = new Date();
+              const day = d.getUTCDay(); // 0=Sun..6=Sat
+              let add = (4 - day + 7) % 7; // days until Thursday (4)
+              if (add === 0) add = 0; // today is Thursday → use today
+              d.setUTCDate(d.getUTCDate() + add);
+              d.setUTCHours(11, 0, 0, 0);
+              return d;
+            })();
+            const teeTime = (teeDate || nextThursday).toISOString();
             // Build official PGA Tour logo URL from event_id (Cloudinary CDN, CORS-enabled)
             const eventId = currentEvent?.event_id;
             const logoUrl = eventId
@@ -1003,8 +1016,7 @@ export default function App(){
             }));
           }
         } catch(e) { console.warn('pgatour event fetch failed:', e.message); }
-      }
-    }catch(e){ console.warn('fetchSchedule failed:', e.message); }
+    }
   };
 
   const fetchField=async(major=activeMajor, updateDisplay=true)=>{
@@ -1496,9 +1508,17 @@ export default function App(){
     const em=calcEarnings(updated, livePurse, liveMajor, isComplete);
     updated.forEach(p=>{p.earnings=em[p.name]||0;});
     if(Object.keys(em).length>0){
+      const evName = liveMajor==='pgatour' ? (poolMetaRef.current?.currentPgatourEvent || THEMES.pgatour?.eventName || '') : undefined;
+      // FINGERPRINT_V106_ARCHIVE_SAVE
+      // When the tournament is COMPLETE, save the FULL archive (entries+earnings+date+event)
+      // so the History tab has correct data even before/independent of backend rotation.
+      // During play, just update earnings on an existing archive.
+      const action = isComplete ? 'save-full-archive' : 'save-archive-earnings';
       fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({poolId,action:'save-archive-earnings',password:adminPw||'auto',
-          major:liveMajor,year:new Date().getFullYear(),earnings:em})
+        body:JSON.stringify({poolId,action,password:adminPw||'auto',
+          major:liveMajor,year:new Date().getFullYear(),earnings:em,
+          eventName:evName,
+          tournamentDate:isComplete?new Date().toISOString():undefined})
       }).catch(()=>{});
     }
     return updated;
@@ -2551,7 +2571,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             boxShadow:`0 4px 16px ${T.primary}40`,
           }}>
             <div>
-              <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',fontWeight:600,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Next Major</div>
+              <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',fontWeight:600,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{activeMajor==='pgatour'?'Next Event':'Next Major'}</div>
               <div style={{fontSize:20,fontWeight:800,color:'#fff',fontFamily:"'Playfair Display',serif",letterSpacing:-.5}}>{T.eventName}</div>
               <div style={{fontSize:11,color:'rgba(255,255,255,0.55)',marginTop:3}}>Unlock to start entering picks</div>
             </div>
