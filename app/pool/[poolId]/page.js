@@ -1,5 +1,5 @@
 'use client';
-// build: gate-reset-on-rotation-logo-fix-v108-20260601-1300
+// build: require-published-r1-gate-v109-20260601-1330
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1180,24 +1180,24 @@ export default function App(){
           // The current event has started once we're past the earliest R1 tee time (from field-updates).
           // in-play feed NEVER includes event_name, so we can't match on it. Instead:
           //   - Before earliest tee time → in-play data is stale (prior event) → skip merge
-          //   - After earliest tee time → in-play data is for the current event → merge
-          // If earliestTeeMs is unknown (field-updates failed), fall back to T.teeTime, then to skipping.
-          // FINGERPRINT_V108_GATE_RESET_ON_EVENT
-          // Reset the gate when the pgatour event changes (rotation). Otherwise the old event's
-          // R1 gate (a past time) stays "started" and we'd merge the NEW event's stale in-play
-          // data (which is still the prior event until the new one tees off Thursday).
+          // FINGERPRINT_V109_REQUIRE_PUBLISHED_R1
+          // The ONLY reliable signal that the current event has started: field-updates has
+          // published R1 tee times AND we're past the earliest one. in-play carries no event_name
+          // and lags a full week behind (it still shows the PRIOR event's scores until the new
+          // event's Thursday R1 actually begins). So:
+          //   - earliestTeeMs === 0  → R1 tees not published yet → event hasn't started → DO NOT merge
+          //   - earliestTeeMs in future → not started → DO NOT merge
+          //   - earliestTeeMs in past → event underway → merge
+          // We deliberately do NOT fall back to T.teeTime here, because a stale/guessed tee time
+          // is exactly what let last week's data through.
           const curEvName = (ptData.event_name||'').toLowerCase().trim();
           if (curEvName && curEvName !== eventStartNameRef.current) {
-            // New event — reset the gate
             eventStartRef.current = 0;
             eventStartNameRef.current = curEvName;
           }
-          const gateMs = earliestTeeMs || (T?.teeTime ? new Date(T.teeTime).getTime() : 0);
-          // Once set to a past time for THIS event, don't move it forward (guards against
-          // field-updates losing R1 data mid-event). Reset above handles event changes.
-          const prevGate = eventStartRef.current;
-          if (gateMs > 0 && (prevGate === 0 || gateMs <= Date.now() || gateMs < prevGate)) {
-            eventStartRef.current = gateMs;
+          // Lock the gate to the earliest published R1 tee for THIS event (only set once, only if real)
+          if (earliestTeeMs > 0 && eventStartRef.current === 0) {
+            eventStartRef.current = earliestTeeMs;
           }
           const effectiveGate = eventStartRef.current;
           const eventHasStarted = effectiveGate > 0 && Date.now() >= effectiveGate;
@@ -1418,15 +1418,10 @@ export default function App(){
     // Gate on earliest tee time (set by fetchField from field-updates). in-play has no event_name
     // to match on, so the tee-time gate is the reliable discriminator against stale prior-event data.
     if (currentMajor === 'pgatour') {
-      // FINGERPRINT_V108_FETCHSCORES_FLOOR
-      // Hard floor: if the scheduled event tee time (T.teeTime) is in the future, the event
-      // hasn't started — skip regardless of eventStartRef (which may lag a tick behind rotation).
-      const schedTee = T?.teeTime ? new Date(T.teeTime).getTime() : 0;
-      if (schedTee && Date.now() < schedTee) {
-        rawScoresRef.current = null;
-        return;
-      }
-      const gateMs = eventStartRef.current || schedTee;
+      // FINGERPRINT_V109_FETCHSCORES_REQUIRE_R1
+      // Only merge once fetchField has locked eventStartRef to a real, published R1 tee in the past.
+      // No fallback to T.teeTime — a guessed/stale schedule time is what let prior-event data through.
+      const gateMs = eventStartRef.current;
       if (!gateMs || Date.now() < gateMs) {
         rawScoresRef.current = null;
         return;
