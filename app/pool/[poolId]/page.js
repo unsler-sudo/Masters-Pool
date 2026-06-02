@@ -1,5 +1,5 @@
 'use client';
-// build: odds-threshold-longshots-v115-20260601-1630
+// build: memorial-green-gold-theme-v116-20260601-1700
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -267,12 +267,12 @@ const PGATOUR_EVENT_THEMES = {
 
   // ─── JUNE ──────────────────────────────────────────────────────────────────
   'the memorial tournament presented by workday': {
-    // Memorial yellow tradition (Jack Nicklaus yellow shirt, Play Yellow CMN campaign)
+    // Memorial logo colors: forest green oval, white field, gold accents (Golden Bear)
     tagline:"Signature · Jack's Tournament",
     // logoUrl:'/logos/memorial.svg',
-    primary:'#fcb913', dark:'#e8a30c', mid:'#ffc828', accent:'#0a3d1f',
-    headerBg:'linear-gradient(170deg,#e8a30c 0%,#fcb913 50%,#ffd45c 100%)',
-    bodyBg:'#fcf3d8', cardBorder:'#e8d098', inputBorder:'#d8c088', stripeBg:'#fdf7e3', rowHl:'#f5e8bc',
+    primary:'#0f5132', dark:'#0a3d26', mid:'#1a6b43', accent:'#c8a032',
+    headerBg:'linear-gradient(170deg,#0a3d26 0%,#0f5132 55%,#1a6b43 100%)',
+    bodyBg:'#f4f8f5', cardBorder:'#cfe0d4', inputBorder:'#b8d0bf', stripeBg:'#eef5f0', rowHl:'#e2efe7',
   },
   'rbc canadian open': {
     // Canadian flag red + RBC blue
