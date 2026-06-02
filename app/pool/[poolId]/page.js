@@ -1,5 +1,5 @@
 'use client';
-// build: share-text-cleanup-v114-20260601-1600
+// build: odds-threshold-longshots-v115-20260601-1630
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1155,7 +1155,15 @@ export default function App(){
           // Convert "Last, First" → "First Last"
           const displayName = name.includes(',') ? name.split(',').reverse().map(s=>s.trim()).join(' ') : name;
           const win = p.win || 0;
-          const odds = win > 0.001 ? `+${Math.round((1/win)*100-100)}` : 'n/a';
+          // FINGERPRINT_V115_ODDS_THRESHOLD
+          // Show odds for any player with a real win probability. DataGolf lists longshots down to
+          // ~0.0001 (e.g. +166000). Old threshold of 0.001 wrongly hid legit longshots as "n/a".
+          // Only show "n/a" when there's genuinely no probability (0 or missing).
+          const odds = win > 0
+            ? (win >= 0.5
+                ? `-${Math.round(win/(1-win)*100)}`        // favorite → negative American odds
+                : `+${Math.min(Math.round((1/win)*100-100), 99999)}`) // underdog → positive, capped
+            : 'n/a';
           // Tier cuts scale to field size (see above)
           const tier = i < tierAMax ? 1 : i < tierBMax ? 2 : 3;
           // Look up tee time
@@ -1360,7 +1368,12 @@ export default function App(){
       const enriched = playersToShow.map((p,i)=>{
         const key  = p.name.toLowerCase().trim();
         const win  = oddsMap[key] ?? 0;
-        const odds = win > 0.001 ? `+${Math.round((1/win)*100-100)}` : 'n/a';
+        // FINGERPRINT_V115_ODDS_THRESHOLD (major path)
+        const odds = win > 0
+          ? (win >= 0.5
+              ? `-${Math.round(win/(1-win)*100)}`
+              : `+${Math.min(Math.round((1/win)*100-100), 99999)}`)
+          : 'n/a';
         const baseRank = (p.dgRank && p.dgRank < 9999) ? p.dgRank - 1 : i;
         const rank = (useOdds && oddsRank[key] !== undefined) ? oddsRank[key] : baseRank;
         const teeInfo = teeTimeMap[key] || null;
