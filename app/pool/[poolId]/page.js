@@ -1,5 +1,5 @@
 'use client';
-// build: memorial-green-gold-theme-v116-20260601-1700
+// build: schedule-rerun-after-loadentries-v117-20260601-1730
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -978,7 +978,11 @@ export default function App(){
 
     // When in PGA Tour mode, fetch the current week's event info.
     // This runs even if the schedule call above failed, so the page never gets stuck.
-    if(activeMajor === 'pgatour'){
+    // FINGERPRINT_V117_USE_REF — use activeMajorRef (always current) not activeMajor (stale in
+    // the mount-time closure / interval callbacks). This is why pgatour schedule never loaded
+    // without tapping "Try Again": the closure's activeMajor was 'pga' from first mount.
+    const curMajor = activeMajorRef.current || activeMajor;
+    if(curMajor === 'pgatour'){
         try {
           const ptRes = await fetch(`/api/scores?endpoint=pre-tournament`);
           if(ptRes.ok){
@@ -1668,12 +1672,17 @@ export default function App(){
     // Then loadEntries will call fetchField() with the correct major
     // Don't call fetchField() here directly because activeMajor defaults to 'pga'
     // which causes brief flash of PGA data when active major is different
-    loadEntries().then(()=>setReady(true));
+    // FINGERPRINT_V117_SCHEDULE_RERUN
+    // loadEntries sets activeMajor (e.g. to 'pgatour'). fetchSchedule's pgatour block only runs
+    // when activeMajor==='pgatour', but the initial fetchSchedule() above ran with the default
+    // 'pga'. So re-run fetchSchedule AFTER loadEntries resolves, once the real major is known.
+    loadEntries().then(()=>{ setReady(true); fetchSchedule(); });
     fetchScores(true);
     setTimeout(()=>fetchAllFields(), 3000);
     timer.current=setInterval(()=>{
       fetchScores(true);
       loadEntries();
+      fetchSchedule(); // keep schedule fresh (publishes tee times, advances events)
       // Refresh field every minute to pick up new round tee times once published
       fetchAllFields();
       setNow(Date.now());
