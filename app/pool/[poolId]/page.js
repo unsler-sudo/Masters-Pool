@@ -1,5 +1,5 @@
 'use client';
-// build: schedule-rerun-after-loadentries-v117-20260601-1730
+// build: live-model-15min-delay-v118-20260601-1800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -396,6 +396,12 @@ const TIER_CUTS_BY_MAJOR = {
   pgatour: [12, 56],   // Smaller fields for signature events (~70 players)
 };
 const TIER_CUTS = [12, 68]; // Default fallback (matches standard majors)
+
+// FINGERPRINT_V118_LIVE_DELAY
+// DataGolf's in-play model takes ~15 min after the first tee time to start posting meaningful
+// scores. Delay the in-play merge by this buffer past the earliest R1 tee so we don't briefly
+// show an empty/stale leaderboard right at tee-off.
+const LIVE_MODEL_DELAY_MS = 15 * 60 * 1000; // 15 minutes
 
 // Per-major payout distribution percentages
 // PGA Championship: Per PGA of America 2026 distribution (verified against $3.69M winner / $20.5M purse)
@@ -1230,7 +1236,8 @@ export default function App(){
             eventStartRef.current = earliestTeeMs;
           }
           const effectiveGate = eventStartRef.current;
-          const eventHasStarted = effectiveGate > 0 && Date.now() >= effectiveGate;
+          // Wait LIVE_MODEL_DELAY_MS past the first tee time before merging (model warm-up).
+          const eventHasStarted = effectiveGate > 0 && Date.now() >= (effectiveGate + LIVE_MODEL_DELAY_MS);
           if (major !== 'pgatour' || eventHasStarted) {
             try {
               const liveRes = await fetch('/api/scores?endpoint=in-play');
@@ -1454,10 +1461,11 @@ export default function App(){
     // to match on, so the tee-time gate is the reliable discriminator against stale prior-event data.
     if (currentMajor === 'pgatour') {
       // FINGERPRINT_V109_FETCHSCORES_REQUIRE_R1
-      // Only merge once fetchField has locked eventStartRef to a real, published R1 tee in the past.
+      // Only merge once fetchField has locked eventStartRef to a real, published R1 tee.
       // No fallback to T.teeTime — a guessed/stale schedule time is what let prior-event data through.
+      // Wait LIVE_MODEL_DELAY_MS past tee time (DataGolf model warm-up, ~15 min).
       const gateMs = eventStartRef.current;
-      if (!gateMs || Date.now() < gateMs) {
+      if (!gateMs || Date.now() < (gateMs + LIVE_MODEL_DELAY_MS)) {
         rawScoresRef.current = null;
         return;
       }
