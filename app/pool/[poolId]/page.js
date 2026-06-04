@@ -1,5 +1,5 @@
 'use client';
-// build: live-model-15min-delay-v118-20260601-1800
+// build: admin-purse-priority-cut-fix-v120-20260601-1930
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -269,6 +269,7 @@ const PGATOUR_EVENT_THEMES = {
   'the memorial tournament presented by workday': {
     // Memorial logo colors: forest green oval, white field, gold accents (Golden Bear)
     tagline:"Signature · Jack's Tournament",
+    purse:20000000, // signature event — $20M (fallback if schedule API omits it)
     // logoUrl:'/logos/memorial.svg',
     primary:'#0f5132', dark:'#0a3d26', mid:'#1a6b43', accent:'#c8a032',
     headerBg:'linear-gradient(170deg,#0a3d26 0%,#0f5132 55%,#1a6b43 100%)',
@@ -548,6 +549,40 @@ const PAYOUT_BY_MAJOR = {
   pgatour: PAYOUT_PGATOUR,
 };
 
+// FINGERPRINT_V119_SIGNATURE_PAYOUT
+// Signature events (Sentry, Pebble, Genesis, API, RBC Heritage, Memorial, Travelers) pay a
+// different, more top-heavy curve than standard PGA Tour events: winner 20% (vs 18%), ~$20M purse,
+// limited ~72-player field. Derived from the official 2026 Memorial payout table (purse $20M).
+const PAYOUT_SIGNATURE = {
+  1:0.20000000, 2:0.11000000, 3:0.07000000, 4:0.05000000, 5:0.04200000,
+  6:0.03800000, 7:0.03500000, 8:0.03230000, 9:0.03000000, 10:0.02780000,
+  11:0.02570000, 12:0.02360000, 13:0.02150000, 14:0.01945000, 15:0.01845000,
+  16:0.01745000, 17:0.01645000, 18:0.01545000, 19:0.01445000, 20:0.01345000,
+  21:0.01250000, 22:0.01165000, 23:0.01080000, 24:0.01000000, 25:0.00920000,
+  26:0.00840000, 27:0.00805000, 28:0.00770000, 29:0.00735000, 30:0.00700000,
+  31:0.00665000, 32:0.00630000, 33:0.00595000, 34:0.00570000, 35:0.00545000,
+  36:0.00520000, 37:0.00495000, 38:0.00470000, 39:0.00450000, 40:0.00430000,
+  41:0.00410000, 42:0.00390000, 43:0.00370000, 44:0.00350000, 45:0.00330000,
+  46:0.00310000, 47:0.00290000, 48:0.00280000, 49:0.00270000, 50:0.00260000,
+  51:0.00255000, 52:0.00250000, 53:0.00245000, 54:0.00240000, 55:0.00235000,
+  56:0.00230000, 57:0.00225000, 58:0.00220000, 59:0.00215000, 60:0.00210000,
+  61:0.00205000, 62:0.00200000, 63:0.00190000, 64:0.00185000, 65:0.00180000
+};
+
+// Known 2026 PGA Tour signature events (normalized substrings for matching against event names)
+const SIGNATURE_EVENT_KEYS = [
+  'sentry', 'pebble beach', 'genesis invitational', 'arnold palmer',
+  'rbc heritage', 'memorial', 'travelers',
+];
+// Decide if a pgatour event uses the signature payout curve.
+// Primary signal: event name matches a known signature event. Fallback: purse >= $15M.
+const isSignatureEvent = (eventName, purse) => {
+  const n = (eventName||'').toLowerCase();
+  if (SIGNATURE_EVENT_KEYS.some(k => n.includes(k))) return true;
+  if (purse && purse >= 15_000_000) return true;
+  return false;
+};
+
 // Default fallback
 const PAYOUT = PAYOUT_PGA;
 
@@ -688,7 +723,7 @@ function formatTeeTimeForUser(date) {
 }
 
 
-function calcEarnings(players, purse, major, tournamentComplete){
+function calcEarnings(players, purse, major, tournamentComplete, signatureEventName){
   // FINGERPRINT_V99_EARNINGS_FIX
   // Projected earnings are shown during live play (pool standings need them), but:
   //  - Cut/WD/DQ players earn $0 (never the payout table)
@@ -697,7 +732,12 @@ function calcEarnings(players, purse, major, tournamentComplete){
   //    players who make the cut get paid, and the field beyond the table is the missed-cut group).
   // The old bug: beyond-table players got the cut-line fallback mid-tournament, so a +9 player
   // (rank 132) showed MORE than an even-par player ranked 83 inside the tail of the table.
-  const payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
+  // FINGERPRINT_V119_SIGNATURE_SELECT
+  // For pgatour signature events, use the top-heavy signature payout curve (winner 20%, etc.).
+  let payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
+  if (major === 'pgatour' && isSignatureEvent(signatureEventName, purse)) {
+    payoutTable = PAYOUT_SIGNATURE;
+  }
   const maxPos = Math.max(...Object.keys(payoutTable).map(Number));
   const g={};
   const beyondMaxPos=[];
@@ -784,6 +824,7 @@ export default function App(){
   const [status,setStatus]=useState('');
   const activeMajorRef=useRef('pga');
   const dynamicPursesRef=useRef(null);
+  const pgatourPurseRef=useRef(null); // resolved purse for current pgatour event (schedule or theme)
   const poolMetaRef=useRef(null);
   const [refreshing,setRefreshing]=useState(false);
   const [entryName,setEntryName]=useState('');
@@ -1035,12 +1076,29 @@ export default function App(){
             // Venue coordinates for tee time timezone conversion
             const venueLat = currentEvent?.latitude;
             const venueLng = currentEvent?.longitude;
+            // FINGERPRINT_V119_PURSE_RESOLVE
+            // Purse: prefer DataGolf schedule value, else the matched event theme's purse
+            // (signature events like Memorial set purse:20000000 in their theme as a fallback).
+            const evThemeKey = (() => {
+              const raw = eventName.toLowerCase().trim();
+              const noYear = raw.replace(/\s+\d{4}$/,'').trim();
+              const keys = Object.keys(PGATOUR_EVENT_THEMES);
+              return (PGATOUR_EVENT_THEMES[raw] && raw)
+                || (PGATOUR_EVENT_THEMES[noYear] && noYear)
+                || keys.find(k => noYear === k)
+                || keys.find(k => noYear.includes(k) || k.includes(noYear));
+            })();
+            const evThemePurse = evThemeKey ? PGATOUR_EVENT_THEMES[evThemeKey]?.purse : null;
+            const schedPurse = currentEvent?.purse || currentEvent?.total_purse || null;
+            const resolvedPurse = schedPurse || evThemePurse || null;
+            if (resolvedPurse) pgatourPurseRef.current = resolvedPurse;
             setScheduleData(prev => ({
               ...prev,
               pgatour: {
                 eventName,
                 courseName,
                 ...(teeTime && { teeTime }),
+                ...(resolvedPurse && { purse: resolvedPurse }),
                 ...(logoUrl && { logoUrl, logoNoBg: false, logoHeight: 80 }),
                 ...(venueLat != null && { venueLat, venueLng }),
               },
@@ -1151,9 +1209,10 @@ export default function App(){
         } catch(e){ console.warn('pgatour tee times unavailable:', e.message); }
 
         // FINGERPRINT_V110_DYNAMIC_TIERS
-        // Tier boundaries scale to field size. Signature events have ~72 players (no cut),
-        // full-field events have ~132+. Fixed 12/56 left signature events with a tiny Tier C
-        // and full fields with an oversized Tier C. Scale: A=top 12, B≈next 45%, C=rest.
+        // Tier boundaries scale to field size. Signature events have ~72 players (most have a
+        // top-50-and-ties cut, e.g. the Memorial); full-field events have ~132+ with a top-65 cut.
+        // Fixed 12/56 left signature events with a tiny Tier C and full fields with an oversized one.
+        // Scale: A=top 12, B≈next 45%, C=rest.
         const fieldSize = sorted.length;
         const tierAMax = 12; // top 12 favorites always Tier A
         const tierBMax = fieldSize <= 80
@@ -1571,11 +1630,16 @@ export default function App(){
     const liveMajor = activeMajorRef.current || activeMajor;
     const livePurses = dynamicPursesRef.current;
     const liveTheme = THEMES[liveMajor] || THEMES.pga;
-    const livePurse = (livePurses && livePurses[liveMajor]) || liveTheme.purse;
-    const em=calcEarnings(updated, livePurse, liveMajor, isComplete);
+    // Purse priority: admin-set (dynamicPurses) → resolved event purse (schedule/theme) → base theme.
+    // Admin override always wins so the commissioner can correct any wrong auto-detected purse.
+    const livePurse = liveMajor === 'pgatour'
+      ? ((livePurses && livePurses[liveMajor]) || pgatourPurseRef.current || liveTheme.purse)
+      : ((livePurses && livePurses[liveMajor]) || liveTheme.purse);
+    // Event name (used both for signature-payout detection and archive saving)
+    const evName = liveMajor==='pgatour' ? (poolMetaRef.current?.currentPgatourEvent || THEMES.pgatour?.eventName || '') : undefined;
+    const em=calcEarnings(updated, livePurse, liveMajor, isComplete, evName);
     updated.forEach(p=>{p.earnings=em[p.name]||0;});
     if(Object.keys(em).length>0){
-      const evName = liveMajor==='pgatour' ? (poolMetaRef.current?.currentPgatourEvent || THEMES.pgatour?.eventName || '') : undefined;
       // FINGERPRINT_V106_ARCHIVE_SAVE
       // When the tournament is COMPLETE, save the FULL archive (entries+earnings+date+event)
       // so the History tab has correct data even before/independent of backend rotation.
