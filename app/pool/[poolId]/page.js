@@ -1,5 +1,5 @@
 'use client';
-// build: archive-winner-take-all-prizes-v122-20260601-2100
+// build: archive-event-theme-colors-v123-20260601-2230
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -3222,7 +3222,21 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 // FINGERPRINT_V101_HISTORY_GROUPS
                 // Split archives: majors (players/masters/pga/usopen/open) vs PGA Tour weekly events
                 const renderArchiveCard = (a) => {
-                const THEME={...THEMES[a.major]||THEMES.pga};
+                // FINGERPRINT_V123_ARCHIVE_THEME
+                // For pgatour archives, merge the event-specific theme (Memorial green, etc.) onto the
+                // base pgatour theme — matched by eventName (lenient, like the live header). Without this
+                // every pgatour card used the generic blue base theme.
+                let THEME = {...(THEMES[a.major]||THEMES.pga)};
+                if (a.major === 'pgatour' && a.eventName) {
+                  const raw = a.eventName.toLowerCase().trim();
+                  const noYear = raw.replace(/\s+\d{4}$/,'').trim();
+                  const keys = Object.keys(PGATOUR_EVENT_THEMES);
+                  const matchKey = (PGATOUR_EVENT_THEMES[raw] && raw)
+                    || (PGATOUR_EVENT_THEMES[noYear] && noYear)
+                    || keys.find(k => noYear === k)
+                    || keys.find(k => noYear.includes(k) || k.includes(noYear));
+                  if (matchKey) THEME = {...THEME, ...PGATOUR_EVENT_THEMES[matchKey]};
+                }
                 const earnings=a.earnings||{};
                 const hasEarnings=Object.keys(earnings).length>0;
                 // For pgatour archives, include event slug in ID to avoid collisions
