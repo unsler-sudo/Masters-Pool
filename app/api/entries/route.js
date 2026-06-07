@@ -1,9 +1,109 @@
 export const dynamic = 'force-dynamic';
-// build: save-full-archive-prizes-v33-20260601-2100
+// build: server-side-rotation-earnings-v34-20260601-2200
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 const VALID_MAJORS = ['players','masters','pga','usopen','open','pgatour'];
+
+// ─── SERVER-SIDE EARNINGS ENGINE (v34) ───────────────────────────────────────
+// FINGERPRINT_V34_SERVER_EARNINGS
+// Mirrors the frontend's calcEarnings so the rotation can compute final earnings itself
+// from DataGolf's in-play feed, instead of depending on someone having the pool open when
+// the tournament finished. Makes the archive save correct even unattended.
+const SRV_PAYOUT_PGATOUR = {
+  1:0.18,2:0.109,3:0.069,4:0.049,5:0.041,6:0.03625,7:0.03375,8:0.03125,9:0.02925,10:0.02725,
+  11:0.02525,12:0.02325,13:0.02125,14:0.01925,15:0.0183,16:0.01735,17:0.0164,18:0.01545,19:0.0145,20:0.01355,
+  21:0.0126,22:0.01165,23:0.0108,24:0.00995,25:0.00915,26:0.00835,27:0.00805,28:0.00775,29:0.00745,30:0.00715,
+  31:0.00685,32:0.00655,33:0.00625,34:0.006,35:0.00575,36:0.0055,37:0.00525,38:0.00505,39:0.00485,40:0.00465,
+  41:0.00445,42:0.00425,43:0.00405,44:0.00385,45:0.00365,46:0.00345,47:0.00325,48:0.00305,49:0.00292,50:0.0028,
+  51:0.0027,52:0.00262,53:0.00256,54:0.0025,55:0.00245,56:0.0024,57:0.00236,58:0.00232,59:0.00228,60:0.00225,
+  61:0.00222,62:0.00219,63:0.00216,64:0.00213,65:0.00211
+};
+const SRV_PAYOUT_SIGNATURE = {
+  1:0.20,2:0.11,3:0.07,4:0.05,5:0.042,6:0.038,7:0.035,8:0.0323,9:0.03,10:0.0278,
+  11:0.0257,12:0.0236,13:0.0215,14:0.01945,15:0.01845,16:0.01745,17:0.01645,18:0.01545,19:0.01445,20:0.01345,
+  21:0.0125,22:0.01165,23:0.0108,24:0.01,25:0.0092,26:0.0084,27:0.00805,28:0.0077,29:0.00735,30:0.007,
+  31:0.00665,32:0.0063,33:0.00595,34:0.0057,35:0.00545,36:0.0052,37:0.00495,38:0.0047,39:0.0045,40:0.0043,
+  41:0.0041,42:0.0039,43:0.0037,44:0.0035,45:0.0033,46:0.0031,47:0.0029,48:0.0028,49:0.0027,50:0.0026,
+  51:0.00255,52:0.0025,53:0.00245,54:0.0024,55:0.00235,56:0.0023,57:0.00225,58:0.0022,59:0.00215,60:0.0021,
+  61:0.00205,62:0.002,63:0.0019,64:0.00185,65:0.0018
+};
+const SRV_SIGNATURE_KEYS = ['sentry','pebble beach','genesis invitational','arnold palmer','rbc heritage','memorial','travelers'];
+function srvIsSignature(eventName, purse) {
+  const n = (eventName||'').toLowerCase();
+  if (SRV_SIGNATURE_KEYS.some(k => n.includes(k))) return true;
+  if (purse && purse >= 15000000) return true;
+  return false;
+}
+function srvNormalizeName(s) {
+  return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[.,'']/g,'').replace(/\s+/g,' ').trim();
+}
+function srvNameVariants(dgName) {
+  const variants = new Set();
+  const raw = (dgName||'').trim();
+  if (!raw) return variants;
+  variants.add(srvNormalizeName(raw));
+  if (raw.includes(',')) {
+    const [last, first] = raw.split(',').map(s=>s.trim());
+    if (first && last) {
+      variants.add(srvNormalizeName(`${first} ${last}`));
+      variants.add(srvNormalizeName(`${last} ${first}`));
+    }
+  } else {
+    const parts = raw.split(' ');
+    if (parts.length >= 2) {
+      const last = parts[parts.length-1];
+      const first = parts.slice(0,-1).join(' ');
+      variants.add(srvNormalizeName(`${last}, ${first}`));
+      variants.add(srvNormalizeName(`${last} ${first}`));
+    }
+  }
+  return variants;
+}
+function srvParsePos(pos) {
+  if (pos == null) return null;
+  const s = String(pos).replace(/^T/i,'').trim();
+  const n = parseInt(s, 10);
+  return isNaN(n) ? null : n;
+}
+function srvComputeEarnings(players, purse, eventName) {
+  const useSig = srvIsSignature(eventName, purse);
+  const table = useSig ? SRV_PAYOUT_SIGNATURE : SRV_PAYOUT_PGATOUR;
+  const maxPos = Math.max(...Object.keys(table).map(Number));
+  const g = {};
+  players.forEach(p => {
+    const posRaw = String(p.current_pos || p.pos || '');
+    if (/CUT|WD|DQ|MC/i.test(posRaw)) return;
+    const pos = srvParsePos(posRaw);
+    if (!pos || pos > maxPos) return;
+    if (!g[pos]) g[pos] = [];
+    g[pos].push(p);
+  });
+  const earnings = {};
+  Object.entries(g).forEach(([ps, pls]) => {
+    const pos = +ps;
+    let total = 0;
+    for (let i = 0; i < pls.length; i++) total += table[pos + i] || 0;
+    const each = Math.round(total / pls.length * purse);
+    pls.forEach(p => {
+      const nm = p.player_name || p.name || '';
+      srvNameVariants(nm).forEach(v => { earnings[v] = each; });
+    });
+  });
+  return earnings;
+}
+function srvEarningsByPick(entries, earningsMap) {
+  const out = {};
+  (entries||[]).forEach(e => {
+    (e.picks||[]).forEach(pick => {
+      const key = srvNormalizeName(pick);
+      out[pick] = earningsMap[key] != null ? earningsMap[key] : 0;
+    });
+  });
+  return out;
+}
+// ──────────────────────────────────────────────────────────────────────────────
 
 // ─── Major Schedule — calculated dynamically, works forever ──────────────────
 const UNLOCK_DAYS_BEFORE = 7;
@@ -156,13 +256,15 @@ async function autoManage(poolId) {
           // Check if prior event is fully concluded via in-play
           // Conditions: top players have R4 strokes recorded, OR in-play data is stale (>12 hr since update)
           let priorEventConcluded = false;
+          let finalInPlayPlayers = null; // capture the final leaderboard for server-side earnings
           try {
             const inPlayUrl = `https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`;
             const ipRes = await fetch(inPlayUrl, { cache:'no-store', signal: AbortSignal.timeout(5000) });
             if (ipRes.ok) {
               const ipData = await ipRes.json();
+              finalInPlayPlayers = ipData.data || ipData.players || [];
               // Filter to players who made the cut (have valid position, didn't WD/DQ/MC) then sort by position
-              const madeCut = (ipData.data || ipData.players || []).filter(p => {
+              const madeCut = finalInPlayPlayers.filter(p => {
                 const pos = String(p.current_pos || '').replace('T','');
                 const posNum = parseInt(pos, 10);
                 return !isNaN(posNum) && posNum > 0;
@@ -195,14 +297,66 @@ async function autoManage(poolId) {
           if (entries.length > 0) {
             const slug = poolEventName.replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
             const archiveKey = k(poolId, `archive:pgatour-${slug}_${year}`);
-            let existingEarnings = {};
-            try { const ex = await redis('GET', archiveKey); if (ex) existingEarnings = JSON.parse(ex).earnings || {}; } catch {}
+
+            // FINGERPRINT_V34_ROTATION_EARNINGS
+            // Compute earnings SERVER-SIDE from the final in-play leaderboard, so the archive is
+            // correct even if no one had the pool open when the tournament finished. We still
+            // prefer any earnings the frontend already saved (it has the same math), but if those
+            // are missing/empty we fill them in here.
+            let existing = null;
+            try { const ex = await redis('GET', archiveKey); if (ex) existing = JSON.parse(ex); } catch {}
+            const existingEarnings = existing?.earnings || {};
+            const existingHasMoney = Object.values(existingEarnings).some(v => v > 0);
+
+            // Resolve purse for the concluded event: admin-set pgatour purse → schedule → signature default.
+            const concludedEvent = events.find(e => (e.event_name||'').toLowerCase() === poolEventName)
+              || events.find(e => {
+                   const en = (e.event_name||'').toLowerCase();
+                   return en.includes(poolEventName) || poolEventName.includes(en);
+                 });
+            const schedPurse = concludedEvent?.purse || concludedEvent?.total_purse || null;
+            const adminPurse = meta?.purses?.pgatour || null; // commissioner-set, if any
+            const sigDefault = srvIsSignature(poolEventName, schedPurse) ? 20000000 : 9000000;
+            const resolvedPurse = adminPurse || schedPurse || sigDefault;
+
+            // Compute server-side earnings (keyed by normalized name), then map to each pick.
+            let earningsByPick = existingEarnings;
+            if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
+              const earnMap = srvComputeEarnings(finalInPlayPlayers, resolvedPurse, poolEventName);
+              earningsByPick = srvEarningsByPick(entries, earnMap);
+              console.log(`[pgatour rotation] computed server-side earnings for ${Object.keys(earningsByPick).length} picks, purse=${resolvedPurse}`);
+            }
+
+            // Prize split: winner-take-all (toggle or ≤4 entries) else standard 1st/2nd/3rd.
+            const fee = meta.entryFee || 0;
+            const n = entries.length;
+            const pot = n * fee;
+            let prizes = existing?.prizes || null;
+            if (!prizes && fee > 0 && n >= 1) {
+              const wta = meta.payoutMode === 'winner-take-all' || n <= 4;
+              prizes = wta ? {first:pot, second:0, third:0} : {first:pot-fee*3, second:fee*2, third:fee};
+            }
+
+            // Logo: build PGA Tour CDN URL from the concluded event's id (preserve existing if set).
+            let logoUrl = existing?.logoUrl || null;
+            let logoNoBg = existing?.logoNoBg ?? null;
+            let logoHeight = existing?.logoHeight || null;
+            if (!logoUrl && concludedEvent?.event_id) {
+              logoUrl = `https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:R000.png/tournaments/logos/R${String(concludedEvent.event_id).padStart(3,'0')}.png`;
+              logoNoBg = false; logoHeight = 80;
+            }
+
             await redis('SET', archiveKey, JSON.stringify({
               major: 'pgatour', eventName: meta.currentPgatourEvent, year,
               archivedAt: new Date().toISOString(),
-              entries, payments, earnings: existingEarnings,
-              entryFee: meta.entryFee || 0,
+              entries, payments, earnings: earningsByPick,
+              entryFee: fee,
+              prizes: prizes || null,
+              logoUrl, logoNoBg, logoHeight,
+              tournamentDate: existing?.tournamentDate || new Date().toISOString(),
+              autoArchived: true,
             }));
+            console.log(`[pgatour rotation] archived ${meta.currentPgatourEvent} — ${entries.length} entries, earnings source: ${existingHasMoney?'frontend':'server-computed'}`);
           }
 
           // Reset pool: locked, unpaid, new event tracked
