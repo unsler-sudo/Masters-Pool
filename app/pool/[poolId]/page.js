@@ -1,5 +1,5 @@
 'use client';
-// build: archive-saves-logo-v121-20260601-2000
+// build: archive-winner-take-all-prizes-v122-20260601-2100
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1660,10 +1660,24 @@ export default function App(){
       // During play, just update earnings on an existing archive.
       const action = isComplete ? 'save-full-archive' : 'save-archive-earnings';
       const logoData = liveMajor==='pgatour' ? (pgatourLogoRef.current||{}) : {};
+      // FINGERPRINT_V122_SAVE_PRIZES
+      // On completion, also store the pool prize split so the archive doesn't rely on a fallback.
+      // Uses the same winner-take-all rules as the live pool (toggle or ≤4 entries).
+      let prizesData = undefined;
+      if (isComplete) {
+        const fee = poolMetaRef.current?.entryFee || 0;
+        const n = entries.length;
+        if (fee > 0 && n >= 1) {
+          const pot = n * fee;
+          const wta = poolMetaRef.current?.payoutMode === 'winner-take-all' || n <= 4;
+          prizesData = wta ? {first:pot, second:0, third:0} : {first:pot-fee*3, second:fee*2, third:fee};
+        }
+      }
       fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({poolId,action,password:adminPw||'auto',
           major:liveMajor,year:new Date().getFullYear(),earnings:em,
           eventName:evName,
+          ...(prizesData ? {prizes:prizesData} : {}),
           ...(isComplete && logoData.logoUrl ? {logoUrl:logoData.logoUrl, logoNoBg:logoData.logoNoBg, logoHeight:logoData.logoHeight} : {}),
           tournamentDate:isComplete?new Date().toISOString():undefined})
       }).catch(()=>{});
@@ -3234,11 +3248,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const fullEntryCount = a.entries.length;
                 const computedPot = fullEntryCount * archiveFee;
                 const savedPrizes = a.prizes;
-                const showPrizes = savedPrizes ? true : (archiveFee > 0 && fullEntryCount >= 3);
+                // FINGERPRINT_V122_ARCHIVE_WTA
+                // Fallback when no saved prizes: ≤4 entries = winner-take-all (whole pot to 1st),
+                // 5+ = standard 1st/2nd/3rd split. Matches the live pool's payout rules.
+                const archiveWTA = fullEntryCount <= 4;
+                const showPrizes = savedPrizes ? true : (archiveFee > 0 && fullEntryCount >= 1);
                 const prizes = savedPrizes
                   ? [savedPrizes.first||0, savedPrizes.second||0, savedPrizes.third||0]
-                  : (archiveFee > 0 && fullEntryCount >= 3
-                    ? [computedPot - archiveFee * 3, archiveFee * 2, archiveFee]
+                  : (archiveFee > 0 && fullEntryCount >= 1
+                    ? (archiveWTA ? [computedPot, 0, 0] : [computedPot - archiveFee * 3, archiveFee * 2, archiveFee])
                     : []);
                 const pot = savedPrizes ? (prizes[0]+prizes[1]+prizes[2]) : computedPot;
                 return<div key={archiveId} style={{marginBottom:16,borderRadius:12,overflow:'hidden',border:`1px solid ${THEME.cardBorder}`}}>
