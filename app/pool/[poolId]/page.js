@@ -1,5 +1,5 @@
 'use client';
-// build: admin-purse-priority-cut-fix-v120-20260601-1930
+// build: archive-saves-logo-v121-20260601-2000
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -825,6 +825,7 @@ export default function App(){
   const activeMajorRef=useRef('pga');
   const dynamicPursesRef=useRef(null);
   const pgatourPurseRef=useRef(null); // resolved purse for current pgatour event (schedule or theme)
+  const pgatourLogoRef=useRef(null); // {logoUrl, logoNoBg, logoHeight} for current pgatour event — for archive save
   const poolMetaRef=useRef(null);
   const [refreshing,setRefreshing]=useState(false);
   const [entryName,setEntryName]=useState('');
@@ -1092,6 +1093,17 @@ export default function App(){
             const schedPurse = currentEvent?.purse || currentEvent?.total_purse || null;
             const resolvedPurse = schedPurse || evThemePurse || null;
             if (resolvedPurse) pgatourPurseRef.current = resolvedPurse;
+            // FINGERPRINT_V121_LOGO_REF
+            // Capture the current event's logo so the archive save (on completion) can store it.
+            // Prefer a custom event-theme logo if one is defined; else the PGA Tour CDN logo.
+            const evThemeLogo = evThemeKey ? PGATOUR_EVENT_THEMES[evThemeKey]?.logoUrl : null;
+            const evThemeLogoNoBg = evThemeKey ? PGATOUR_EVENT_THEMES[evThemeKey]?.logoNoBg : undefined;
+            const evThemeLogoH = evThemeKey ? PGATOUR_EVENT_THEMES[evThemeKey]?.logoHeight : undefined;
+            if (evThemeLogo) {
+              pgatourLogoRef.current = { logoUrl: evThemeLogo, logoNoBg: evThemeLogoNoBg ?? true, logoHeight: evThemeLogoH || 80 };
+            } else if (logoUrl) {
+              pgatourLogoRef.current = { logoUrl, logoNoBg: false, logoHeight: 80 };
+            }
             setScheduleData(prev => ({
               ...prev,
               pgatour: {
@@ -1099,7 +1111,9 @@ export default function App(){
                 courseName,
                 ...(teeTime && { teeTime }),
                 ...(resolvedPurse && { purse: resolvedPurse }),
-                ...(logoUrl && { logoUrl, logoNoBg: false, logoHeight: 80 }),
+                ...(evThemeLogo
+                  ? { logoUrl: evThemeLogo, logoNoBg: evThemeLogoNoBg ?? true, logoHeight: evThemeLogoH || 80 }
+                  : (logoUrl && { logoUrl, logoNoBg: false, logoHeight: 80 })),
                 ...(venueLat != null && { venueLat, venueLng }),
               },
             }));
@@ -1645,10 +1659,12 @@ export default function App(){
       // so the History tab has correct data even before/independent of backend rotation.
       // During play, just update earnings on an existing archive.
       const action = isComplete ? 'save-full-archive' : 'save-archive-earnings';
+      const logoData = liveMajor==='pgatour' ? (pgatourLogoRef.current||{}) : {};
       fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({poolId,action,password:adminPw||'auto',
           major:liveMajor,year:new Date().getFullYear(),earnings:em,
           eventName:evName,
+          ...(isComplete && logoData.logoUrl ? {logoUrl:logoData.logoUrl, logoNoBg:logoData.logoNoBg, logoHeight:logoData.logoHeight} : {}),
           tournamentDate:isComplete?new Date().toISOString():undefined})
       }).catch(()=>{});
     }
