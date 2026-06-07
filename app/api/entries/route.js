@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: import-archive-slug-key-v32-20260601-1400
+// build: save-full-archive-prizes-v33-20260601-2100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1195,7 +1195,7 @@ export async function POST(request) {
           return Response.json({ ok:true, skipped:'auto call with no real earnings' });
         }
       }
-      const { major, year, earnings, logoUrl, logoNoBg, logoHeight, tournamentDate, eventName } = body;
+      const { major, year, earnings, prizes, logoUrl, logoNoBg, logoHeight, tournamentDate, eventName } = body;
       // FINGERPRINT_V31_ARCHIVE_KEY
       // pgatour archives are keyed by event slug to avoid week-to-week collisions.
       // Major archives keep the simple major_year key.
@@ -1215,6 +1215,7 @@ export async function POST(request) {
         payments,
         earnings: earnings || {},
         entryFee: meta?.entryFee || 0,
+        prizes: prizes || null,
         logoUrl: logoUrl || null,
         logoNoBg: logoNoBg !== undefined ? logoNoBg : null,
         logoHeight: logoHeight || null,
