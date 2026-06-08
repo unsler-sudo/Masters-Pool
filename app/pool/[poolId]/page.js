@@ -1,5 +1,5 @@
 'use client';
-// build: archive-event-theme-colors-v123-20260601-2230
+// build: completed-event-holdover-v124-20260601-2330
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1310,7 +1310,42 @@ export default function App(){
           }
           const effectiveGate = eventStartRef.current;
           // Wait LIVE_MODEL_DELAY_MS past the first tee time before merging (model warm-up).
-          const eventHasStarted = effectiveGate > 0 && Date.now() >= (effectiveGate + LIVE_MODEL_DELAY_MS);
+          let eventHasStarted = effectiveGate > 0 && Date.now() >= (effectiveGate + LIVE_MODEL_DELAY_MS);
+
+          // FINGERPRINT_V124_COMPLETED_HOLDOVER
+          // Transition edge: when an event finishes, DataGolf flips field-updates (and pre-tournament)
+          // to the NEXT event while in-play STILL holds the just-completed event's final leaderboard.
+          // The gate above would lock those final scores out (new event's R1 tee is in the future),
+          // making a completed leaderboard vanish until rotation fires. So: if in-play currently holds
+          // a COMPLETED event (enough players with real positions AND R4 recorded), keep merging it.
+          // This only overrides the gate to SHOW finished results — it can't leak a future event's data
+          // because a not-yet-started event has no R4 scores.
+          if (major === 'pgatour' && !eventHasStarted) {
+            try {
+              const peekRes = await fetch('/api/scores?endpoint=in-play');
+              if (peekRes.ok) {
+                const peek = await peekRes.json();
+                const ipPlayers = peek.data || peek.players || [];
+                const withPos = ipPlayers.filter(p => {
+                  const pn = parseInt(String(p.current_pos||'').replace(/^T/i,''), 10);
+                  return !isNaN(pn) && pn > 0;
+                });
+                const leadersDone = withPos
+                  .sort((a,b)=>{
+                    const ap=parseInt(String(a.current_pos||'').replace(/^T/i,''),10)||999;
+                    const bp=parseInt(String(b.current_pos||'').replace(/^T/i,''),10)||999;
+                    return ap-bp;
+                  })
+                  .slice(0,10)
+                  .every(p => p.R4 != null);
+                // Completed event sitting in in-play → allow the merge (holdover display)
+                if (withPos.length >= 5 && leadersDone) {
+                  eventHasStarted = true;
+                }
+              }
+            } catch {}
+          }
+
           if (major !== 'pgatour' || eventHasStarted) {
             try {
               const liveRes = await fetch('/api/scores?endpoint=in-play');
