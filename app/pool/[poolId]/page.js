@@ -1,5 +1,5 @@
 'use client';
-// build: completed-event-holdover-v124-20260601-2330
+// build: unread-chat-indicator-v125-20260602-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -885,6 +885,13 @@ export default function App(){
   const [publicArchives,setPublicArchives]=useState([]);
   const [historyLoaded,setHistoryLoaded]=useState(false);
   const [chatMessages,setChatMessages]=useState([]);
+  const [lastSeenChatCount,setLastSeenChatCount]=useState(()=>{
+    // FINGERPRINT_V125_UNREAD_CHAT
+    // Persist the count of messages the user has seen, so the unread dot survives reloads.
+    if(typeof window==='undefined')return 0;
+    const v=parseInt(window.localStorage.getItem('tgp_chatseen_'+(typeof window!=='undefined'?window.location.pathname:'') )||'0',10);
+    return isNaN(v)?0:v;
+  });
   const [chatName,setChatName]=useState('');
   const [chatCode,setChatCode]=useState('');
   const [chatVerified,setChatVerified]=useState(false);
@@ -2028,6 +2035,34 @@ export default function App(){
     return()=>clearInterval(interval);
   },[tab]);
 
+  // FINGERPRINT_V125_UNREAD_TRACKING
+  // While viewing the Chat tab, treat all current messages as seen (clears the unread dot).
+  useEffect(()=>{
+    if(tab==='Chat' && chatMessages.length>0){
+      setLastSeenChatCount(chatMessages.length);
+      try{ window.localStorage.setItem('tgp_chatseen_'+window.location.pathname, String(chatMessages.length)); }catch{}
+    }
+  },[tab,chatMessages.length]);
+
+  // Background poll for unread indicator when NOT on the Chat tab.
+  // 60s cadence (matches the main refresh loop) to keep Vercel invocations modest; visible only.
+  useEffect(()=>{
+    if(tab==='Chat')return; // active 5s poll already running
+    const check=async()=>{
+      if(document.visibilityState!=='visible')return;
+      try{
+        const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({poolId,action:'chat-fetch'})});
+        const d=await r.json();
+        if(d.messages) setChatMessages(d.messages);
+      }catch{}
+    };
+    check();
+    const interval=setInterval(check, 60000);
+    return()=>clearInterval(interval);
+  },[tab,poolId]);
+  const hasUnreadChat = chatMessages.length > lastSeenChatCount;
+
   // Auto-redirect away from Enter Pool tab when tournament starts (tab gets hidden)
   useEffect(()=>{
     if(pastTeeTime&&tab==='Enter Pool')setTab('Standings');
@@ -2690,7 +2725,7 @@ export default function App(){
       </header>
 
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
-        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3}}>{t}</button>)}
+        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:7,marginLeft:3,width:7,height:7,borderRadius:'50%',background:'#e0322c',display:'inline-block',boxShadow:'0 0 0 2px #fff'}}/>}</button>)}
       </nav>
       {lastUp&&!picksHidden&&<div style={{padding:'4px 14px',background:T.navActive,borderBottom:`1px solid ${T.cardBorder}`,textAlign:'center'}}><span style={{fontSize:10,color:'#8a9580'}}>Scores update automatically · Last: {lastUp}</span></div>}
       {justActivated&&<div style={{background:'#d1fae5',padding:'10px 16px',fontSize:13,color:'#065f46',textAlign:'center',fontWeight:600}}>🎉 Your pool is live! Share this link with your friends to start entering picks.</div>}
