@@ -1,5 +1,5 @@
 'use client';
-// build: unread-chat-indicator-v125-20260602-1000
+// build: unread-chat-verified-only-v126-20260602-1030
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2036,13 +2036,15 @@ export default function App(){
   },[tab]);
 
   // FINGERPRINT_V125_UNREAD_TRACKING
-  // While viewing the Chat tab, treat all current messages as seen (clears the unread dot).
+  // Mark messages seen only when the user is on the Chat tab AND verified — i.e. actually
+  // viewing the messages, not just looking at the sign-in screen. Otherwise the dot would
+  // clear without them ever reading anything.
   useEffect(()=>{
-    if(tab==='Chat' && chatMessages.length>0){
+    if(tab==='Chat' && chatVerified && chatMessages.length>0){
       setLastSeenChatCount(chatMessages.length);
       try{ window.localStorage.setItem('tgp_chatseen_'+window.location.pathname, String(chatMessages.length)); }catch{}
     }
-  },[tab,chatMessages.length]);
+  },[tab,chatVerified,chatMessages.length]);
 
   // Background poll for unread indicator when NOT on the Chat tab.
   // 60s cadence (matches the main refresh loop) to keep Vercel invocations modest; visible only.
