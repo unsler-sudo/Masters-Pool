@@ -1,5 +1,5 @@
 'use client';
-// build: remove-holdover-clean-gate-v128-20260602-1200
+// build: odds-fallback-top5-makecut-v129-20260602-1230
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1244,15 +1244,22 @@ export default function App(){
           const name = p.player_name || p.name || '';
           // Convert "Last, First" → "First Last"
           const displayName = name.includes(',') ? name.split(',').reverse().map(s=>s.trim()).join(' ') : name;
+          // FINGERPRINT_V129_ODDS_FALLBACK
+          // Show meaningful longshot odds for everyone in the field. DataGolf reports win:0 for the
+          // deepest longshots (amateurs, past champs on exemptions) even though they have real top-5
+          // and make-cut probabilities. Falling back through win → top-5 → make-cut means a player in
+          // the field always shows a number (capped at +99999) instead of "n/a". Only truly data-less
+          // players (no probability of any kind) show "n/a".
           const win = p.win || 0;
-          // FINGERPRINT_V115_ODDS_THRESHOLD
-          // Show odds for any player with a real win probability. DataGolf lists longshots down to
-          // ~0.0001 (e.g. +166000). Old threshold of 0.001 wrongly hid legit longshots as "n/a".
-          // Only show "n/a" when there's genuinely no probability (0 or missing).
-          const odds = win > 0
-            ? (win >= 0.5
-                ? `-${Math.round(win/(1-win)*100)}`        // favorite → negative American odds
-                : `+${Math.min(Math.round((1/win)*100-100), 99999)}`) // underdog → positive, capped
+          // Effective win-equivalent probability for odds display: use win if present, else derive a
+          // very small proxy from top-5 (÷5) or make-cut (÷50) so the magnitude stays realistic.
+          const pTop5 = p.top_5 || p.top5 || 0;
+          const pCut  = p.make_cut || p.makeCut || 0;
+          const effWin = win > 0 ? win : (pTop5 > 0 ? pTop5 / 5 : (pCut > 0 ? pCut / 50 : 0));
+          const odds = effWin > 0
+            ? (effWin >= 0.5
+                ? `-${Math.round(effWin/(1-effWin)*100)}`        // favorite → negative American odds
+                : `+${Math.min(Math.round((1/effWin)*100-100), 99999)}`) // underdog → positive, capped
             : 'n/a';
           // Tier cuts scale to field size (see above)
           const tier = i < tierAMax ? 1 : i < tierBMax ? 2 : 3;
