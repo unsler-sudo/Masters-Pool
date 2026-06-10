@@ -1,5 +1,5 @@
 'use client';
-// build: blinking-chat-dot-v130-20260602-1300
+// build: tappable-column-sort-v131-20260602-1400
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -837,6 +837,10 @@ export default function App(){
   const [picks,setPicks]=useState({1:[],2:[],3:[]});
   const [search,setSearch]=useState('');
   const [fieldSort,setFieldSort]=useState('leaderboard'); // 'leaderboard' or 'pairings'
+  // FINGERPRINT_V131_COLSORT
+  // User-tappable column sort for the leaderboard view. null = default day-aware logic.
+  // {key:'pos'|'name'|'tier'|'thru'|'score'|'earnings', dir:1|-1}
+  const [colSort,setColSort]=useState(null);
   const [toast,setToast]=useState('');
   const [adminPw,setAdminPw]=useState('');
   const [adminOk,setAdminOk]=useState(false);
@@ -2259,7 +2263,41 @@ export default function App(){
       });
   const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>a.name.localeCompare(b.name));
   const filteredTier=tierField.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
-  const fieldVis=sortF.filter(p=>{
+  // FINGERPRINT_V131_COLSORT_APPLY
+  // Tap-to-sort override (leaderboard view only). When colSort is null, sortF keeps the
+  // default day-aware order computed above. Cut players always sink to the bottom.
+  const colSorted = (colSort && fieldSort !== 'pairings')
+    ? [...sortF].sort((a,b)=>{
+        const aCut=/CUT|WD|DQ|MC/i.test(a.pos), bCut=/CUT|WD|DQ|MC/i.test(b.pos);
+        if(aCut&&!bCut)return 1;
+        if(bCut&&!aCut)return -1;
+        const d=colSort.dir;
+        const num=(v)=>{const n=parseFloat(String(v??'').replace(/[$,+]/g,''));return isNaN(n)?null:n;};
+        switch(colSort.key){
+          case 'pos': {
+            const pa=parsePos(a.pos)??9999, pb=parsePos(b.pos)??9999;
+            return (pa-pb)*d;
+          }
+          case 'name': return a.name.localeCompare(b.name)*d;
+          case 'tier': return ((a.tier??9)-(b.tier??9))*d || a.name.localeCompare(b.name);
+          case 'thru': {
+            // numeric thru (1-18); 'F'/18 = 18; tee time (not started) sorts after
+            const tv=(p)=>{const t=parseInt(p.thru,10);if(!isNaN(t))return t;if(String(p.thru)==='F')return 18;return -1;};
+            return (tv(a)-tv(b))*d;
+          }
+          case 'score': {
+            const sa=parseScoreToNum(a.score), sb=parseScoreToNum(b.score);
+            return (sa-sb)*d;
+          }
+          case 'earnings': {
+            const ea=a.earnings??0, eb=b.earnings??0;
+            return (ea-eb)*d;
+          }
+          default: return 0;
+        }
+      })
+    : sortF;
+  const fieldVis=colSorted.filter(p=>{
     if(!p.name.toLowerCase().includes(search.toLowerCase())) return false;
     if(showOnlyFavorites && !favorites.has(p.name)) return false;
     return true;
@@ -2945,13 +2983,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           <input style={{...inp,marginBottom:6}} placeholder="Search players..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <div style={{display:'flex',gap:6,marginBottom:8,justifyContent:'center',flexWrap:'wrap'}}>
             {isLive && !tournamentComplete && field.some(p=>p.pairingTeeTime||p.teeTime) && <>
-              <button onClick={()=>setFieldSort('leaderboard')} style={{
+              <button onClick={()=>{setFieldSort('leaderboard');setColSort(null);}} style={{
                 padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
                 border:`1px solid ${fieldSort==='leaderboard'?T.primary:'#d0d4d0'}`,
                 background:fieldSort==='leaderboard'?T.primary:'#fff',
                 color:fieldSort==='leaderboard'?'#fff':'#5a6555',
               }}>Leaderboard</button>
-              <button onClick={()=>setFieldSort('pairings')} style={{
+              <button onClick={()=>{setFieldSort('pairings');setColSort(null);}} style={{
                 padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
                 border:`1px solid ${fieldSort==='pairings'?T.primary:'#d0d4d0'}`,
                 background:fieldSort==='pairings'?T.primary:'#fff',
@@ -2980,7 +3018,27 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           <div style={{borderRadius:9,border:`1px solid ${T.cardBorder}`,position:'relative'}}>
             <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.15)',borderTopLeftRadius:9,borderTopRightRadius:9}}>
               {pastTeeTime && !isPreTournament
-                ?<><span style={{width:40,textAlign:'center'}}>Pos</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>Tee/Thru</span><span style={{width:40,textAlign:'center'}}>Tot</span><span style={{width:72,textAlign:'right'}}>Earnings</span></>
+                ?(()=>{
+                  // FINGERPRINT_V131_COLSORT_HEADER
+                  // Tap cycle per column: default → asc → desc → default. Arrow shows active sort.
+                  const cycle=(key,defaultDir=1)=>{
+                    setColSort(cs=>{
+                      if(!cs||cs.key!==key)return {key,dir:defaultDir};
+                      if(cs.dir===defaultDir)return {key,dir:-defaultDir};
+                      return null; // third tap → back to default day logic
+                    });
+                  };
+                  const arrow=(key)=>colSort?.key===key?(colSort.dir===1?' ▲':' ▼'):'';
+                  const hc={cursor:'pointer',userSelect:'none'};
+                  return <>
+                    <span onClick={()=>cycle('pos')} style={{...hc,width:40,textAlign:'center'}}>Pos{arrow('pos')}</span>
+                    <span onClick={()=>cycle('name')} style={{...hc,flex:1}}>Player{arrow('name')}</span>
+                    <span onClick={()=>cycle('tier')} style={{...hc,width:30,textAlign:'center'}}>Tier{arrow('tier')}</span>
+                    <span onClick={()=>cycle('thru',-1)} style={{...hc,width:50,textAlign:'center'}}>Thru{arrow('thru')}</span>
+                    <span onClick={()=>cycle('score')} style={{...hc,width:40,textAlign:'center'}}>Tot{arrow('score')}</span>
+                    <span onClick={()=>cycle('earnings',-1)} style={{...hc,width:72,textAlign:'right'}}>Earnings{arrow('earnings')}</span>
+                  </>;
+                })()
                 : hasTeeTimes
                 ?<><span style={{width:40,textAlign:'center'}}>#</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:62,textAlign:'center'}}>R1 Tee</span><span style={{width:40,textAlign:'center'}}>DG#</span></>
                 :<><span style={{width:40,textAlign:'center'}}>#</span><span style={{flex:1}}>Player</span><span style={{width:30,textAlign:'center'}}>Tier</span><span style={{width:50,textAlign:'center'}}>DG Rank</span></>
