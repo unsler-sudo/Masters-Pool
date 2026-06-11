@@ -1,5 +1,5 @@
 'use client';
-// build: live-field-reconcile-v133-20260611-1500
+// build: fieldupdates-roster-append-v134-20260611-1530
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1186,11 +1186,15 @@ export default function App(){
         const teeTimeMap = {};
         let earliestTeeMs = 0; // earliest R1 tee time (UTC ms) — event-start gate, never moves
         let fuCurrentRound = 1;
+        let fuRawPlayers = []; // raw field-updates roster — authoritative for late substitutions
+        let fuEventName = '';
         try {
           const fuRes = await fetch('/api/scores?endpoint=field-updates');
           if(fuRes.ok){
             const fd = await fuRes.json();
             const fieldPlayers = fd.field || fd.players || [];
+            fuRawPlayers = fieldPlayers;
+            fuEventName = fd.event_name || '';
             const currentRound = fd.current_round || 1;
             fuCurrentRound = currentRound;
             fieldPlayers.forEach(p=>{
@@ -1297,6 +1301,57 @@ export default function App(){
             r1: null, r2: null, r3: null, r4: null,
           };
         });
+
+        // FINGERPRINT_V134_FU_FIELD_APPEND
+        // field-updates is the authoritative roster — it carries late substitutions (alternates
+        // who replace a pre-R1 WD, e.g. Kohles for Hubbard). Pre-tournament was snapshotted
+        // earlier and misses them. Append any field-updates player WITH a tee time who isn't in
+        // the pre-tournament-built field, complete with tee data (so pairings + cut detection work).
+        // GUARD: only when field-updates names the SAME event as pre-tournament — during the
+        // weekend transition field-updates flips to the next event first, and appending then
+        // would inject next week's entire field into this week's display.
+        const fuNorm = (s)=>(s||'').toLowerCase().replace(/\s+\d{4}$/,'').trim();
+        const ptEvN = fuNorm(ptData.event_name), fuEvN = fuNorm(fuEventName);
+        const sameEvent = ptEvN && fuEvN && (ptEvN===fuEvN || ptEvN.includes(fuEvN) || fuEvN.includes(ptEvN));
+        if (sameEvent && fuRawPlayers.length > 0) {
+          const have = new Set();
+          enriched.forEach(e=>{
+            const n=(e.name||'').toLowerCase().trim();
+            have.add(n);
+            const parts=n.split(' ');
+            if(parts.length>=2) have.add(`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`);
+          });
+          fuRawPlayers.forEach(p=>{
+            const rawName=(p.player_name||'').trim();
+            if(!rawName) return;
+            const key=rawName.toLowerCase();
+            const flipped = rawName.includes(',') ? rawName.split(',').reverse().map(s=>s.trim()).join(' ').toLowerCase() : null;
+            if(have.has(key) || (flipped && have.has(flipped))) return;
+            const teeInfo = teeTimeMap[key] || (flipped ? teeTimeMap[flipped] : null);
+            if(!teeInfo) return; // only confirmed substitutes with published tee times
+            const displayName = rawName.includes(',') ? rawName.split(',').reverse().map(s=>s.trim()).join(' ') : rawName;
+            enriched.push({
+              name: displayName,
+              country: p.country || 'USA',
+              dgId: p.dg_id || null,
+              odds: 'n/a', // not in the pre-tournament odds model
+              tier: 3,
+              rank: 9998, dgRank: 9999, win: 0,
+              confirmed: true, onTrack: true,
+              addedFromFieldUpdates: true,
+              teeTime: teeInfo.teeTime || null,
+              startHole: teeInfo.startHole || null,
+              teeRoundNum: teeInfo.roundNum || null,
+              allRoundsTees: teeInfo.allRounds || null,
+              pairingTeeTime: teeInfo.teeTime || null,
+              pairingStartHole: teeInfo.startHole || null,
+              pairingRoundNum: teeInfo.roundNum || null,
+              pos: '-', score: 'E', today: '', thru: '',
+              earnings: 0,
+              r1: null, r2: null, r3: null, r4: null,
+            });
+          });
+        }
 
         setFields(prev => ({...prev, [major]: enriched}));
         if(updateDisplay){
