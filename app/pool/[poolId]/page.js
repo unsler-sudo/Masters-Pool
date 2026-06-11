@@ -1,5 +1,5 @@
 'use client';
-// build: pretourney-column-sort-v132-20260602-1430
+// build: live-field-reconcile-v133-20260611-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1596,6 +1596,11 @@ export default function App(){
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')  // remove diacritics
       .replace(/\s+/g, ' ');  // collapse multiple spaces
     
+    // FINGERPRINT_V133_FIELD_RECONCILE
+    // Track which in-play entries get consumed by the name match, so we can reconcile after:
+    // alternates who replaced a WD (e.g. in-play has them, pre-tournament doesn't) get ADDED,
+    // and pre-tournament players absent from in-play entirely (withdrew before R1) get marked WD.
+    const matchedRawNames = new Set();
     const updated=currentField.map(f=>{
       const fName=normalize(f.name);
       // Build all possible name format variants to match against
@@ -1622,6 +1627,7 @@ export default function App(){
         return candidates.has(pName);
       });
       if(match){
+        matchedRawNames.add(normalize(match.player_name||match.dg_player_name||''));
         const total=match.current_score??match.total_to_par??match.total??null;
         const todayScore=match.today??null;
         const thruHoles=match.thru??null;
@@ -1637,6 +1643,72 @@ export default function App(){
       return f;
     });
 
+    // Only reconcile when in-play has substantial data for the live event (guards against
+    // partial fetches wrongly WD'ing the field or appending junk).
+    const substantialLive = raw.length >= 50;
+    if (substantialLive) {
+      // 1) ADD alternates: in-play players that matched no field row (late field replacements).
+      //    Keep the name format consistent with the rest of the field ("First Last" for pgatour).
+      const fieldUsesComma = currentField.length > 0 && currentField.filter(f=>(f.name||'').includes(',')).length > currentField.length/2;
+      raw.forEach(p=>{
+        const rn = normalize(p.player_name||p.dg_player_name||'');
+        if(!rn || matchedRawNames.has(rn)) return;
+        const rawName = (p.player_name||p.dg_player_name||'').trim();
+        const displayName = (!fieldUsesComma && rawName.includes(','))
+          ? rawName.split(',').reverse().map(s=>s.trim()).join(' ')
+          : rawName;
+        const total=p.current_score??p.total_to_par??p.total??null;
+        const thruHoles=p.thru??null;
+        updated.push({
+          name: displayName,
+          country: p.country || 'USA',
+          dgId: p.dg_id || null,
+          odds: 'n/a',
+          tier: 3,
+          rank: 9998,
+          dgRank: 9999,
+          win: 0,
+          confirmed: true,
+          onTrack: true,
+          addedFromLive: true, // alternate added at tee-off; no pre-tournament data
+          teeTime: null, startHole: null, teeRoundNum: null, allRoundsTees: null,
+          pairingTeeTime: null, pairingStartHole: null, pairingRoundNum: null,
+          pos: p.current_pos!=null&&p.current_pos!=='--'?String(p.current_pos):'-',
+          score: total!=null?(total===0?'E':(total>0?`+${total}`:String(total))):'E',
+          today: '',
+          thru: thruHoles!=null&&thruHoles>0?String(thruHoles):'',
+          r1:p.R1??null, r2:p.R2??null, r3:p.R3??null, r4:p.R4??null,
+          earnings: 0,
+        });
+      });
+      // 2) WD no-shows: field players completely absent from in-play with no scores at all —
+      //    they withdrew before R1 (DataGolf removes them from the live feed).
+      updated.forEach(f=>{
+        if(f.addedFromLive) return;
+        const fName=normalize(f.name);
+        const inLive = raw.some(p=>{
+          const pName=normalize(p.player_name||p.dg_player_name||'');
+          if(pName===fName) return true;
+          // cheap reverse check for "First Last" vs "Last, First"
+          if(fName.includes(',')){
+            const [l,fi]=fName.split(',').map(s=>s.trim());
+            return pName===`${fi} ${l}`;
+          }
+          const parts=fName.split(' ');
+          if(parts.length>=2) return pName===`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`;
+          return false;
+        });
+        const noScores = f.r1==null && f.r2==null && f.r3==null && f.r4==null;
+        const notMarked = !/CUT|WD|DQ|MC/i.test(f.pos||'');
+        const noRealPos = !(parseInt(String(f.pos||'').replace(/^T/i,''),10)>0);
+        if(!inLive && noScores && notMarked && noRealPos){
+          f.pos='WD';
+          f.thru='';
+          f.teeTime=null; f.pairingTeeTime=null; // don't show a stale tee for a withdrawn player
+        }
+      });
+    }
+
     // ── MISSED CUT DETECTION ─────────────────────────────────────────────
     // FINGERPRINT_V104_CUT_R3TEE
     // After R2, players who made the cut get an R3 tee time; those who missed don't.
@@ -1649,6 +1721,7 @@ export default function App(){
     const r3TeeTimesPublished = playersWithR3Tee >= 50;
     if (r3TeeTimesPublished) {
       updated.forEach(p => {
+        if (p.addedFromLive) return; // alternates have no allRoundsTees; in-play's current_pos carries their CUT status
         const r1Done = p.r1 != null;
         const r2Done = p.r2 != null;
         const r3NotStarted = p.r3 == null;
