@@ -1,5 +1,5 @@
 'use client';
-// build: picked-players-filter-v136-20260611-1630
+// build: code-review-fixes-v137-20260611-1730
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1658,6 +1658,7 @@ export default function App(){
     // alternates who replaced a WD (e.g. in-play has them, pre-tournament doesn't) get ADDED,
     // and pre-tournament players absent from in-play entirely (withdrew before R1) get marked WD.
     const matchedRawNames = new Set();
+    const matchedFieldNames = new Set(); // field players found in the live feed — the WD check's source of truth
     const updated=currentField.map(f=>{
       const fName=normalize(f.name);
       // Build all possible name format variants to match against
@@ -1685,6 +1686,7 @@ export default function App(){
       });
       if(match){
         matchedRawNames.add(normalize(match.player_name||match.dg_player_name||''));
+        matchedFieldNames.add(f.name);
         const total=match.current_score??match.total_to_par??match.total??null;
         const todayScore=match.today??null;
         const thruHoles=match.thru??null;
@@ -1742,19 +1744,12 @@ export default function App(){
       //    they withdrew before R1 (DataGolf removes them from the live feed).
       updated.forEach(f=>{
         if(f.addedFromLive) return;
-        const fName=normalize(f.name);
-        const inLive = raw.some(p=>{
-          const pName=normalize(p.player_name||p.dg_player_name||'');
-          if(pName===fName) return true;
-          // cheap reverse check for "First Last" vs "Last, First"
-          if(fName.includes(',')){
-            const [l,fi]=fName.split(',').map(s=>s.trim());
-            return pName===`${fi} ${l}`;
-          }
-          const parts=fName.split(' ');
-          if(parts.length>=2) return pName===`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`;
-          return false;
-        });
+        // FINGERPRINT_V137_WD_MATCH_FIX
+        // Use the merge map's own match result (which handles 3-4 part last names like
+        // "Dumont De Chassart, Adrien") instead of re-deriving with a weaker matcher.
+        // The old re-derived check only tried single-word last-name splits, so multi-part
+        // names could false-WD in the window before they teed off (no scores yet).
+        const inLive = matchedFieldNames.has(f.name);
         const noScores = f.r1==null && f.r2==null && f.r3==null && f.r4==null;
         const notMarked = !/CUT|WD|DQ|MC/i.test(f.pos||'');
         const noRealPos = !(parseInt(String(f.pos||'').replace(/^T/i,''),10)>0);
@@ -2279,6 +2274,11 @@ export default function App(){
   // Pre-tournament has TWO sub-states: with-tee-times (Wed-Thu morning) and no-tee-times (Mon-Tue)
   // When tee times are available, show them. When not, show DG odds rank.
   const hasTeeTimes = isPreTournament && field.some(p => p.teeTime);
+  // FINGERPRINT_V137_COLSORT_MODE_RESET
+  // The header columns change meaning when the display mode flips (pre-tournament 'tee'/'rank'
+  // vs live 'thru'/'score'/'earnings'). Without this reset, a sort picked Wednesday (e.g. R1 Tee)
+  // would silently keep ordering Thursday's live leaderboard with no visible arrow.
+  useEffect(()=>{ setColSort(null); },[isPreTournament, hasTeeTimes, activeMajor]);
   const sortF = (!isActiveMajor || isPreTournament)
     ? [...field].sort((a,b)=>{
         // Pre-tournament: if tee times available, sort by tee time ASC (earliest first)
@@ -3590,10 +3590,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 // year, the existing ⛳ Majors / 🏌️ PGA Tour Events grouping is preserved, each
                 // group sorted most-recent-first by tournament date.
                 const byDate=(a,b)=>new Date(b.tournamentDate||b.archivedAt||0)-new Date(a.tournamentDate||a.archivedAt||0);
-                const years=[...new Set(publicArchives.map(a=>a.year||new Date(a.tournamentDate||a.archivedAt||Date.now()).getFullYear()))].sort((a,b)=>b-a);
+                const archYear=(a)=>Number(a.year)||new Date(a.tournamentDate||a.archivedAt||Date.now()).getFullYear();
+                const years=[...new Set(publicArchives.map(archYear))].sort((a,b)=>b-a);
                 const newestYear=years[0];
                 return <>{years.map(y=>{
-                  const yearArchives=publicArchives.filter(a=>(a.year||new Date(a.tournamentDate||a.archivedAt||Date.now()).getFullYear())===y);
+                  const yearArchives=publicArchives.filter(a=>archYear(a)===y);
                   const majorArchives=yearArchives.filter(a=>majorKeys.includes(a.major)).sort(byDate);
                   const tourArchives=yearArchives.filter(a=>a.major==='pgatour').sort(byDate);
                   const isOpen=expandedYears[y]??(y===newestYear);
