@@ -1,5 +1,5 @@
 'use client';
-// build: history-year-accordion-v135-20260611-1600
+// build: picked-players-filter-v136-20260611-1630
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -858,6 +858,7 @@ export default function App(){
   // Player favorites — per-device using localStorage, scoped per pool
   const [favorites,setFavorites]=useState(new Set());
   const [showOnlyFavorites,setShowOnlyFavorites]=useState(false);
+  const [showOnlyPicked,setShowOnlyPicked]=useState(false); // FINGERPRINT_V136 — filter field to players in pool entries
   // Load favorites from localStorage on mount
   useEffect(()=>{
     if(typeof window === 'undefined') return;
@@ -2439,6 +2440,9 @@ export default function App(){
   const fieldVis=colSorted.filter(p=>{
     if(!p.name.toLowerCase().includes(search.toLowerCase())) return false;
     if(showOnlyFavorites && !favorites.has(p.name)) return false;
+    // FINGERPRINT_V136_PICKED_FILTER — show only players selected in pool entries.
+    // Inert while picks are hidden (pre tee-off) so it can't leak who picked whom.
+    if(showOnlyPicked && !picksHidden && owners(p.name).length===0) return false;
     return true;
   });
 
@@ -3141,6 +3145,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               background:showOnlyFavorites?'#d4a017':'#fff',
               color:showOnlyFavorites?'#fff':'#5a6555',
             }}>⭐ Favorites ({favorites.size})</button>}
+            {!picksHidden && entries.length>0 && <button onClick={()=>setShowOnlyPicked(v=>!v)} style={{
+              padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
+              border:`1px solid ${showOnlyPicked?T.primary:'#d0d4d0'}`,
+              background:showOnlyPicked?T.primary:'#fff',
+              color:showOnlyPicked?'#fff':'#5a6555',
+            }}>🎯 Picked ({field.filter(p=>owners(p.name).length>0).length})</button>}
           </div>
           {!pastTeeTime&&<div style={{marginBottom:8,textAlign:'center'}}>
             {fieldSource&&<div style={{fontSize:10,color:T.primary,background:`${T.primary}0a`,padding:'4px 10px',borderRadius:20,display:'inline-block',marginBottom:4}}>{fieldSource}</div>}
