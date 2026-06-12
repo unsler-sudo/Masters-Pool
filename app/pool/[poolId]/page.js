@@ -1,5 +1,5 @@
 'use client';
-// build: fieldupdates-roster-append-v134-20260611-1530
+// build: history-year-accordion-v135-20260611-1600
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -887,6 +887,7 @@ export default function App(){
   const [expandedArchive,setExpandedArchive]=useState(null);
   const [showArchives,setShowArchives]=useState(false);
   const [publicArchives,setPublicArchives]=useState([]);
+  const [expandedYears,setExpandedYears]=useState({}); // History year accordion — newest open by default
   const [historyLoaded,setHistoryLoaded]=useState(false);
   const [chatMessages,setChatMessages]=useState([]);
   const [lastSeenChatCount,setLastSeenChatCount]=useState(()=>{
@@ -3572,19 +3573,40 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </div>;
                 };
                 const majorKeys=['players','masters','pga','usopen','open'];
-                const majorArchives=publicArchives.filter(a=>majorKeys.includes(a.major));
-                const tourArchives=publicArchives.filter(a=>a.major==='pgatour');
                 const sectionHdr=(txt)=>(<div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:800,color:T.primary,margin:'4px 0 10px',paddingBottom:6,borderBottom:`2px solid ${T.primary}22`}}>{txt}</div>);
-                return <>
-                  {majorArchives.length>0&&<div style={{marginBottom:20}}>
-                    {sectionHdr('⛳ Majors')}
-                    {majorArchives.map(renderArchiveCard)}
-                  </div>}
-                  {tourArchives.length>0&&<div>
-                    {sectionHdr('🏌️ PGA Tour Events')}
-                    {tourArchives.map(renderArchiveCard)}
-                  </div>}
-                </>;
+                // FINGERPRINT_V135_YEAR_ACCORDION
+                // Stack archives by season in collapsible year groups so History scales year after
+                // year. Newest season expanded by default; older seasons start collapsed. Within a
+                // year, the existing ⛳ Majors / 🏌️ PGA Tour Events grouping is preserved, each
+                // group sorted most-recent-first by tournament date.
+                const byDate=(a,b)=>new Date(b.tournamentDate||b.archivedAt||0)-new Date(a.tournamentDate||a.archivedAt||0);
+                const years=[...new Set(publicArchives.map(a=>a.year||new Date(a.tournamentDate||a.archivedAt||Date.now()).getFullYear()))].sort((a,b)=>b-a);
+                const newestYear=years[0];
+                return <>{years.map(y=>{
+                  const yearArchives=publicArchives.filter(a=>(a.year||new Date(a.tournamentDate||a.archivedAt||Date.now()).getFullYear())===y);
+                  const majorArchives=yearArchives.filter(a=>majorKeys.includes(a.major)).sort(byDate);
+                  const tourArchives=yearArchives.filter(a=>a.major==='pgatour').sort(byDate);
+                  const isOpen=expandedYears[y]??(y===newestYear);
+                  return <div key={y} style={{marginBottom:14}}>
+                    <button onClick={()=>setExpandedYears(prev=>({...prev,[y]:!isOpen}))}
+                      style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',
+                        background:T.navActive,border:`1px solid ${T.cardBorder}`,borderRadius:10,
+                        padding:'12px 14px',cursor:'pointer',marginBottom:isOpen?12:0}}>
+                      <span style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:800,color:T.primary}}>🗓 {y} Season</span>
+                      <span style={{fontSize:12,color:'#8a9580',fontWeight:600}}>{yearArchives.length} event{yearArchives.length===1?'':'s'} <span style={{marginLeft:6,color:T.primary}}>{isOpen?'▼':'▶'}</span></span>
+                    </button>
+                    {isOpen&&<>
+                      {majorArchives.length>0&&<div style={{marginBottom:20}}>
+                        {sectionHdr('⛳ Majors')}
+                        {majorArchives.map(renderArchiveCard)}
+                      </div>}
+                      {tourArchives.length>0&&<div>
+                        {sectionHdr('🏌️ PGA Tour Events')}
+                        {tourArchives.map(renderArchiveCard)}
+                      </div>}
+                    </>}
+                  </div>;
+                })}</>;
               })()
           }
         </>}
