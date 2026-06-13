@@ -1,5 +1,5 @@
 'use client';
-// build: code-review-fixes-v137-20260611-1730
+// build: tee-fallback-recent-round-v140-20260613-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2252,8 +2252,18 @@ export default function App(){
   // Resolve a player's tee time + start hole for the current tournament round (for pairings)
   const pairTeeFor = (p) => {
     const ar = p.allRoundsTees;
-    if (ar && ar[tournamentRound]) return { teeTime: ar[tournamentRound].teeTime, startHole: ar[tournamentRound].startHole };
-    // Fallback to whatever single tee time is on the player
+    // FINGERPRINT_V140_TEE_FALLBACK
+    // Prefer the current tournament round's tee. If that round's tees aren't published yet
+    // (e.g. Saturday night before R4 tees post), fall back to the HIGHEST round we DO have a
+    // tee for — i.e. the most recently played round (R3) — NOT R1. p.teeTime is always R1, so
+    // the old fallback wrongly showed Thursday's times once R3 was done and R4 wasn't out.
+    if (ar) {
+      if (ar[tournamentRound]) return { teeTime: ar[tournamentRound].teeTime, startHole: ar[tournamentRound].startHole };
+      const avail = Object.keys(ar).map(Number).sort((a,b)=>b-a); // highest round first
+      for (const rn of avail) {
+        if (ar[rn]?.teeTime) return { teeTime: ar[rn].teeTime, startHole: ar[rn].startHole };
+      }
+    }
     return { teeTime: p.pairingTeeTime || p.teeTime, startHole: p.pairingStartHole || p.startHole || 1 };
   };
   // Only consider this major "active" if it's actually within its tournament window
