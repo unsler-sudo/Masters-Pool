@@ -1,5 +1,5 @@
 'use client';
-// build: chalk-favorite-indicator-v138-20260611-1830
+// build: code-review-fixes-v137-20260611-1730
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -602,31 +602,6 @@ const FLAG_MAP = {
   INA:'🇮🇩',HKG:'🇭🇰',
 };
 const Flag = ({c}) => FLAG_MAP[c] ? <span>{FLAG_MAP[c]}</span> : null;
-
-// FINGERPRINT_V138_CHALK_ICON
-// Small chalk-stick icon for marking the tier favorite ("chalk") pick. Simplified from the
-// full illustration down to the stick silhouette so it reads crisply at ~14px. Tight viewBox,
-// no dust cloud or fine texture (those vanish at small sizes anyway).
-const ChalkIcon = ({size=14, title='Chalk — tier favorite'}) => (
-  <svg width={size} height={size} viewBox="370 125 540 620" xmlns="http://www.w3.org/2000/svg" style={{display:'inline-block',verticalAlign:'-2px',flexShrink:0}} role="img" aria-label={title}>
-    <title>{title}</title>
-    <defs>
-      <linearGradient id="chalkMiniBody" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#FFFFFF" />
-        <stop offset="70%" stopColor="#FAFAFA" />
-        <stop offset="100%" stopColor="#E6E6E6" />
-      </linearGradient>
-    </defs>
-    {/* Charcoal outline for contrast on light row backgrounds */}
-    <path d="M 542 135 L 892 642 c 18 26, 30 45, 18 69 c -15 30, -52 42, -81 22 c -15 -10, -28 -24, -43 -46 L 378 182 c -35 -51, 15 -98, 54 -73 Z" fill="#475569" />
-    {/* Chalk body */}
-    <path d="M 545 147 L 884 639 c 12 17, 24 35, 14 51 c -10 16, -34 26, -55 12 c -15 -10, -25 -22, -38 -41 L 381 194 c -22 -32, 11 -67, 39 -49 L 545 147 Z" fill="url(#chalkMiniBody)" />
-    {/* One soft highlight ridge so it reads as 3D, not flat */}
-    <path d="M 485 210 L 775 625" fill="none" stroke="#FFFFFF" strokeWidth="14" strokeLinecap="round" opacity="0.7" />
-    {/* Worn tip */}
-    <path d="M 884 639 c 12 17, 24 35, 14 51 c -10 16, -34 26, -55 12 c -15 -10, -25 -22, -38 -41 Z" fill="#D9DEE5" />
-  </svg>
-);
 
 // Schedule retry button — shows after 5 seconds of loading so user isn't stuck
 function ScheduleRetry({onRetry, primary}) {
@@ -2241,25 +2216,6 @@ export default function App(){
     ? [...entries].sort((a,b)=>teamE(b)-teamE(a))
     : entries;
   const owners=n=>entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
-  // FINGERPRINT_V138_CHALK
-  // "Chalk" = the single most-favored player (lowest odds rank) in a tier. Computed for tiers
-  // A (1) and B (2) only — tier C longshots have no meaningful favorite. Returns a Set of the
-  // chalk players' names. Uses each player's `rank` (odds order); falls back to dgRank.
-  const chalkNames = (() => {
-    const set = new Set();
-    [1, 2].forEach(tierId => {
-      const inTier = field.filter(p => p.tier === tierId);
-      if (inTier.length === 0) return;
-      const fav = inTier.reduce((best, p) => {
-        const r  = p.rank ?? p.dgRank ?? 9999;
-        const br = best.rank ?? best.dgRank ?? 9999;
-        return r < br ? p : best;
-      });
-      if (fav) set.add(fav.name);
-    });
-    return set;
-  })();
-  const isChalk = (name) => !picksHidden && chalkNames.has(name);
   // Parse "8:18 AM" → 818, "1:43 PM" → 1343 for sorting
   const parseTeeTime = (tt) => {
     if (!tt) return 9999;
@@ -3093,13 +3049,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <div style={{fontSize:10,fontWeight:700,color:t.color,marginBottom:3,letterSpacing:.5}}>{t.label.toUpperCase()}</div>
                     {tp.map(pn=>{const p=field.find(f=>f.name===pn);return<div key={pn} onClick={(ev)=>{ev.stopPropagation();if(p)setSelectedPlayer(p);}} style={{display:'flex',padding:'4px 0',borderBottom:'1px solid #f5f0e8',alignItems:'center',gap:6,cursor:p?'pointer':'default'}}>
                       <span style={{fontSize:14}}><Flag c={p?.country}/></span>
-                      <div style={{flex:1}}><span style={{fontWeight:600,fontSize:13,color:p?T.primary:'#333',textDecoration:p?'underline':'none',textDecorationStyle:'dotted',textUnderlineOffset:2}}>{flip(pn)}</span>{isChalk(pn)&&<ChalkIcon size={13}/>}{p&&<span style={{fontSize:11,color:'#8a9580',marginLeft:6}}>{p.pos} · {p.score}</span>}</div>
+                      <div style={{flex:1}}><span style={{fontWeight:600,fontSize:13,color:p?T.primary:'#333',textDecoration:p?'underline':'none',textDecorationStyle:'dotted',textUnderlineOffset:2}}>{flip(pn)}</span>{p&&<span style={{fontSize:11,color:'#8a9580',marginLeft:6}}>{p.pos} · {p.score}</span>}</div>
                       <span style={{fontWeight:700,fontSize:13,color:T.primary}}>{fmt(p?.earnings)}</span>
                     </div>;})}
                   </div>;})}
                 </div>}
                 {!picksHidden&&!op&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>
-                  {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} onClick={(ev)=>{ev.stopPropagation();if(p)setSelectedPlayer(p);}} style={{fontSize:10,background:T.navActive,padding:'2px 7px',borderRadius:4,border:`1px solid ${T.cardBorder}`,borderLeft:`3px solid ${t?.color||'#ccc'}`,cursor:p?'pointer':'default'}}><Flag c={p?.country}/> {pn.split(', ')[0]}{isChalk(pn)&&<ChalkIcon size={11}/>} <b style={{color:T.primary}}>{fmt(p?.earnings)}</b></span>;})}
+                  {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} onClick={(ev)=>{ev.stopPropagation();if(p)setSelectedPlayer(p);}} style={{fontSize:10,background:T.navActive,padding:'2px 7px',borderRadius:4,border:`1px solid ${T.cardBorder}`,borderLeft:`3px solid ${t?.color||'#ccc'}`,cursor:p?'pointer':'default'}}><Flag c={p?.country}/> {pn.split(', ')[0]} <b style={{color:T.primary}}>{fmt(p?.earnings)}</b></span>;})}
                 </div>}
               </div>);})}
           </>}
