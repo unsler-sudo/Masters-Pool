@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: server-side-rotation-earnings-v34-20260601-2200
+// build: roster-backfill-v142-20260616-1300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -189,6 +189,24 @@ async function getPayments(pid)    { try { const r=await redis('GET',k(pid,'paym
 async function savePayments(pid,p) { await redis('SET',k(pid,'payments'),JSON.stringify(p)); }
 async function getMajor(pid)       { try { const r=await redis('GET',k(pid,'major')); return VALID_MAJORS.includes(r)?r:'pga'; } catch { return 'pga'; } }
 async function getPoolMeta(pid)    { try { const r=await redis('GET',k(pid,'meta')); return r?JSON.parse(r):null; } catch { return null; } }
+
+// FINGERPRINT_V141_ROSTER
+// Persistent player roster — accumulates {name,email,editCode,lastSeen} across ALL events.
+// Never cleared on rotation (separate key), so the commissioner can invite past players to the
+// next week's pool. Keyed by lowercased email so the same person stays one entry week to week.
+async function getRoster(pid)      { try { const r=await redis('GET',k(pid,'roster')); return r?JSON.parse(r):[]; } catch { return []; } }
+async function saveRoster(pid,r)   { await redis('SET',k(pid,'roster'),JSON.stringify(r)); }
+async function upsertRoster(pid, name, email, editCode) {
+  if (!email) return;
+  try {
+    const roster = await getRoster(pid);
+    const em = email.trim().toLowerCase();
+    const idx = roster.findIndex(p => p.email === em);
+    const rec = { name: name?.trim()||'', email: em, editCode: editCode||null, lastSeen: Date.now() };
+    if (idx >= 0) roster[idx] = { ...roster[idx], ...rec }; else roster.push(rec);
+    await saveRoster(pid, roster);
+  } catch (e) { console.error('roster upsert failed:', e.message); }
+}
 
 // ─── Auto-manage per pool ─────────────────────────────────────────────────────
 async function autoManage(poolId) {
@@ -717,8 +735,8 @@ export async function POST(request) {
         ts: Date.now(),
       });
       await saveEntries(poolId, entries);
-
-      // Send edit code email
+      // FINGERPRINT_V141_ROSTER — remember this player for future-pool invites
+      await upsertRoster(poolId, name.trim(), email.trim().toLowerCase(), editCode);
       if (process.env.RESEND_API_KEY) {
         const meta = await getPoolMeta(poolId);
         const poolName = meta?.poolName || 'Golf Pool';
@@ -844,6 +862,8 @@ export async function POST(request) {
       entries[idx].email = email.trim().toLowerCase();
       entries[idx].editCode = editCode;
       await saveEntries(poolId, entries);
+      // FINGERPRINT_V141_ROSTER
+      await upsertRoster(poolId, entries[idx].name, email.trim().toLowerCase(), editCode);
 
       if (process.env.RESEND_API_KEY) {
         const meta = await getPoolMeta(poolId);
@@ -997,6 +1017,117 @@ export async function POST(request) {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       await redis('DEL', k(poolId, 'chat'));
       return Response.json({ ok:true, messages:[] });
+    }
+
+    // FINGERPRINT_V141_BACKFILL — one-time seed of the roster from existing archives.
+    // Scans every archive (majors + pgatour slug keys) and upserts any entry that has an email.
+    // Hand-imported archives with no emails contribute nothing; auto-rotated ones carry emails.
+    if (body.action === 'backfill-roster') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      let scanned = 0, added = 0, withEmail = 0;
+      const beforeRoster = await getRoster(poolId);
+      const beforeCount = beforeRoster.length;
+      try {
+        // Collect all archive keys: major keys + pgatour slug keys (SCAN)
+        const majorKeys = ['players','masters','pga','usopen','open'];
+        const keysToCheck = [];
+        // Major archives (a few years back to be safe)
+        const thisYear = new Date().getFullYear();
+        for (let y = 2024; y <= thisYear + 1; y++) {
+          majorKeys.forEach(m => keysToCheck.push(k(poolId, `archive:${m}_${y}`)));
+        }
+        // pgatour slug-keyed archives via SCAN
+        let cursor = '0';
+        const pat = `pool:${poolId}:archive:pgatour-*`;
+        do {
+          const res = await redis('SCAN', cursor, 'MATCH', pat, 'COUNT', '100');
+          if (Array.isArray(res) && res.length === 2) {
+            cursor = res[0];
+            (res[1] || []).forEach(key => keysToCheck.push(key));
+          } else break;
+        } while (cursor !== '0');
+
+        // Read each archive and upsert entries with emails
+        for (const key of keysToCheck) {
+          let raw;
+          try { raw = await redis('GET', key); } catch { continue; }
+          if (!raw) continue;
+          scanned++;
+          let arch;
+          try { arch = JSON.parse(raw); } catch { continue; }
+          const entries = arch.entries || [];
+          for (const e of entries) {
+            if (e.email) {
+              withEmail++;
+              await upsertRoster(poolId, e.name, e.email, e.editCode || null);
+            }
+          }
+        }
+      } catch (e) {
+        return Response.json({ error: 'Backfill failed: ' + e.message }, { status:500 });
+      }
+      const afterRoster = await getRoster(poolId);
+      added = afterRoster.length - beforeCount;
+      return Response.json({ ok:true, archivesScanned:scanned, entriesWithEmail:withEmail, newPlayersAdded:added, totalRoster:afterRoster.length });
+    }
+
+    // FINGERPRINT_V141_GET_ROSTER — list past players who left an email (for invites)
+    if (body.action === 'get-roster') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const roster = await getRoster(poolId);
+      // Newest-seen first, hide the edit code in the listing (only names + emails)
+      const list = roster
+        .slice()
+        .sort((a,b)=>(b.lastSeen||0)-(a.lastSeen||0))
+        .map(p=>({ name:p.name, email:p.email, lastSeen:p.lastSeen }));
+      return Response.json({ ok:true, roster:list, count:list.length });
+    }
+
+    // FINGERPRINT_V141_INVITE_ROSTER — email all past players to join the current week's pool
+    if (body.action === 'invite-roster') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      if (!process.env.RESEND_API_KEY) return Response.json({ error:'Email not configured' }, { status:400 });
+      const roster = await getRoster(poolId);
+      if (roster.length === 0) return Response.json({ ok:true, sent:0, message:'No past players with emails yet' });
+
+      const meta = await getPoolMeta(poolId);
+      const poolName = meta?.poolName || 'Golf Pool';
+      const eventName = meta?.currentPgatourEvent || meta?.eventName || 'this week\'s tournament';
+      const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
+      const fee = meta?.entryFee || 0;
+
+      // Optional custom message from the commissioner
+      const customNote = (body.message||'').trim();
+
+      let sent = 0, failed = 0;
+      // Send individually so each person gets a personal greeting (and we don't leak the email list)
+      for (const p of roster) {
+        if (!p.email) continue;
+        try {
+          const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+              to: p.email,
+              subject: `${poolName} is open for ${eventName} ⛳`,
+              html: `
+                <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+                  <h2 style="color:#1a2a5c;margin-bottom:6px;">New week, new pool ⛳</h2>
+                  <p>Hey ${p.name||'there'},</p>
+                  <p><b>${poolName}</b> is now open for <b>${eventName}</b>.</p>
+                  ${customNote ? `<p style="background:#f5f7fb;border-left:3px solid #1a2a5c;padding:10px 14px;margin:16px 0;">${customNote.replace(/</g,'&lt;')}</p>` : ''}
+                  ${fee>0 ? `<p>Entry is <b>$${fee}</b>. Get your picks in before the first tee.</p>` : `<p>Get your picks in before the first tee.</p>`}
+                  <p style="margin:22px 0;"><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:600;">Make My Picks →</a></p>
+                  <p style="font-size:12px;color:#888;margin-top:28px;">You're getting this because you entered a past ${poolName} pool. See you on the leaderboard.</p>
+                </div>
+              `,
+            }),
+          });
+          if (res.ok) sent++; else failed++;
+        } catch { failed++; }
+      }
+      return Response.json({ ok:true, sent, failed, total:roster.length });
     }
 
     if (body.action === 'cleanup-orphan-payments') {
