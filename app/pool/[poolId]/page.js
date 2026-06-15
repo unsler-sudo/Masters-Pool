@@ -1,5 +1,5 @@
 'use client';
-// build: invite-past-players-v141-20260616-1200
+// build: odds-window-monday-9am-et-v144-20260616-1430
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1433,7 +1433,27 @@ export default function App(){
       const teeT = new Date(dynamicTeeTime || 0).getTime();
       const cutoff = teeT + 6 * 24 * 60 * 60 * 1000;
       const nowMs = Date.now();
-      const isThisMajorInWindow = nowMs >= teeT && nowMs <= cutoff;
+      // FINGERPRINT_V144_ODDS_WINDOW
+      // Odds open Monday 9:00 AM ET of tournament week (tee is Thursday). Computed from the tee
+      // date: step back to the Monday of that week, set 9 AM ET. Using a fixed Monday-9am anchor
+      // (instead of a rolling "7 days before") prevents the NEXT event's odds from opening while
+      // the CURRENT event is still wrapping up the prior weekend.
+      const oddsFetchStart = (() => {
+        if (!teeT) return 0;
+        const d = new Date(teeT);
+        // Move back to Monday of the tee-time's week (getUTCDay: Sun=0..Sat=6; Thu=4 → back 3 days)
+        const dow = d.getUTCDay();
+        const daysBackToMon = (dow + 6) % 7; // Mon→0, Tue→1, ... Thu→3, ... Sun→6
+        const mon = new Date(d);
+        mon.setUTCDate(d.getUTCDate() - daysBackToMon);
+        // 9:00 AM ET. June–Oct is EDT (UTC−4) → 13:00 UTC; Nov–Mar is EST (UTC−5) → 14:00 UTC.
+        // Determine ET offset for that Monday (rough US DST: 2nd Sun Mar – 1st Sun Nov = EDT).
+        const m = mon.getUTCMonth(); // 0=Jan
+        const isEDT = m > 2 && m < 10 ? true : (m === 2 ? mon.getUTCDate() >= 8 : (m === 10 ? mon.getUTCDate() < 7 : false));
+        mon.setUTCHours(isEDT ? 13 : 14, 0, 0, 0);
+        return mon.getTime();
+      })();
+      const isThisMajorInWindow = teeT > 0 && nowMs >= oddsFetchStart && nowMs <= cutoff;
       if(updateDisplay && isThisMajorInWindow){
         let preds = [];
         const preRes = await fetch('/api/scores?endpoint=pre-tournament');
@@ -1510,7 +1530,9 @@ export default function App(){
       }
 
       const teeTimeMs = new Date(T.teeTime).getTime();
-      const useOdds   = Date.now() >= teeTimeMs - 7 * 24 * 60 * 60 * 1000;
+      // FINGERPRINT_V144_USEODDS — align with the Monday-9am-ET fetch window (oddsFetchStart)
+      // so odds display exactly when they're fetched, not a rolling 7 days earlier.
+      const useOdds   = oddsFetchStart > 0 ? Date.now() >= oddsFetchStart : Date.now() >= teeTimeMs - 7 * 24 * 60 * 60 * 1000;
 
       const oddsRank = {};
       if(useOdds && Object.keys(oddsMap).length > 0){
