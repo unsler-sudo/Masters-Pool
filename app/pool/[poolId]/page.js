@@ -1,5 +1,5 @@
 'use client';
-// build: tee-fallback-recent-round-v140-20260613-1200
+// build: invite-past-players-v141-20260616-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -843,6 +843,8 @@ export default function App(){
   const [colSort,setColSort]=useState(null);
   const [toast,setToast]=useState('');
   const [adminPw,setAdminPw]=useState('');
+  const [roster,setRoster]=useState(null); // FINGERPRINT_V141 — past-player roster for invites
+  const [inviting,setInviting]=useState(false);
   const [adminOk,setAdminOk]=useState(false);
   const [adminAuthError,setAdminAuthError]=useState('');
   const [serverLocked,setServerLocked]=useState(false);
@@ -3750,6 +3752,41 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 })}
               </div>
               <p style={{fontSize:11,color:'#888',marginTop:8}}>Note: pools with 4 or fewer entries are always winner-take-all regardless of this setting.</p>
+            </div>
+            {/* FINGERPRINT_V141_INVITE_UI */}
+            <div style={sec}><h3 style={stl}>📧 Invite Past Players</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Email everyone who's entered a past pool (and left an email) to join this week's event. Great to run after the pool rotates to a new tournament. Each person gets a personal invite with a link to make their picks.</p>
+              {roster===null
+                ? <button type="button" style={pri} onClick={async()=>{
+                    const d=await adminAction('get-roster',{});
+                    if(d?.ok){setRoster(d.roster||[]);}
+                    else msg(d?.error||'Could not load roster');
+                  }}>👥 Load Past Players</button>
+                : roster.length===0
+                ? <p style={{fontSize:13,color:'#888'}}>No past players with emails yet. Once people enter pools with their email, they'll show up here.</p>
+                : <>
+                    <div style={{fontSize:13,fontWeight:600,color:T.primary,marginBottom:8}}>{roster.length} past player{roster.length===1?'':'s'} on file</div>
+                    <div style={{maxHeight:160,overflowY:'auto',border:`1px solid ${T.cardBorder}`,borderRadius:8,padding:'6px 0',marginBottom:10,background:'#fafafa'}}>
+                      {roster.map((p,i)=>(
+                        <div key={p.email} style={{display:'flex',justifyContent:'space-between',padding:'5px 12px',fontSize:12,borderBottom:i<roster.length-1?`1px solid ${T.cardBorder}55`:'none'}}>
+                          <span style={{fontWeight:600}}>{p.name||'(no name)'}</span>
+                          <span style={{color:'#8a9580'}}>{p.email}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <textarea id="inviteNoteInput" placeholder="Optional message to include (e.g. 'Big purse this week — get in before Thursday!')" style={{width:'100%',boxSizing:'border-box',padding:'9px 12px',borderRadius:7,border:`1px solid ${T.inputBorder}`,fontSize:13,fontFamily:"'DM Sans',sans-serif",minHeight:54,marginBottom:10,resize:'vertical'}}/>
+                    <button type="button" disabled={inviting} style={{...pri,opacity:inviting?0.6:1,cursor:inviting?'default':'pointer'}} onClick={async()=>{
+                      if(!window.confirm(`Send an invite email to all ${roster.length} past players?`))return;
+                      setInviting(true);
+                      const note=(document.getElementById('inviteNoteInput')?.value||'').trim();
+                      const d=await adminAction('invite-roster',{message:note});
+                      setInviting(false);
+                      if(d?.ok)msg(`Invites sent to ${d.sent} player${d.sent===1?'':'s'}${d.failed?` (${d.failed} failed)`:''}`);
+                      else msg(d?.error||'Invite failed');
+                    }}>{inviting?'Sending…':`📨 Send Invite to ${roster.length} Player${roster.length===1?'':'s'}`}</button>
+                    <button type="button" style={{...inp,flex:'none',marginLeft:8,cursor:'pointer',background:'#f0f0f0',border:'none',fontWeight:600,fontSize:12,padding:'9px 14px'}} onClick={()=>setRoster(null)}>Refresh</button>
+                  </>
+              }
             </div>
             <div style={sec}><h3 style={stl}>🎨 Custom Pool Logo</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Override the major's default logo with your own. Paste a public image URL (PNG/JPG). Leave blank to use the default major logo.</p>
