@@ -1,5 +1,5 @@
 'use client';
-// build: major-pretournament-pairings-v145-20260616-1530
+// build: tee-namematch-compound-v146-20260616-1600
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1497,13 +1497,29 @@ export default function App(){
               const startHole = nextRound.start_hole;
               const roundNum = nextRound.round_num;
               const data = { teeTime, startHole, roundNum };
+              // FINGERPRINT_V146_TEE_NAMEMATCH
+              // Index under multiple key formats so compound surnames (e.g. "Dumont De Chassart",
+              // "Arni Sveinsson") match regardless of how pre-tournament vs field-updates split the
+              // name. norm = accent/punct-stripped; tokenKey = sorted words (order-independent).
+              const norm = (s)=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim();
+              const tokenKey = (s)=>norm(s).split(' ').sort().join(' ');
               teeTimeMap[pname] = data;
+              teeTimeMap[norm(pname)] = data;
+              teeTimeMap[tokenKey(pname)] = data; // order-independent catch-all
               if(pname.includes(',')){
                 const parts = pname.split(',').map(s=>s.trim());
-                if(parts.length===2) teeTimeMap[`${parts[1]} ${parts[0]}`] = data;
+                if(parts.length===2){
+                  const flip = `${parts[1]} ${parts[0]}`;
+                  teeTimeMap[flip] = data;
+                  teeTimeMap[norm(flip)] = data;
+                }
               } else {
                 const pts = pname.split(' ');
-                if(pts.length>=2) teeTimeMap[`${pts[pts.length-1]}, ${pts.slice(0,-1).join(' ')}`] = data;
+                if(pts.length>=2){
+                  const lf = `${pts[pts.length-1]}, ${pts.slice(0,-1).join(' ')}`;
+                  teeTimeMap[lf] = data;
+                  teeTimeMap[norm(lf)] = data;
+                }
               }
             });
           }
@@ -1566,7 +1582,10 @@ export default function App(){
           : 'n/a';
         const baseRank = (p.dgRank && p.dgRank < 9999) ? p.dgRank - 1 : i;
         const rank = (useOdds && oddsRank[key] !== undefined) ? oddsRank[key] : baseRank;
-        const teeInfo = teeTimeMap[key] || null;
+        // FINGERPRINT_V146_TEE_NAMEMATCH — try exact, then normalized, then order-independent token key
+        const _norm = (s)=>s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim();
+        const _tok = (s)=>_norm(s).split(' ').sort().join(' ');
+        const teeInfo = teeTimeMap[key] || teeTimeMap[_norm(key)] || teeTimeMap[_tok(key)] || null;
         return {
           name:p.name, country:p.country||'USA', dgId: p.dg_id || p.dgId || null,
           odds, tier:rank<cuts[0]?1:rank<cuts[1]?2:3,
