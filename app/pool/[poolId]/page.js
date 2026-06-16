@@ -1,5 +1,5 @@
 'use client';
-// build: tee-namematch-compound-v146-20260616-1600
+// build: hide-source-pill-when-locked-v148-20260616-1700
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1626,8 +1626,12 @@ export default function App(){
         const cached = scrapeData.fromCache ? ' · cached' : '';
         if(pastTeeTime){
           setFieldSource(`📡 ${confirmed} players in field${cached}`);
-        } else {
+        } else if(onTrack > 0){
+          // Field still firming up — show the confirmed/on-track breakdown + legend
           setFieldSource(`📡 datagolf.com/major-fields · ${confirmed} confirmed ✓  ${onTrack} on track –${cached}`);
+        } else {
+          // FINGERPRINT_V147_FIELD_SET — field locked (no on-track players left): clean simple line
+          setFieldSource(`📡 datagolf.com/major-fields · ${confirmed} in field${cached}`);
         }
         setFieldLastUpdated(new Date().toLocaleTimeString());
       }
@@ -2737,7 +2741,7 @@ export default function App(){
                   <div style={{fontSize:38,lineHeight:1}}><Flag c={p.country}/></div>
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800}}>{flip(p.name)}</div>
-                    <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
+                    <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
                     {(()=>{
                       // FINGERPRINT_V102_POPUP_TEE
                       // Show the tee time for the player's active round (next to play), not always R1.
@@ -3216,17 +3220,22 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             }}>🎯 Picked ({field.filter(p=>owners(p.name).length>0).length})</button>}
           </div>
           {!pastTeeTime&&<div style={{marginBottom:8,textAlign:'center'}}>
-            {fieldSource&&<div style={{fontSize:10,color:T.primary,background:`${T.primary}0a`,padding:'4px 10px',borderRadius:20,display:'inline-block',marginBottom:4}}>{fieldSource}</div>}
+            {/* FINGERPRINT_V148_HIDE_SOURCE — only show the data-source pill while the field is
+                still firming up (on-track players exist). Once locked, it's noise — drop it. */}
+            {fieldSource&&field.some(p=>p.onTrack&&!p.confirmed)&&<div style={{fontSize:10,color:T.primary,background:`${T.primary}0a`,padding:'4px 10px',borderRadius:20,display:'inline-block',marginBottom:4}}>{fieldSource}</div>}
             {fieldLastUpdated&&<div style={{fontSize:10,color:'#8a9580',marginTop:2}}>Field last updated: {fieldLastUpdated} · auto-refreshes every 60s</div>}
           </div>}
-          {!pastTeeTime&&<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,fontSize:10,color:'#8a9580',justifyContent:'center'}}>
-            <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#e8f5e8',color:'#2d7a1e',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>✓</span> Confirmed</span>
-            <span>·</span>
-            <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#fff0d6',color:'#7a4a00',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>–</span> On Track</span>
-            <span>·</span>
-            <span>Tap player for scorecard</span>
-          </div>}
-          {pastTeeTime&&<div style={{fontSize:10,color:'#8a9580',textAlign:'center',marginBottom:8}}>Tap player for scorecard</div>}
+          {/* FINGERPRINT_V147_FIELD_SET — full ✓/– legend only while the field is still firming up
+              (some players on-track but unconfirmed). Once everyone's confirmed, just the tap hint. */}
+          {!pastTeeTime && field.some(p=>p.onTrack&&!p.confirmed)
+            ? <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,fontSize:10,color:'#8a9580',justifyContent:'center'}}>
+                <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#e8f5e8',color:'#2d7a1e',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>✓</span> Confirmed</span>
+                <span>·</span>
+                <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{background:'#fff0d6',color:'#7a4a00',padding:'1px 5px',borderRadius:8,fontWeight:700,fontSize:9}}>–</span> On Track</span>
+                <span>·</span>
+                <span>Tap player for scorecard</span>
+              </div>
+            : <div style={{fontSize:10,color:'#8a9580',textAlign:'center',marginBottom:8}}>Tap player for scorecard</div>}
           <div style={{borderRadius:9,border:`1px solid ${T.cardBorder}`,position:'relative'}}>
             <div style={{display:'flex',padding:'8px 10px',background:T.primary,color:'#faf6ed',fontSize:10,fontWeight:700,textTransform:'uppercase',letterSpacing:.5,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.15)',borderTopLeftRadius:9,borderTopRightRadius:9}}>
               {(()=>{
