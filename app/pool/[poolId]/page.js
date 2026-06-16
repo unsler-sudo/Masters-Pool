@@ -1,5 +1,5 @@
 'use client';
-// build: hide-picker-check-when-locked-v149-20260616-1730
+// build: hide-field-tab-check-when-locked-v150-20260616-1800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -3343,7 +3343,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <span onClick={(e)=>{e.stopPropagation();toggleFavorite(p.name);}} style={{marginRight:5,cursor:'pointer',fontSize:13,verticalAlign:'middle',userSelect:'none'}}>{favorites.has(p.name)?'⭐':'☆'}</span>
                     <span style={{marginRight:3}}><Flag c={p.country}/></span>
                     <span style={{fontWeight:600,fontSize:12,textDecoration:isCut&&isLive?'line-through':'none',color:isCut&&isLive?'#999':'inherit'}}>{flip(p.name)}</span>
-                    {p.confirmed&&!isLive&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8,border:'1px solid #2d7a1e40'}}>✓</span>}
+                    {p.confirmed&&!isLive&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8,border:'1px solid #2d7a1e40'}}>✓</span>}
                     {p.onTrack&&!p.confirmed&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 5px',borderRadius:8,border:'1px solid #c8840040'}}>–</span>}
                   </div>
                   {!picksHidden&&ow.length>0&&<div style={{fontSize:9,color:'#8b6914',marginTop:1,whiteSpace:'normal',wordBreak:'break-word',lineHeight:1.3}}>({ow.join(', ')})</div>}
