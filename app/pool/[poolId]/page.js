@@ -1,5 +1,5 @@
 'use client';
-// build: hide-source-pill-when-locked-v148-20260616-1700
+// build: hide-picker-check-when-locked-v149-20260616-1730
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -3169,7 +3169,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   style={{display:'flex',alignItems:'center',padding:'8px 12px',border:'none',borderBottom:'1px solid #f0ebe0',width:'100%',background:sel?`${T.primary}0e`:'#fff',textAlign:'left',opacity:full?.3:1,cursor:full?'not-allowed':'pointer'}}>
                   <div style={{flex:1}}>
                     <div style={{fontWeight:600,fontSize:13}}><Flag c={p.country}/> {flip(p.name)}
-                      {p.confirmed&&!pastTeeTime&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8}}>✓</span>}
+                      {p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8}}>✓</span>}
                       {p.onTrack&&!p.confirmed&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 5px',borderRadius:8}}>– On Track</span>}
                     </div>
                     <div style={{fontSize:11,color:'#8a9580'}}>{p.country} · {p.odds}</div>
