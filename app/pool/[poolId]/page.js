@@ -1,5 +1,5 @@
 'use client';
-// build: odds-window-monday-9am-et-v144-20260616-1430
+// build: major-pretournament-pairings-v145-20260616-1530
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2297,9 +2297,13 @@ export default function App(){
     const isCut = /CUT|WD|DQ|MC/i.test(p.pos);
     return isCut || p.r4 != null;
   });
-  // Detect pre-tournament state: pgatour mode with no live data (no positions, no thru values)
-  // FINGERPRINT_V74_PRETOURNSORT
-  const isPreTournament = activeMajor === 'pgatour' && !aRoundIsLive && !tournamentComplete
+  // Detect pre-tournament state: no live data yet (no positions, no thru values).
+  // FINGERPRINT_V74_PRETOURNSORT / FINGERPRINT_V145_MAJOR_PRETOURN
+  // Applies to BOTH pgatour mode AND majors before tee-off. Previously pgatour-only, so majors
+  // (US Open etc.) never entered pre-tournament display — no tee times, no pairings view —
+  // until the round went live. Now any event that isn't past tee-off and has no live positions
+  // is treated as pre-tournament.
+  const isPreTournament = !pastTeeTime && !aRoundIsLive && !tournamentComplete
     && !field.some(p => {
       const pn = parsePos(p.pos);
       return pn && pn > 0;
@@ -3159,7 +3163,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
         {tab==='Field'&&<>
           <input style={{...inp,marginBottom:6}} placeholder="Search players..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <div style={{display:'flex',gap:6,marginBottom:8,justifyContent:'center',flexWrap:'wrap'}}>
-            {isLive && !tournamentComplete && field.some(p=>p.pairingTeeTime||p.teeTime) && <>
+            {/* FINGERPRINT_V145_PAIRINGS_TOGGLE
+                Show the Leaderboard/Pairings toggle whenever tee times exist and the tournament
+                isn't complete — INCLUDING major pre-tournament (Wed before Thu tee-off). Previously
+                gated on `isLive`, which is false for majors until tee-off, so the US Open pairings
+                view never appeared pre-tournament even with tees loaded (pgatour mode worked because
+                isLive is always true there). Now it keys off the actual presence of tee times. */}
+            {!tournamentComplete && field.some(p=>p.pairingTeeTime||p.teeTime) && <>
               <button onClick={()=>{setFieldSort('leaderboard');setColSort(null);}} style={{
                 padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
                 border:`1px solid ${fieldSort==='leaderboard'?T.primary:'#d0d4d0'}`,
