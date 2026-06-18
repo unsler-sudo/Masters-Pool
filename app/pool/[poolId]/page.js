@@ -1,5 +1,5 @@
 'use client';
-// build: skip-placeholder-repaint-v164-20260618-1600
+// build: major-hole10-asterisk-v165-20260618-1630
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -3509,20 +3509,23 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         if (!p.thru) return '-';
                         // Normalize "18" to "F" (round finished)
                         const thruDisplay = (String(p.thru) === '18' || p.thru === 18) ? 'F' : p.thru;
-                        // FINGERPRINT_V105_ASTERISK_ACTIVEROUND
+                        // FINGERPRINT_V105_ASTERISK_ACTIVEROUND / FINGERPRINT_V165_MAJOR_ASTERISK
                         // Asterisk = player started the CURRENT round on hole 10 (back nine).
-                        // Use the active round's start hole, not R1's (p.startHole is R1).
+                        // Prefer the active round's start hole from allRoundsTees (pgatour builds it).
+                        // The major path doesn't build allRoundsTees, so fall back to p.startHole /
+                        // pairingStartHole (which majors DO set) — otherwise majors never showed the *.
                         const curRoundStartHole = (() => {
                           const ar = p.allRoundsTees;
-                          if (!ar) return null;
-                          const completed=(p.r1!=null?1:0)+(p.r2!=null?1:0)+(p.r3!=null?1:0)+(p.r4!=null?1:0);
-                          const thruN = parseInt(p.thru, 10);
-                          const isFinished = thruN === 18 || String(p.thru) === 'F';
-                          // If showing "F", the displayed round is the one just finished (= completed).
-                          // If actively playing, it's the round in progress (= completed + 1).
-                          const displayedRound = isFinished ? Math.max(completed, 1) : Math.min(completed + 1, 4);
-                          if (ar[displayedRound]) return ar[displayedRound].startHole || 1;
-                          return null; // unknown — don't guess
+                          if (ar) {
+                            const completed=(p.r1!=null?1:0)+(p.r2!=null?1:0)+(p.r3!=null?1:0)+(p.r4!=null?1:0);
+                            const thruN = parseInt(p.thru, 10);
+                            const isFinished = thruN === 18 || String(p.thru) === 'F';
+                            const displayedRound = isFinished ? Math.max(completed, 1) : Math.min(completed + 1, 4);
+                            if (ar[displayedRound]) return ar[displayedRound].startHole || 1;
+                          }
+                          // Fallback for majors (no allRoundsTees): use the single start hole captured
+                          // from field-updates for this round.
+                          return p.startHole || p.pairingStartHole || null;
                         })();
                         const showAsterisk = curRoundStartHole === 10;
                         return <>{thruDisplay}{showAsterisk ? <span style={{color:T.primary,fontWeight:700}}>*</span> : null}</>;
