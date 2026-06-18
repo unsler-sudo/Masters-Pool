@@ -1,5 +1,5 @@
 'use client';
-// build: spinner-only-when-empty-v151-20260618-0730
+// build: preserve-live-scores-major-v152-20260618-0830
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1616,9 +1616,24 @@ export default function App(){
           if(isThisMajorActive && rawScoresRef.current){
             return mergeScoresIntoField(enriched, rawScoresRef.current);
           }
-          // FINGERPRINT_V75_NEVENTRESET
-          // No cached rawScores or not active — return clean field
-          // (Don't preserve old scores; they might be from a prior event in pgatour mode.)
+          // FINGERPRINT_V152_PRESERVE_LIVE
+          // If this major is live but rawScoresRef isn't populated on THIS cycle (fetchField ran
+          // before fetchScores, or between fetches), DON'T wipe scores back to a clean field — that
+          // caused the leaderboard to flicker scoreless. Instead, carry forward any live values the
+          // previous field state already had (pos/score/thru/today/r1-r4) by re-merging from `prev`.
+          if(isThisMajorActive && prev && prev.some(p=>p.pos && p.pos!=='-')){
+            const prevByName = {};
+            prev.forEach(p=>{ prevByName[(p.name||'').toLowerCase().trim()] = p; });
+            return enriched.map(e=>{
+              const old = prevByName[(e.name||'').toLowerCase().trim()];
+              if(old && old.pos && old.pos!=='-'){
+                return {...e, pos:old.pos, score:old.score, today:old.today, thru:old.thru,
+                  r1:old.r1, r2:old.r2, r3:old.r3, r4:old.r4};
+              }
+              return e;
+            });
+          }
+          // Truly pre-tournament (no scores anywhere yet) — clean field
           return enriched;
         });
         const confirmed = enriched.filter(p=>p.confirmed).length;
