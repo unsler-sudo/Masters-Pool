@@ -1,5 +1,5 @@
 'use client';
-// build: no-double-build-flash-v162-20260618-1500
+// build: cached-paint-with-scores-v163-20260618-1530
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -818,6 +818,10 @@ export default function App(){
   const [payments,setPayments]=useState({});
   const [field,setField]=useState([]);
   const [fields,setFields]=useState({});
+  // FINGERPRINT_V163_REFS — live mirrors of field/fields so fetchField can read current values
+  // without nesting state setters (used by the cached-paint anti-flash logic).
+  const fieldRef=useRef([]);
+  const fieldsRef=useRef({});
   const [fieldSource,setFieldSource]=useState('preliminary');
   const [fieldLastUpdated,setFieldLastUpdated]=useState(null);
   const [ready,setReady]=useState(false);
@@ -1148,18 +1152,33 @@ export default function App(){
   const fetchField=async(major=activeMajor, updateDisplay=true)=>{
     const theme = THEMES[major] || THEMES.pga;
     if(updateDisplay){
-      setFields(prev=>{
-        const cached = prev[major];
-        if(cached?.length > 0){
-          // Filter cached data through confirmed/onTrack to prevent flicker
-          // (old cache may have unfiltered players from pre-tournament views)
-          const filteredCache = cached.filter(p=>p.confirmed||p.onTrack);
-          setField(filteredCache);
-          setFieldSource(`📡 datagolf.com/major-fields · ${filteredCache.length} confirmed in field ✓ · cached`);
-        } else {
-          setField([]);
-          setFieldSource(`⏳ Loading ${theme.eventName} field...`);
+      // Read the current cache for this major (without mutating it here)
+      const cachedNow = fieldsRef.current?.[major];
+      if(cachedNow?.length > 0){
+        const filteredCache = cachedNow.filter(p=>p.confirmed||p.onTrack);
+        // FINGERPRINT_V163_CACHED_WITH_SCORES
+        // Paint the cached field WITH live scores already merged so the placeholder render isn't
+        // scoreless. Without this, the cached scoreless field painted first, then the merged field
+        // replaced it ~0.1s later — a visible flash. Prefer rawScoresRef; if not ready, carry scores
+        // from the field already on screen (fieldRef) so we never downgrade to scoreless.
+        let painted = filteredCache;
+        if(rawScoresRef.current){
+          painted = mergeScoresIntoField(filteredCache, rawScoresRef.current);
+        } else if(fieldRef.current && fieldRef.current.some(p=>p.pos && p.pos!=='-')){
+          const byName={}; fieldRef.current.forEach(p=>{byName[(p.name||'').toLowerCase().trim()]=p;});
+          painted = filteredCache.map(e=>{
+            const old=byName[(e.name||'').toLowerCase().trim()];
+            return (old && old.pos && old.pos!=='-')
+              ? {...e, pos:old.pos, score:old.score, today:old.today, thru:old.thru, r1:old.r1, r2:old.r2, r3:old.r3, r4:old.r4}
+              : e;
+          });
         }
+        setField(painted);
+        setFieldSource(`📡 datagolf.com/major-fields · ${filteredCache.length} confirmed in field ✓ · cached`);
+      } else {
+        setField([]);
+        setFieldSource(`⏳ Loading ${theme.eventName} field...`);
+      }
         return prev;
       });
     }
@@ -2071,6 +2090,10 @@ export default function App(){
       return map;
     }catch(e){return null;}
   };
+
+  // FINGERPRINT_V163_REFS — keep the mirrors in sync with state every render
+  useEffect(()=>{ fieldRef.current = field; }, [field]);
+  useEffect(()=>{ fieldsRef.current = fields; }, [fields]);
 
   // Fetch live stats when scorecard opens
   useEffect(()=>{
