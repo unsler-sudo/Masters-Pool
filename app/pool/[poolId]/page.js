@@ -1,5 +1,5 @@
 'use client';
-// build: compound-name-dedup-wd-fix-v160-20260618-1330
+// build: major-no-flash-inline-scores-v161-20260618-1430
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1648,6 +1648,25 @@ export default function App(){
         const cutoff = themeTeeT + 6 * 24 * 60 * 60 * 1000; // 6 days after scheduled tee-off
         const nowMs = Date.now();
         const isThisMajorActive = realTeeT > 0 && nowMs >= realTeeT && nowMs <= cutoff;
+
+        // Only merge with current field/raw scores if this major is in tournament window
+        // FINGERPRINT_V161_NO_FLASH
+        // On the active major during live play, if we don't yet have cached scores (first load),
+        // fetch in-play inline BEFORE the first setField so the field appears already-populated in
+        // one render — no scoreless flash. (pgatour mode looks seamless because it merges in one
+        // step; this gives majors the same single-render behavior.)
+        if(updateDisplay && isThisMajorActive && !rawScoresRef.current){
+          try{
+            const liveRes = await fetch('/api/scores?endpoint=in-play');
+            if(liveRes.ok){
+              const liveData = await liveRes.json();
+              const liveRaw = liveData.data || liveData.players || [];
+              if(Array.isArray(liveRaw) && liveRaw.length > 0){
+                rawScoresRef.current = liveRaw;
+              }
+            }
+          }catch{}
+        }
 
         // Only merge with current field/raw scores if this major is in tournament window
         setField(prev=>{
