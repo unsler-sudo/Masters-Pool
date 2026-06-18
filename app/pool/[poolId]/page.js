@@ -1,5 +1,5 @@
 'use client';
-// build: major-no-flash-inline-scores-v161-20260618-1430
+// build: no-double-build-flash-v162-20260618-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1710,15 +1710,25 @@ export default function App(){
     }catch(e){ console.warn(`fetchField(${major}) failed:`,e.message); }
   };
 
-  const fetchAllFields=async()=>{
+  const fetchAllFields=async(skipActive)=>{
     const MAJORS=['players','masters','pga','usopen','open'];
     const active = activeMajorRef.current;
     // FINGERPRINT_V158_ACTIVE_FIRST
     // Build the ACTIVE major's field first (so the user's live data appears fast and so
     // fetchScores — chained after this — has the right field to merge into). Then the rest.
-    const ordered = active && MAJORS.includes(active)
+    let ordered = active && MAJORS.includes(active)
       ? [active, ...MAJORS.filter(m=>m!==active)]
       : MAJORS;
+    // FINGERPRINT_V162_NO_DOUBLE_BUILD
+    // On initial load, loadEntries ALREADY built the active major's field (with inline scores via
+    // v161). Rebuilding it here too causes a second render → the residual score flash. When
+    // skipActive is set (initial load), build only the OTHER majors' caches and let fetchScores
+    // refresh the active one — no redundant scoreless rebuild of what the user is looking at.
+    if(skipActive && active){
+      ordered = ordered.filter(m=>m!==active);
+      // still ensure scores merge into the already-built active field
+      fetchScores(true);
+    }
     for(let i=0;i<ordered.length;i++){
       const major = ordered[i];
       await fetchField(major, major===active);
@@ -2091,7 +2101,7 @@ export default function App(){
     // pgatour included. (fetchAllFields also fires fetchScores after the active MAJOR builds, but
     // pgatour goes through loadEntries, so we cover it explicitly here.) Both are safe: fetchScores
     // is idempotent and gated, and mergeScoresIntoField no-ops on an empty field.
-    loadEntries().then(()=>{ setReady(true); fetchSchedule(); fetchAllFields(); fetchScores(true); });
+    loadEntries().then(()=>{ setReady(true); fetchSchedule(); fetchAllFields(true); });
     timer.current=setInterval(()=>{
       fetchScores(true);
       loadEntries();
