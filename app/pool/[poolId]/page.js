@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-load-scores-regression-fix-v159-20260618-1230
+// build: compound-name-dedup-wd-fix-v160-20260618-1330
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1326,10 +1326,17 @@ export default function App(){
         const ptEvN = fuNorm(ptData.event_name), fuEvN = fuNorm(fuEventName);
         const sameEvent = ptEvN && fuEvN && (ptEvN===fuEvN || ptEvN.includes(fuEvN) || fuEvN.includes(ptEvN));
         if (sameEvent && fuRawPlayers.length > 0) {
+          // FINGERPRINT_V160_DEDUP_TOKEN
+          // Dedup with a token-sorted key (accent/punct-stripped, words sorted) so compound
+          // surnames match between pre-tournament and field-updates regardless of how each splits
+          // the name. Without this, "Adrien Dumont De Chassart" (pre-tourn) vs "Dumont De Chassart,
+          // Adrien" (field-updates) didn't match → the player got appended as a DUPLICATE.
+          const tok = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim().split(' ').sort().join(' ');
           const have = new Set();
           enriched.forEach(e=>{
             const n=(e.name||'').toLowerCase().trim();
             have.add(n);
+            have.add(tok(e.name));
             const parts=n.split(' ');
             if(parts.length>=2) have.add(`${parts[parts.length-1]}, ${parts.slice(0,-1).join(' ')}`);
           });
@@ -1338,7 +1345,7 @@ export default function App(){
             if(!rawName) return;
             const key=rawName.toLowerCase();
             const flipped = rawName.includes(',') ? rawName.split(',').reverse().map(s=>s.trim()).join(' ').toLowerCase() : null;
-            if(have.has(key) || (flipped && have.has(flipped))) return;
+            if(have.has(key) || (flipped && have.has(flipped)) || have.has(tok(rawName))) return;
             const teeInfo = teeTimeMap[key] || (flipped ? teeTimeMap[flipped] : null);
             if(!teeInfo) return; // only confirmed substitutes with published tee times
             const displayName = rawName.includes(',') ? rawName.split(',').reverse().map(s=>s.trim()).join(' ') : rawName;
@@ -1799,6 +1806,11 @@ export default function App(){
       const match=raw.find(p=>{
         const pName=normalize(p.player_name||p.dg_player_name||'');
         return candidates.has(pName);
+      }) || raw.find(p=>{
+        // FINGERPRINT_V160_TOKEN_MATCH — token-sorted fallback for compound surnames
+        // (e.g. "Dumont De Chassart") so they MATCH in-play and don't get falsely WD'd/duplicated.
+        const tok = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim().split(' ').sort().join(' ');
+        return tok(p.player_name||p.dg_player_name||'') === tok(f.name);
       });
       if(match){
         matchedRawNames.add(normalize(match.player_name||match.dg_player_name||''));
@@ -1825,9 +1837,13 @@ export default function App(){
       // 1) ADD alternates: in-play players that matched no field row (late field replacements).
       //    Keep the name format consistent with the rest of the field ("First Last" for pgatour).
       const fieldUsesComma = currentField.length > 0 && currentField.filter(f=>(f.name||'').includes(',')).length > currentField.length/2;
+      // FINGERPRINT_V160_APPEND_TOKEN — also build a token-set of field names so compound-surname
+      // players already in the field aren't re-added here as live duplicates.
+      const tokOf = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim().split(' ').sort().join(' ');
+      const fieldTokens = new Set(updated.map(f=>tokOf(f.name)));
       raw.forEach(p=>{
         const rn = normalize(p.player_name||p.dg_player_name||'');
-        if(!rn || matchedRawNames.has(rn)) return;
+        if(!rn || matchedRawNames.has(rn) || fieldTokens.has(tokOf(p.player_name||p.dg_player_name||''))) return;
         const rawName = (p.player_name||p.dg_player_name||'').trim();
         const displayName = (!fieldUsesComma && rawName.includes(','))
           ? rawName.split(',').reverse().map(s=>s.trim()).join(' ')
