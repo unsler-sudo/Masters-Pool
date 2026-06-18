@@ -1,5 +1,5 @@
 'use client';
-// build: cached-paint-with-scores-v163-20260618-1530
+// build: skip-placeholder-repaint-v164-20260618-1600
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1154,33 +1154,26 @@ export default function App(){
     if(updateDisplay){
       // Read the current cache for this major (without mutating it here)
       const cachedNow = fieldsRef.current?.[major];
-      if(cachedNow?.length > 0){
-        const filteredCache = cachedNow.filter(p=>p.confirmed||p.onTrack);
-        // FINGERPRINT_V163_CACHED_WITH_SCORES
-        // Paint the cached field WITH live scores already merged so the placeholder render isn't
-        // scoreless. Without this, the cached scoreless field painted first, then the merged field
-        // replaced it ~0.1s later — a visible flash. Prefer rawScoresRef; if not ready, carry scores
-        // from the field already on screen (fieldRef) so we never downgrade to scoreless.
-        let painted = filteredCache;
-        if(rawScoresRef.current){
-          painted = mergeScoresIntoField(filteredCache, rawScoresRef.current);
-        } else if(fieldRef.current && fieldRef.current.some(p=>p.pos && p.pos!=='-')){
-          const byName={}; fieldRef.current.forEach(p=>{byName[(p.name||'').toLowerCase().trim()]=p;});
-          painted = filteredCache.map(e=>{
-            const old=byName[(e.name||'').toLowerCase().trim()];
-            return (old && old.pos && old.pos!=='-')
-              ? {...e, pos:old.pos, score:old.score, today:old.today, thru:old.thru, r1:old.r1, r2:old.r2, r3:old.r3, r4:old.r4}
-              : e;
-          });
+      // FINGERPRINT_V164_SKIP_PLACEHOLDER
+      // Only paint a placeholder when the displayed field is EMPTY (true cold load). If the field
+      // already has content (we're refreshing the major already on screen — 60s tick or reopen),
+      // skip the placeholder repaint entirely and let the final setField (later in this function)
+      // update in place. The early placeholder repaint was the remaining flash source: it briefly
+      // swapped the live field for the cached snapshot before the merged rebuild landed.
+      const displayedEmpty = !fieldRef.current || fieldRef.current.length === 0;
+      if(displayedEmpty){
+        if(cachedNow?.length > 0){
+          const filteredCache = cachedNow.filter(p=>p.confirmed||p.onTrack);
+          const painted = rawScoresRef.current
+            ? mergeScoresIntoField(filteredCache, rawScoresRef.current)
+            : filteredCache;
+          setField(painted);
+          setFieldSource(`📡 datagolf.com/major-fields · ${filteredCache.length} confirmed in field ✓ · cached`);
+        } else {
+          setField([]);
+          setFieldSource(`⏳ Loading ${theme.eventName} field...`);
         }
-        setField(painted);
-        setFieldSource(`📡 datagolf.com/major-fields · ${filteredCache.length} confirmed in field ✓ · cached`);
-      } else {
-        setField([]);
-        setFieldSource(`⏳ Loading ${theme.eventName} field...`);
       }
-        return prev;
-      });
     }
     try{
       // ─── PGA TOUR MODE — bypass scraper, fetch field from DataGolf directly ─
@@ -2136,11 +2129,16 @@ export default function App(){
     const clock=setInterval(()=>setNow(Date.now()),1000);
 
     // Refresh immediately when user returns to the page after backgrounding it
+    // FINGERPRINT_V164_REOPEN_NO_FLASH
+    // On reopen, refresh scores into the EXISTING field (fetchScores merges in place) and rebuild
+    // only the non-active majors' caches (skipActive=true). Rebuilding the active field here caused
+    // a scoreless placeholder repaint → the reopen flash. fetchScores alone updates live data
+    // seamlessly without tearing down the displayed field.
     const handleVisibility=()=>{
       if(document.visibilityState==='visible'){
         fetchScores(true);
         loadEntries();
-        fetchAllFields();
+        fetchAllFields(true);
         setNow(Date.now());
       }
     };
