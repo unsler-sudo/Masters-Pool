@@ -1,5 +1,5 @@
 'use client';
-// build: preserve-live-scores-major-v152-20260618-0830
+// build: real-tee-time-major-live-v153-20260618-0930
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -942,7 +942,15 @@ export default function App(){
   const TOURNAMENT = { name: T.eventName, purse: effectivePurse };
   const TIERS = TIER_DEFS.map(t => t.id===2 ? {...t, color:T.primary} : t);
 
-  const pastTeeTime = now >= TEE_TIME && now <= TOURNAMENT_END;
+  // FINGERPRINT_V153_REAL_TEE
+  // pastTeeTime must reflect the ACTUAL earliest tee time, not just the hardcoded theme time.
+  // field-updates publishes real R1 tees into eventStartRef; for a major the true first tee is
+  // often earlier than the theme's placeholder (e.g. US Open first groups ~6:45 AM ET vs theme
+  // 7:00 AM). If we only trust the theme time, there's a window where play has started, scores
+  // exist in DataGolf, but the app still thinks it's pre-tournament → no live scores shown.
+  const realEarliestTee = eventStartRef.current && eventStartRef.current > 0 ? eventStartRef.current : TEE_TIME;
+  const effectiveTeeStart = Math.min(TEE_TIME, realEarliestTee);
+  const pastTeeTime = now >= effectiveTeeStart && now <= TOURNAMENT_END;
   const isLive = pastTeeTime || activeMajor === 'pgatour'; // pgatour mode always shows live data
   const locked = serverLocked || pastTeeTime;
   const picksHidden = serverPicksHidden && !pastTeeTime;
@@ -1481,6 +1489,20 @@ export default function App(){
             const venue = MAJOR_VENUE_COORDS[major];
             const venueLat = venue?.lat;
             const venueLng = venue?.lng;
+            // FINGERPRINT_V153_MAJOR_EVENTSTART
+            // Capture the earliest R1 tee time (UTC ms) so pastTeeTime reflects the ACTUAL first
+            // tee, not the theme's placeholder. Mirrors what the pgatour path does via eventStartRef.
+            let majorEarliestR1 = 0;
+            fieldPlayers.forEach(p=>{
+              (p.teetimes||[]).forEach(t=>{
+                if(t.round_num===1 && t.teetime){
+                  const ud = convertTeeTimeToUserTZ(t.teetime, venueLat, venueLng);
+                  const ms = ud ? ud.getTime() : new Date(t.teetime.replace(' ','T')+':00Z').getTime();
+                  if(ms && (majorEarliestR1===0 || ms < majorEarliestR1)) majorEarliestR1 = ms;
+                }
+              });
+            });
+            if(majorEarliestR1 > 0) eventStartRef.current = majorEarliestR1;
             fieldPlayers.forEach(p=>{
               const pname = (p.player_name||'').toLowerCase().trim();
               if(!pname) return;
