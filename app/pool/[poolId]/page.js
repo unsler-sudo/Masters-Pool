@@ -1,5 +1,5 @@
 'use client';
-// build: live-scores-working-clean-v157-20260618-1130
+// build: refresh-load-order-fix-v158-20260618-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1687,9 +1687,19 @@ export default function App(){
   const fetchAllFields=async()=>{
     const MAJORS=['players','masters','pga','usopen','open'];
     const active = activeMajorRef.current;
-    for(const major of MAJORS){
+    // FINGERPRINT_V158_ACTIVE_FIRST
+    // Build the ACTIVE major's field first (so the user's live data appears fast and so
+    // fetchScores — chained after this — has the right field to merge into). Then the rest.
+    const ordered = active && MAJORS.includes(active)
+      ? [active, ...MAJORS.filter(m=>m!==active)]
+      : MAJORS;
+    for(let i=0;i<ordered.length;i++){
+      const major = ordered[i];
       await fetchField(major, major===active);
-      await new Promise(r=>setTimeout(r, 8000));
+      // After the ACTIVE major's field is built, fetch+merge scores immediately (don't wait for
+      // the other majors' 8s-spaced fetches). This makes live scores appear right after refresh.
+      if(i===0 && (major===active)) fetchScores(true);
+      if(i < ordered.length-1) await new Promise(r=>setTimeout(r, 8000));
     }
   };
 
@@ -2034,9 +2044,13 @@ export default function App(){
     // loadEntries sets activeMajor (e.g. to 'pgatour'). fetchSchedule's pgatour block only runs
     // when activeMajor==='pgatour', but the initial fetchSchedule() above ran with the default
     // 'pga'. So re-run fetchSchedule AFTER loadEntries resolves, once the real major is known.
-    loadEntries().then(()=>{ setReady(true); fetchSchedule(); });
-    fetchScores(true);
-    setTimeout(()=>fetchAllFields(), 3000);
+    // FINGERPRINT_V158_LOAD_ORDER
+    // Build the field first (active major first), and fetchScores fires inside fetchAllFields
+    // right after the active major's field exists — so live scores merge correctly on refresh
+    // instead of vanishing until the next 60s cycle. Chain AFTER loadEntries so activeMajorRef
+    // is set (loadEntries determines the active major); otherwise fetchAllFields runs in default
+    // order and can't fetch scores for the right event.
+    loadEntries().then(()=>{ setReady(true); fetchSchedule(); fetchAllFields(); });
     timer.current=setInterval(()=>{
       fetchScores(true);
       loadEntries();
