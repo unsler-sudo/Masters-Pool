@@ -1,5 +1,5 @@
 'use client';
-// build: refresh-load-order-fix-v158-20260618-1200
+// build: pgatour-load-scores-regression-fix-v159-20260618-1230
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2050,7 +2050,13 @@ export default function App(){
     // instead of vanishing until the next 60s cycle. Chain AFTER loadEntries so activeMajorRef
     // is set (loadEntries determines the active major); otherwise fetchAllFields runs in default
     // order and can't fetch scores for the right event.
-    loadEntries().then(()=>{ setReady(true); fetchSchedule(); fetchAllFields(); });
+    // FINGERPRINT_V159_LOAD_SCORES_ALL_MODES
+    // loadEntries builds the active field (incl. pgatour, which isn't in fetchAllFields' major list).
+    // Fire fetchScores after it resolves so scores load on the initial render in EVERY mode —
+    // pgatour included. (fetchAllFields also fires fetchScores after the active MAJOR builds, but
+    // pgatour goes through loadEntries, so we cover it explicitly here.) Both are safe: fetchScores
+    // is idempotent and gated, and mergeScoresIntoField no-ops on an empty field.
+    loadEntries().then(()=>{ setReady(true); fetchSchedule(); fetchAllFields(); fetchScores(true); });
     timer.current=setInterval(()=>{
       fetchScores(true);
       loadEntries();
