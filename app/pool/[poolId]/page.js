@@ -1,5 +1,5 @@
 'use client';
-// build: hide-field-tab-check-when-locked-v150-20260616-1800
+// build: spinner-only-when-empty-v151-20260618-0730
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -3278,7 +3278,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </>;
               })()}
             </div>
-            {field.length === 0 || (isLive && !isPreTournament && (!rawScoresRef.current || !field.some(p => p.pos && p.pos !== '-')))
+            {/* FINGERPRINT_V151_SPINNER_FIX
+                Only show the loading spinner when the field is genuinely empty. Previously it also
+                spun whenever live mode was on but no player had a position yet — a real gap state
+                early Thursday (past tee, model warming up, positions not posted). That left users
+                staring at an endless spinner even though the field + tee times were loaded. Now if
+                we have players, we render them (tee times / dashes) and scores fill in as they post. */}
+            {field.length === 0
               ? <div style={{padding:'40px 20px',textAlign:'center',color:'#8a9580',fontSize:13}}>
                   <div style={{display:'inline-block',width:24,height:24,border:`3px solid ${T.primary}30`,borderTop:`3px solid ${T.primary}`,borderRadius:'50%',animation:'spin 0.8s linear infinite',marginBottom:10}}/>
                   <div>Loading field...</div>
