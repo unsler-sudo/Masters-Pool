@@ -1,5 +1,5 @@
 'use client';
-// build: real-tee-time-major-live-v153-20260618-0930
+// build: major-active-real-tee-v154-20260618-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1628,10 +1628,19 @@ export default function App(){
 
       if(updateDisplay){
         // Determine if this major is in its tournament window
-        const teeT = new Date(THEMES[major]?.teeTime || 0).getTime();
-        const cutoff = teeT + 6 * 24 * 60 * 60 * 1000; // 6 days after tee-off
+        // FINGERPRINT_V154_ACTIVE_REAL_TEE
+        // Use the REAL earliest tee (eventStartRef, set above from field-updates) when it's earlier
+        // than the hardcoded theme tee. Without this, isThisMajorActive stayed false until the theme's
+        // placeholder time (e.g. 11:00 UTC) even though play had started earlier — so scores never
+        // merged. This mirrors the pastTeeTime fix (v153); both must use the real tee or the field
+        // rebuilds scoreless every cycle.
+        const themeTeeT = new Date(THEMES[major]?.teeTime || 0).getTime();
+        const realTeeT = (eventStartRef.current && eventStartRef.current > 0)
+          ? Math.min(themeTeeT || eventStartRef.current, eventStartRef.current)
+          : themeTeeT;
+        const cutoff = themeTeeT + 6 * 24 * 60 * 60 * 1000; // 6 days after scheduled tee-off
         const nowMs = Date.now();
-        const isThisMajorActive = nowMs >= teeT && nowMs <= cutoff;
+        const isThisMajorActive = realTeeT > 0 && nowMs >= realTeeT && nowMs <= cutoff;
 
         // Only merge with current field/raw scores if this major is in tournament window
         setField(prev=>{
