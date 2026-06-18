@@ -1,5 +1,5 @@
 'use client';
-// build: major-active-real-tee-v154-20260618-1000
+// build: merge-diagnostics-v155-20260618-1030
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1645,8 +1645,11 @@ export default function App(){
         // Only merge with current field/raw scores if this major is in tournament window
         setField(prev=>{
           if(isThisMajorActive && rawScoresRef.current){
-            return mergeScoresIntoField(enriched, rawScoresRef.current);
+            const m = mergeScoresIntoField(enriched, rawScoresRef.current);
+            console.log(`[fetchField] active=true, merged scores → ${m.filter(p=>p.pos&&p.pos!=='-').length} positions`);
+            return m;
           }
+          console.log(`[fetchField] active=${isThisMajorActive}, rawScores=${!!rawScoresRef.current} — NOT merging fresh; realTeeT=${new Date(realTeeT).toISOString()}, now=${new Date(nowMs).toISOString()}`);
           // FINGERPRINT_V152_PRESERVE_LIVE
           // If this major is live but rawScoresRef isn't populated on THIS cycle (fetchField ran
           // before fetchScores, or between fetches), DON'T wipe scores back to a clean field — that
@@ -1729,8 +1732,14 @@ export default function App(){
       rawScoresRef.current=raw; // Cache for re-merge when field updates
 
       setField(currentField=>{
-        if(!currentField||currentField.length===0)return currentField;
-        return mergeScoresIntoField(currentField, raw);
+        if(!currentField||currentField.length===0){
+          console.log('[fetchScores] field EMPTY, skipping merge');
+          return currentField;
+        }
+        const merged = mergeScoresIntoField(currentField, raw);
+        const withPos = merged.filter(p=>p.pos&&p.pos!=='-').length;
+        console.log(`[fetchScores] merged → ${withPos} players have positions (field size ${merged.length})`);
+        return merged;
       });
       setLastUp(new Date().toLocaleTimeString());
       setStatus('');
