@@ -1,5 +1,5 @@
 'use client';
-// build: merge-diagnostics-v155-20260618-1030
+// build: fetchscores-stale-closure-fix-v156-20260618-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1701,7 +1701,20 @@ export default function App(){
     // Otherwise scores from the in-play feed (current PGA) would incorrectly attach to other majors
     // EXCEPT: in pgatour mode, in-play feed always matches the active event, so always fetch
     const currentMajor = activeMajorRef.current || activeMajor;
-    if(!pastTeeTime && currentMajor !== 'pgatour'){
+    // FINGERPRINT_V156_STALE_CLOSURE_FIX
+    // CRITICAL: do NOT use the render-scope `pastTeeTime` here. This function is called from a
+    // setInterval created once on mount — it closes over `pastTeeTime` from that first render
+    // (when it was false, pre-tee-off) and never sees the updated value. That made fetchScores
+    // bail forever, so rawScoresRef never populated and the leaderboard never got live scores.
+    // Recompute the tee gate LIVE from refs/theme each call instead.
+    const liveTheme = THEMES[currentMajor] || THEMES.pga;
+    const themeTeeMs = new Date(liveTheme?.teeTime || 0).getTime();
+    const realTeeMs = (eventStartRef.current && eventStartRef.current > 0)
+      ? Math.min(themeTeeMs || eventStartRef.current, eventStartRef.current)
+      : themeTeeMs;
+    const tournEndMs = themeTeeMs + 6 * 24 * 60 * 60 * 1000;
+    const livePastTee = realTeeMs > 0 && Date.now() >= realTeeMs && Date.now() <= tournEndMs;
+    if(!livePastTee && currentMajor !== 'pgatour'){
       // Clear any stale score data and exit
       rawScoresRef.current=null;
       return;
