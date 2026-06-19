@@ -1,5 +1,5 @@
 'use client';
-// build: major-hole10-asterisk-v165-20260618-1630
+// build: mr-chalk-label-v166-20260618-1700
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2408,6 +2408,23 @@ export default function App(){
     ? [...entries].sort((a,b)=>teamE(b)-teamE(a))
     : entries;
   const owners=n=>entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
+  // FINGERPRINT_V166_MR_CHALK
+  // "Mr. Chalk" = the entry whose picks have the highest COMBINED win probability — i.e. they
+  // played the chalk (all the favorites). Uses each picked player's `win` (0–1 win prob from the
+  // odds model). Only meaningful once picks are revealed and odds exist; ties → first by rank.
+  const mrChalk = (() => {
+    if (picksHidden || entries.length < 2) return null;
+    let best = null, bestSum = -1;
+    entries.forEach(e => {
+      const sum = e.picks.reduce((s,n)=>{
+        const p = field.find(f=>f.name===n);
+        return s + (p && typeof p.win === 'number' ? p.win : 0);
+      }, 0);
+      if (sum > bestSum) { bestSum = sum; best = e.name; }
+    });
+    // Require at least some real odds signal so we don't crown someone on all-zeros
+    return bestSum > 0 ? best : null;
+  })();
   // Parse "8:18 AM" → 818, "1:43 PM" → 1343 for sorting
   const parseTeeTime = (tt) => {
     if (!tt) return 9999;
@@ -3239,6 +3256,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <div style={{flex:1}}>
                     <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap'}}>
                       <span style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700}}>{e.name}</span>
+                      {/* FINGERPRINT_V166_MR_CHALK — chalkiest picks (highest combined win prob) */}
+                      {mrChalk===e.name&&<span title="Picked all the favorites — chalkiest entry in the pool" style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#5a4a1a',background:'#f0e6c8',border:'1px solid #c9a84c80',padding:'1px 7px',borderRadius:9,whiteSpace:'nowrap',verticalAlign:'middle'}}>Mr. Chalk</span>}
                       {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${prize}</span>}
                       {!paymentsHidden&&<span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,background:paid?'#e8f5e8':'#f5f5f5',color:paid?'#2d7a1e':'#aaa',border:`1px solid ${paid?'#2d7a1e30':'#ddd'}`}}>{paid?'✓ Paid':'Unpaid'}</span>}
                     </div>
