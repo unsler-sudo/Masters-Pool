@@ -1,5 +1,5 @@
 'use client';
-// build: mr-chalk-label-v166-20260618-1700
+// build: mr-chalk-odds-based-v168-20260618-1800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2408,22 +2408,32 @@ export default function App(){
     ? [...entries].sort((a,b)=>teamE(b)-teamE(a))
     : entries;
   const owners=n=>entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
-  // FINGERPRINT_V166_MR_CHALK
-  // "Mr. Chalk" = the entry whose picks have the highest COMBINED win probability — i.e. they
-  // played the chalk (all the favorites). Uses each picked player's `win` (0–1 win prob from the
-  // odds model). Only meaningful once picks are revealed and odds exist; ties → first by rank.
+  // FINGERPRINT_V166_MR_CHALK / FINGERPRINT_V168_ODDS_BASED
+  // "Mr. Chalk" = the entry that drafted the chalk (the favorites), judged by the actual ODDS
+  // shown on each player (the same `p.odds` value displayed in the scorecard, e.g. "-200"/"+5000").
+  // American odds → implied win probability so picks are comparable: a -200 favorite implies a
+  // much higher prob than a +5000 longshot. Highest combined implied prob = chalkiest entry.
+  const oddsToProb = (oddsStr) => {
+    if (oddsStr == null) return null;
+    const s = String(oddsStr).trim();
+    if (!s || s === 'n/a') return null;
+    const v = parseInt(s.replace('+',''), 10);
+    if (isNaN(v) || v === 0) return null;
+    return v < 0 ? (Math.abs(v) / (Math.abs(v) + 100)) : (100 / (v + 100));
+  };
   const mrChalk = (() => {
     if (picksHidden || entries.length < 2) return null;
-    let best = null, bestSum = -1;
+    let best = null, bestSum = -1, sawRealOdds = false;
     entries.forEach(e => {
-      const sum = e.picks.reduce((s,n)=>{
-        const p = field.find(f=>f.name===n);
-        return s + (p && typeof p.win === 'number' ? p.win : 0);
-      }, 0);
+      let sum = 0;
+      e.picks.forEach(pn => {
+        const p = field.find(f=>f.name===pn);
+        const prob = p ? oddsToProb(p.odds) : null;
+        if (prob != null) { sum += prob; sawRealOdds = true; }
+      });
       if (sum > bestSum) { bestSum = sum; best = e.name; }
     });
-    // Require at least some real odds signal so we don't crown someone on all-zeros
-    return bestSum > 0 ? best : null;
+    return sawRealOdds ? best : null;
   })();
   // Parse "8:18 AM" → 818, "1:43 PM" → 1343 for sorting
   const parseTeeTime = (tt) => {
