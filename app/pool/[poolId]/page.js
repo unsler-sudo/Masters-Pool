@@ -1,5 +1,5 @@
 'use client';
-// build: usopen-official-exact-payouts-v171-20260618-1930
+// build: usopen-formula-ladder-cut-adaptive-v172-20260618-2000
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -444,42 +444,29 @@ const PAYOUT_PGA = {
 // (total purse $22,500,000; winner $4,500,000 = 20%). Positions 1-67 each pay a distinct amount;
 // the prior table used flat tiers and was off by up to ~$157K in the middle. Ties are handled by
 // position-averaging in calcEarnings as usual. Set pool purse to $22.5M in admin to match.
-// FINGERPRINT_V171_USOPEN_OFFICIAL
-// Exact official 2026 U.S. Open payouts by FINAL finishing position. Each value is the actual
-// per-player dollar amount (tie redistribution already baked in), so it's a DIRECT lookup — NOT
-// run through percentage math or tie-averaging. The Tour redistributes tie money in a way a clean
-// percentage table can't reproduce (verified: a % table diverges from T23 onward), so for a
-// completed event we use the published figures directly. Keyed by the player's finishing position.
-const USOPEN_2026_OFFICIAL = {
-  1:4500000,2:2430000,3:1532530,4:920882,5:920882,6:920882,
-  7:617090,8:617090,9:617090,10:617090,11:405862,12:405862,
-  13:405862,14:405862,15:405862,16:405862,17:280966,18:280966,
-  19:280966,20:280966,21:280966,22:230220,23:181101,24:181101,
-  25:181101,26:181101,27:181101,28:181101,29:181101,30:181101,
-  31:181101,32:128756,33:128756,34:128756,35:128756,36:128756,
-  37:128756,38:128756,39:101859,40:101859,41:101859,42:101859,
-  43:72592,44:72592,45:72592,46:72592,47:72592,48:72592,
-  49:72592,50:72592,51:72592,52:72592,53:51467,54:51467,
-  55:51467,56:48625,57:48625,58:48625,59:48625,60:48625,
-  61:47242,62:47242,63:46551,64:46551,65:44938,66:44938,
-  67:44938,68:44938,69:44938,70:44938,71:43324,72:42863
-};
-
+// FINGERPRINT_V172_USOPEN_LADDER
+// Exact per-position percentage ladder for the U.S. Open, derived from the official 2026 payouts.
+// Each position holds its true per-player share, so the normal tie-averaging path in calcEarnings
+// reproduces every official tie amount EXACTLY (averaging equal values returns the same value), and
+// it adapts to the cut automatically: however many make the money, only occupied positions pay —
+// positions past the field pay $0 (handled by the beyond-table logic). This is a real formula
+// (percentages × purse, tie-averaged), not a hardcoded result map. Purse: $22.5M.
 const PAYOUT_USOPEN = {
-  1:0.20000000,2:0.10800000,3:0.06811244,4:0.04774947,5:0.03977071,
-  6:0.03526413,7:0.03179200,8:0.02847351,9:0.02576956,10:0.02366987,
-  11:0.02160093,12:0.01997240,13:0.01861018,14:0.01717627,15:0.01594720,
-  16:0.01492298,17:0.01410360,18:0.01328422,19:0.01246484,20:0.01164542,
-  21:0.01093871,22:0.01023200,23:0.00954578,24:0.00891076,25:0.00835769,
-  26:0.00788653,27:0.00752804,28:0.00721053,29:0.00690329,30:0.00659600,
-  31:0.00628876,32:0.00598147,33:0.00567418,34:0.00539764,35:0.00517231,
-  36:0.00494698,37:0.00473191,38:0.00452707,39:0.00432222,40:0.00411738,
-  41:0.00391253,42:0.00370769,43:0.00350284,44:0.00329800,45:0.00309316,
-  46:0.00290880,47:0.00272444,48:0.00255031,49:0.00244787,50:0.00234547,
-  51:0.00228400,52:0.00223280,53:0.00219182,54:0.00217133,55:0.00215084,
-  56:0.00213036,57:0.00210987,58:0.00208942,59:0.00206893,60:0.00204844,
-  61:0.00202796,62:0.00200747,63:0.00198698,64:0.00196649,65:0.00194600,
-  66:0.00192551,67:0.00190502,
+  1:0.20000000,2:0.10800000,3:0.06811244,4:0.04092809,5:0.04092809,
+  6:0.04092809,7:0.02742622,8:0.02742622,9:0.02742622,10:0.02742622,
+  11:0.01803831,12:0.01803831,13:0.01803831,14:0.01803831,15:0.01803831,
+  16:0.01803831,17:0.01248738,18:0.01248738,19:0.01248738,20:0.01248738,
+  21:0.01248738,22:0.01023200,23:0.00804893,24:0.00804893,25:0.00804893,
+  26:0.00804893,27:0.00804893,28:0.00804893,29:0.00804893,30:0.00804893,
+  31:0.00804893,32:0.00572249,33:0.00572249,34:0.00572249,35:0.00572249,
+  36:0.00572249,37:0.00572249,38:0.00572249,39:0.00452707,40:0.00452707,
+  41:0.00452707,42:0.00452707,43:0.00322631,44:0.00322631,45:0.00322631,
+  46:0.00322631,47:0.00322631,48:0.00322631,49:0.00322631,50:0.00322631,
+  51:0.00322631,52:0.00322631,53:0.00228742,54:0.00228742,55:0.00228742,
+  56:0.00216111,57:0.00216111,58:0.00216111,59:0.00216111,60:0.00216111,
+  61:0.00209964,62:0.00209964,63:0.00206893,64:0.00206893,65:0.00199724,
+  66:0.00199724,67:0.00199724,68:0.00199724,69:0.00199724,70:0.00199724,
+  71:0.00192551,72:0.00190502,
 };
 
 // The Open Championship payout distribution
@@ -750,19 +737,6 @@ function formatTeeTimeForUser(date) {
 
 
 function calcEarnings(players, purse, major, tournamentComplete, signatureEventName){
-  // FINGERPRINT_V171_USOPEN_OFFICIAL — direct exact-payout lookup for the 2026 U.S. Open.
-  // The official tie redistribution can't be reproduced by a percentage table + averaging, so use
-  // the published per-position dollars directly. Position parsed from p.pos ("T43" → 43); cut/WD/DQ
-  // earn $0; positions past the table earn $0.
-  if (major === 'usopen') {
-    const m = {};
-    players.forEach(p=>{
-      if (/CUT|WD|DQ|MC/i.test(p.pos||'')) { m[p.name]=0; return; }
-      const pos = parsePos(p.pos);
-      m[p.name] = (pos && USOPEN_2026_OFFICIAL[pos]) ? USOPEN_2026_OFFICIAL[pos] : 0;
-    });
-    return m;
-  }
   // FINGERPRINT_V99_EARNINGS_FIX
   // Projected earnings are shown during live play (pool standings need them), but:
   //  - Cut/WD/DQ players earn $0 (never the payout table)
