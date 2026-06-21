@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: roster-backfill-v142-20260616-1300
+// build: usopen-purse-22.5M-v143-20260618-1830
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -676,7 +676,7 @@ export async function GET(request) {
 
     // Load dynamic tournament purses
     const PURSE_DEFAULTS = {
-      players: 25000000, masters: 22500000, pga: 20500000, usopen: 21500000, open: 17000000, pgatour: 9000000,
+      players: 25000000, masters: 22500000, pga: 20500000, usopen: 22500000, open: 17000000, pgatour: 9000000,
     };
     const purses = {};
     for (const m of Object.keys(PURSE_DEFAULTS)) {
