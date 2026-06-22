@@ -1,5 +1,5 @@
 'use client';
-// build: usopen-formula-ladder-cut-adaptive-v172-20260618-2000
+// build: invite-failure-detail-v173-20260622-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -4040,7 +4040,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       const note=(document.getElementById('inviteNoteInput')?.value||'').trim();
                       const d=await adminAction('invite-roster',{message:note});
                       setInviting(false);
-                      if(d?.ok)msg(`Invites sent to ${d.sent} player${d.sent===1?'':'s'}${d.failed?` (${d.failed} failed)`:''}`);
+                      if(d?.ok){
+                        msg(`Invites sent to ${d.sent} player${d.sent===1?'':'s'}${d.failed?` (${d.failed} failed)`:''}`);
+                        // FINGERPRINT_V143_INVITE_DIAG — surface which emails failed and why
+                        if(d.failures && d.failures.length){
+                          console.warn('Invite failures:', d.failures);
+                          const lines = d.failures.map(f=>`• ${f.email} — ${f.reason}`).join('\n');
+                          setTimeout(()=>alert(`${d.failed} invite${d.failed===1?'':'s'} failed:\n\n${lines}`), 300);
+                        }
+                      }
                       else msg(d?.error||'Invite failed');
                     }}>{inviting?'Sending…':`📨 Send Invite to ${roster.length} Player${roster.length===1?'':'s'}`}</button>
                     <button type="button" style={{...inp,flex:'none',marginLeft:8,cursor:'pointer',background:'#f0f0f0',border:'none',fontWeight:600,fontSize:12,padding:'9px 14px'}} onClick={()=>setRoster(null)}>Refresh</button>
