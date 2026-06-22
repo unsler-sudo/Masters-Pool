@@ -10,6 +10,11 @@ const PROMO_CODES = {
     expiresAt: '2026-06-18T09:00:00Z', // June 18 5 AM ET (9 AM UTC)
     description: 'Free US Open 2026',
   },
+  'THEOPEN26': {
+    validForMajors: ['open'],
+    expiresAt: '2026-07-16T09:00:00Z', // July 16 5 AM ET (9 AM UTC) — The Open R1 tee-off morning
+    description: 'Free The Open Championship 2026',
+  },
   // Add more promo codes here as needed
 };
 const POOL_PRICE    = parseInt(process.env.POOL_PRICE_CENTS || '1000'); // $10.00
