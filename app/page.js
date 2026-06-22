@@ -193,9 +193,9 @@ export default function LandingPage() {
         </div>
         <div style={{maxWidth:440,margin:'0 auto 28px',padding:'14px 18px',background:'linear-gradient(135deg,rgba(201,168,76,.18),rgba(201,168,76,.08))',borderRadius:12,border:'1px solid rgba(201,168,76,.4)'}}>
           <div style={{fontSize:11,fontWeight:700,color:'#c9a84c',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🎁 Limited Time</div>
-          <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:6}}>Free Pool for the U.S. Open</div>
+          <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:6}}>Free Pool for The Open Championship</div>
           <div style={{fontSize:12,opacity:.7,lineHeight:1.5}}>
-            Use promo code <code style={{background:'rgba(255,255,255,.15)',padding:'2px 8px',borderRadius:4,fontFamily:'monospace',fontWeight:700,color:'#fff',letterSpacing:1}}>USOPEN26</code> at signup to skip the $10 fee for your first major. Expires June 18 at 5 AM ET.
+            Use promo code <code style={{background:'rgba(255,255,255,.15)',padding:'2px 8px',borderRadius:4,fontFamily:'monospace',fontWeight:700,color:'#fff',letterSpacing:1}}>THEOPEN26</code> at signup to skip the $10 fee for your first major. Expires July 16 at 5 AM ET.
           </div>
         </div>
         <button type="button" onClick={()=>setStep('create')} style={{
