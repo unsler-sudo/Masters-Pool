@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: usopen-purse-22.5M-v143-20260618-1830
+// build: invite-failure-diagnostics-v144-20260622-1200
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1100,9 +1100,15 @@ export async function POST(request) {
       const customNote = (body.message||'').trim();
 
       let sent = 0, failed = 0;
+      const failures = []; // FINGERPRINT_V143_INVITE_DIAG — capture why each send failed
       // Send individually so each person gets a personal greeting (and we don't leak the email list)
       for (const p of roster) {
         if (!p.email) continue;
+        // Basic email sanity check before hitting the API
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.email)) {
+          failed++; failures.push({ email: p.email, reason: 'invalid format' });
+          continue;
+        }
         try {
           const res = await fetch('https://api.resend.com/emails', {
             method: 'POST',
@@ -1124,10 +1130,18 @@ export async function POST(request) {
               `,
             }),
           });
-          if (res.ok) sent++; else failed++;
-        } catch { failed++; }
+          if (res.ok) { sent++; }
+          else {
+            failed++;
+            let reason = `HTTP ${res.status}`;
+            try { const errBody = await res.json(); reason = errBody?.message || errBody?.name || reason; } catch {}
+            failures.push({ email: p.email, reason });
+          }
+        } catch (e) { failed++; failures.push({ email: p.email, reason: e.message || 'network error' }); }
+        // Small spacing between sends to stay under Resend's rate limit (free tier ~2/sec)
+        await new Promise(r => setTimeout(r, 600));
       }
-      return Response.json({ ok:true, sent, failed, total:roster.length });
+      return Response.json({ ok:true, sent, failed, total:roster.length, failures });
     }
 
     if (body.action === 'cleanup-orphan-payments') {
