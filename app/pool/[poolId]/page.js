@@ -1,5 +1,5 @@
 'use client';
-// build: invite-failure-detail-v173-20260622-1200
+// build: picker-odds-sort-v174-20260622-1300
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2640,7 +2640,15 @@ export default function App(){
         if (ah !== bh) return ah - bh;
         return a.name.localeCompare(b.name);
       });
-  const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>a.name.localeCompare(b.name));
+  // FINGERPRINT_V174_PICKER_ODDS_SORT
+  // Order the pick list by odds, best (biggest favorite) to worst — using rank (odds-based, lower
+  // = better). Falls back to dgRank, then name, so players without a rank still sort sensibly.
+  const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>{
+    const ar = (typeof a.rank==='number' && a.rank<9000) ? a.rank : (typeof a.dgRank==='number' ? a.dgRank : 9999);
+    const br = (typeof b.rank==='number' && b.rank<9000) ? b.rank : (typeof b.dgRank==='number' ? b.dgRank : 9999);
+    if (ar !== br) return ar - br;
+    return a.name.localeCompare(b.name);
+  });
   const filteredTier=tierField.filter(p=>p.name.toLowerCase().includes(search.toLowerCase()));
   // FINGERPRINT_V131_COLSORT_APPLY
   // Tap-to-sort override (leaderboard view only, live AND pre-tournament). When colSort is null,
