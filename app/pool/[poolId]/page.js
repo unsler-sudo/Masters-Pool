@@ -1,5 +1,5 @@
 'use client';
-// build: picker-odds-sort-v174-20260622-1300
+// build: nocut-signature-payouts-v175-20260622-1400
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -582,6 +582,29 @@ const PAYOUT_SIGNATURE = {
   61:0.00205000, 62:0.00200000, 63:0.00190000, 64:0.00185000, 65:0.00180000
 };
 
+// FINGERPRINT_V175_SIGNATURE_NOCUT
+// No-cut signature events (e.g. The Sentry, Travelers) pay ALL ~72 players and use an 18% winner
+// share (vs the cut signature events like Memorial which pay 20% to a smaller paid field). Exact
+// per-position percentages derived from the official 2026 Travelers payouts (purse $20M, winner
+// $3.6M = 18%). Sums to 100% since every position is paid. Tie-averaging handles ties.
+const PAYOUT_SIGNATURE_NOCUT = {
+  1:0.18000000,2:0.10800000,3:0.06800000,4:0.04800000,5:0.04000000,
+  6:0.03600000,7:0.03350000,8:0.03100000,9:0.02900000,10:0.02700000,
+  11:0.02500000,12:0.02300000,13:0.02100000,14:0.01900000,15:0.01800000,
+  16:0.01700000,17:0.01600000,18:0.01500000,19:0.01400000,20:0.01300000,
+  21:0.01200000,22:0.01115000,23:0.01037500,24:0.00950000,25:0.00875000,
+  26:0.00795000,27:0.00762500,28:0.00730000,29:0.00700000,30:0.00670000,
+  31:0.00642500,32:0.00612500,33:0.00582500,34:0.00555000,35:0.00532500,
+  36:0.00507500,37:0.00482500,38:0.00462500,39:0.00442500,40:0.00420000,
+  41:0.00400000,42:0.00380000,43:0.00360000,44:0.00340000,45:0.00320000,
+  46:0.00300000,47:0.00280000,48:0.00265000,49:0.00250000,50:0.00245000,
+  51:0.00240000,52:0.00235000,53:0.00230000,54:0.00230000,55:0.00227500,
+  56:0.00225000,57:0.00222500,58:0.00220000,59:0.00217500,60:0.00215000,
+  61:0.00212500,62:0.00210000,63:0.00207500,64:0.00205000,65:0.00202500,
+  66:0.00200000,67:0.00197500,68:0.00195000,69:0.00190000,70:0.00187500,
+  71:0.00185000,72:0.00180000,
+};
+
 // Known 2026 PGA Tour signature events (normalized substrings for matching against event names)
 const SIGNATURE_EVENT_KEYS = [
   'sentry', 'pebble beach', 'genesis invitational', 'arnold palmer',
@@ -594,6 +617,16 @@ const isSignatureEvent = (eventName, purse) => {
   if (SIGNATURE_EVENT_KEYS.some(k => n.includes(k))) return true;
   if (purse && purse >= 15_000_000) return true;
   return false;
+};
+
+// FINGERPRINT_V175_SIGNATURE_NOCUT
+// No-cut signature events: every player is paid (no 36-hole cut), 18% winner share, ~72 paid.
+// 2026: The Sentry and the Travelers Championship are the no-cut signature events. The other
+// signature events (Pebble, Genesis, Arnold Palmer, RBC Heritage, Memorial) DO have a cut.
+const SIGNATURE_NOCUT_KEYS = ['sentry', 'travelers'];
+const isNoCutSignature = (eventName) => {
+  const n = (eventName||'').toLowerCase();
+  return SIGNATURE_NOCUT_KEYS.some(k => n.includes(k));
 };
 
 // Default fallback
@@ -749,7 +782,9 @@ function calcEarnings(players, purse, major, tournamentComplete, signatureEventN
   // For pgatour signature events, use the top-heavy signature payout curve (winner 20%, etc.).
   let payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
   if (major === 'pgatour' && isSignatureEvent(signatureEventName, purse)) {
-    payoutTable = PAYOUT_SIGNATURE;
+    // FINGERPRINT_V175_SIGNATURE_NOCUT — no-cut signature events (Sentry, Travelers) pay all 72
+    // with an 18% winner share; cut signature events (Memorial etc.) use the 20% top-heavy curve.
+    payoutTable = isNoCutSignature(signatureEventName) ? PAYOUT_SIGNATURE_NOCUT : PAYOUT_SIGNATURE;
   }
   const maxPos = Math.max(...Object.keys(payoutTable).map(Number));
   const g={};
