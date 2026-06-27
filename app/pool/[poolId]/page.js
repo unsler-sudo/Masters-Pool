@@ -1,5 +1,5 @@
 'use client';
-// build: nocut-signature-payouts-v175-20260622-1400
+// build: tour-championship-exact-v178-20260622-1530
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -605,10 +605,24 @@ const PAYOUT_SIGNATURE_NOCUT = {
   71:0.00185000,72:0.00180000,
 };
 
+// FINGERPRINT_V178_TOUR_CHAMP
+// Tour Championship — unique 30-player, no-cut, $40M finale. Winner takes 25% ($10M); the whole
+// purse is paid out as position money (sums to 100%). Exact per-position percentages from the
+// official 2025 payouts (same $40M structure). Its own table — NOT the 18% no-cut signature curve.
+const PAYOUT_TOUR_CHAMP = {
+  1:0.25000000,2:0.10881250,3:0.10881250,4:0.06541667,5:0.06541667,
+  6:0.06541667,7:0.02804167,8:0.02804167,9:0.02804167,10:0.01787500,
+  11:0.01787500,12:0.01650000,13:0.01425000,14:0.01425000,15:0.01425000,
+  16:0.01425000,17:0.01206250,18:0.01206250,19:0.01131250,20:0.01131250,
+  21:0.01056250,22:0.01056250,23:0.00987500,24:0.00987500,25:0.00943750,
+  26:0.00943750,27:0.00918750,28:0.00918750,29:0.00900000,30:0.00887500,
+};
+
 // Known 2026 PGA Tour signature events (normalized substrings for matching against event names)
 const SIGNATURE_EVENT_KEYS = [
   'sentry', 'pebble beach', 'genesis invitational', 'arnold palmer',
-  'rbc heritage', 'memorial', 'travelers',
+  'rbc heritage', 'truist', 'memorial', 'travelers',
+  'st. jude', 'st jude', 'fedex st', 'bmw championship', 'tour championship',
 ];
 // Decide if a pgatour event uses the signature payout curve.
 // Primary signal: event name matches a known signature event. Fallback: purse >= $15M.
@@ -619,15 +633,22 @@ const isSignatureEvent = (eventName, purse) => {
   return false;
 };
 
-// FINGERPRINT_V175_SIGNATURE_NOCUT
+// FINGERPRINT_V175_SIGNATURE_NOCUT / FINGERPRINT_V176_NOCUT_LIST / FINGERPRINT_V177_PLAYOFFS
 // No-cut signature events: every player is paid (no 36-hole cut), 18% winner share, ~72 paid.
-// 2026: The Sentry and the Travelers Championship are the no-cut signature events. The other
-// signature events (Pebble, Genesis, Arnold Palmer, RBC Heritage, Memorial) DO have a cut.
-const SIGNATURE_NOCUT_KEYS = ['sentry', 'travelers'];
+// 2026 no-cut signature events (5): The Sentry, AT&T Pebble Beach Pro-Am, RBC Heritage,
+// Truist Championship, Travelers Championship. The other 3 player-hosted signature events
+// (Genesis Invitational, Arnold Palmer Invitational, Memorial) DO have a 36-hole cut.
+// The 3 FedExCup Playoff events (St. Jude, BMW, Tour Championship) are ALSO no-cut.
+const SIGNATURE_NOCUT_KEYS = [
+  'sentry', 'pebble beach', 'rbc heritage', 'truist', 'travelers',
+  'st. jude', 'st jude', 'fedex st', 'bmw championship', 'tour championship',
+];
 const isNoCutSignature = (eventName) => {
   const n = (eventName||'').toLowerCase();
   return SIGNATURE_NOCUT_KEYS.some(k => n.includes(k));
 };
+// FINGERPRINT_V178_TOUR_CHAMP — the Tour Championship has its own 25%-winner $40M table.
+const isTourChampionship = (eventName) => (eventName||'').toLowerCase().includes('tour championship');
 
 // Default fallback
 const PAYOUT = PAYOUT_PGA;
@@ -782,9 +803,14 @@ function calcEarnings(players, purse, major, tournamentComplete, signatureEventN
   // For pgatour signature events, use the top-heavy signature payout curve (winner 20%, etc.).
   let payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
   if (major === 'pgatour' && isSignatureEvent(signatureEventName, purse)) {
-    // FINGERPRINT_V175_SIGNATURE_NOCUT — no-cut signature events (Sentry, Travelers) pay all 72
-    // with an 18% winner share; cut signature events (Memorial etc.) use the 20% top-heavy curve.
-    payoutTable = isNoCutSignature(signatureEventName) ? PAYOUT_SIGNATURE_NOCUT : PAYOUT_SIGNATURE;
+    // FINGERPRINT_V178_TOUR_CHAMP — Tour Championship first (its own 25% table), then no-cut vs cut.
+    if (isTourChampionship(signatureEventName)) {
+      payoutTable = PAYOUT_TOUR_CHAMP;
+    } else {
+      // FINGERPRINT_V175_SIGNATURE_NOCUT — no-cut signature events (Sentry, Travelers, etc.) pay all
+      // with an 18% winner share; cut signature events (Memorial etc.) use the 20% top-heavy curve.
+      payoutTable = isNoCutSignature(signatureEventName) ? PAYOUT_SIGNATURE_NOCUT : PAYOUT_SIGNATURE;
+    }
   }
   const maxPos = Math.max(...Object.keys(payoutTable).map(Number));
   const g={};
