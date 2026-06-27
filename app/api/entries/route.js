@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: nocut-signature-payouts-v145-20260622-1400
+// build: tour-championship-exact-v148-20260622-1530
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -28,7 +28,7 @@ const SRV_PAYOUT_SIGNATURE = {
   51:0.00255,52:0.0025,53:0.00245,54:0.0024,55:0.00235,56:0.0023,57:0.00225,58:0.0022,59:0.00215,60:0.0021,
   61:0.00205,62:0.002,63:0.0019,64:0.00185,65:0.0018
 };
-const SRV_SIGNATURE_KEYS = ['sentry','pebble beach','genesis invitational','arnold palmer','rbc heritage','memorial','travelers'];
+const SRV_SIGNATURE_KEYS = ['sentry','pebble beach','genesis invitational','arnold palmer','rbc heritage','truist','memorial','travelers','st. jude','st jude','fedex st','bmw championship','tour championship'];
 // FINGERPRINT_V145_SRV_NOCUT — no-cut signature events (Sentry, Travelers): 18% winner, all 72 paid.
 const SRV_PAYOUT_SIGNATURE_NOCUT = {
   1:0.18,2:0.108,3:0.068,4:0.048,5:0.04,6:0.036,7:0.0335,8:0.031,9:0.029,10:0.027,
@@ -39,7 +39,14 @@ const SRV_PAYOUT_SIGNATURE_NOCUT = {
   51:0.0024,52:0.00235,53:0.0023,54:0.0023,55:0.002275,56:0.00225,57:0.002225,58:0.0022,59:0.002175,60:0.00215,
   61:0.002125,62:0.0021,63:0.002075,64:0.00205,65:0.002025,66:0.002,67:0.001975,68:0.00195,69:0.0019,70:0.001875,71:0.00185,72:0.0018
 };
-const SRV_NOCUT_KEYS = ['sentry','travelers'];
+const SRV_NOCUT_KEYS = ['sentry','pebble beach','rbc heritage','truist','travelers','st. jude','st jude','fedex st','bmw championship','tour championship'];
+// FINGERPRINT_V148_SRV_TOURCHAMP — Tour Championship: 30 players, $40M, 25% winner, its own table.
+const SRV_PAYOUT_TOUR_CHAMP = {
+  1:0.25,2:0.1088125,3:0.1088125,4:0.06541667,5:0.06541667,6:0.06541667,7:0.02804167,8:0.02804167,9:0.02804167,10:0.017875,
+  11:0.017875,12:0.0165,13:0.01425,14:0.01425,15:0.01425,16:0.01425,17:0.0120625,18:0.0120625,19:0.0113125,20:0.0113125,
+  21:0.0105625,22:0.0105625,23:0.009875,24:0.009875,25:0.0094375,26:0.0094375,27:0.0091875,28:0.0091875,29:0.009,30:0.008875
+};
+function srvIsTourChampionship(eventName){ return (eventName||'').toLowerCase().includes('tour championship'); }
 function srvIsSignature(eventName, purse) {
   const n = (eventName||'').toLowerCase();
   if (SRV_SIGNATURE_KEYS.some(k => n.includes(k))) return true;
@@ -84,10 +91,16 @@ function srvParsePos(pos) {
 }
 function srvComputeEarnings(players, purse, eventName) {
   const useSig = srvIsSignature(eventName, purse);
-  // FINGERPRINT_V145_SRV_NOCUT — pick no-cut table for Sentry/Travelers, else cut-signature/standard
-  const table = useSig
-    ? (srvIsNoCutSignature(eventName) ? SRV_PAYOUT_SIGNATURE_NOCUT : SRV_PAYOUT_SIGNATURE)
-    : SRV_PAYOUT_PGATOUR;
+  // FINGERPRINT_V145_SRV_NOCUT / FINGERPRINT_V148_SRV_TOURCHAMP
+  // Tour Championship has its own 25% table; else no-cut (Sentry/Travelers/St.Jude/BMW) vs cut sig.
+  let table;
+  if (useSig && srvIsTourChampionship(eventName)) {
+    table = SRV_PAYOUT_TOUR_CHAMP;
+  } else if (useSig) {
+    table = srvIsNoCutSignature(eventName) ? SRV_PAYOUT_SIGNATURE_NOCUT : SRV_PAYOUT_SIGNATURE;
+  } else {
+    table = SRV_PAYOUT_PGATOUR;
+  }
   const maxPos = Math.max(...Object.keys(table).map(Number));
   const g = {};
   players.forEach(p => {
@@ -352,7 +365,9 @@ async function autoManage(poolId) {
                  });
             const schedPurse = concludedEvent?.purse || concludedEvent?.total_purse || null;
             const adminPurse = meta?.purses?.pgatour || null; // commissioner-set, if any
-            const sigDefault = srvIsSignature(poolEventName, schedPurse) ? 20000000 : 9000000;
+            // FINGERPRINT_V148_SRV_TOURCHAMP — Tour Championship defaults to $40M, other signature $20M
+            const sigDefault = srvIsTourChampionship(poolEventName) ? 40000000
+              : (srvIsSignature(poolEventName, schedPurse) ? 20000000 : 9000000);
             const resolvedPurse = adminPurse || schedPurse || sigDefault;
 
             // Compute server-side earnings (keyed by normalized name), then map to each pick.
