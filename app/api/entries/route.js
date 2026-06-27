@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: invite-failure-diagnostics-v144-20260622-1200
+// build: nocut-signature-payouts-v145-20260622-1400
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -29,11 +29,26 @@ const SRV_PAYOUT_SIGNATURE = {
   61:0.00205,62:0.002,63:0.0019,64:0.00185,65:0.0018
 };
 const SRV_SIGNATURE_KEYS = ['sentry','pebble beach','genesis invitational','arnold palmer','rbc heritage','memorial','travelers'];
+// FINGERPRINT_V145_SRV_NOCUT — no-cut signature events (Sentry, Travelers): 18% winner, all 72 paid.
+const SRV_PAYOUT_SIGNATURE_NOCUT = {
+  1:0.18,2:0.108,3:0.068,4:0.048,5:0.04,6:0.036,7:0.0335,8:0.031,9:0.029,10:0.027,
+  11:0.025,12:0.023,13:0.021,14:0.019,15:0.018,16:0.017,17:0.016,18:0.015,19:0.014,20:0.013,
+  21:0.012,22:0.01115,23:0.010375,24:0.0095,25:0.00875,26:0.00795,27:0.007625,28:0.0073,29:0.007,30:0.0067,
+  31:0.006425,32:0.006125,33:0.005825,34:0.00555,35:0.005325,36:0.005075,37:0.004825,38:0.004625,39:0.004425,40:0.0042,
+  41:0.004,42:0.0038,43:0.0036,44:0.0034,45:0.0032,46:0.003,47:0.0028,48:0.00265,49:0.0025,50:0.00245,
+  51:0.0024,52:0.00235,53:0.0023,54:0.0023,55:0.002275,56:0.00225,57:0.002225,58:0.0022,59:0.002175,60:0.00215,
+  61:0.002125,62:0.0021,63:0.002075,64:0.00205,65:0.002025,66:0.002,67:0.001975,68:0.00195,69:0.0019,70:0.001875,71:0.00185,72:0.0018
+};
+const SRV_NOCUT_KEYS = ['sentry','travelers'];
 function srvIsSignature(eventName, purse) {
   const n = (eventName||'').toLowerCase();
   if (SRV_SIGNATURE_KEYS.some(k => n.includes(k))) return true;
   if (purse && purse >= 15000000) return true;
   return false;
+}
+function srvIsNoCutSignature(eventName) {
+  const n = (eventName||'').toLowerCase();
+  return SRV_NOCUT_KEYS.some(k => n.includes(k));
 }
 function srvNormalizeName(s) {
   return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -69,7 +84,10 @@ function srvParsePos(pos) {
 }
 function srvComputeEarnings(players, purse, eventName) {
   const useSig = srvIsSignature(eventName, purse);
-  const table = useSig ? SRV_PAYOUT_SIGNATURE : SRV_PAYOUT_PGATOUR;
+  // FINGERPRINT_V145_SRV_NOCUT — pick no-cut table for Sentry/Travelers, else cut-signature/standard
+  const table = useSig
+    ? (srvIsNoCutSignature(eventName) ? SRV_PAYOUT_SIGNATURE_NOCUT : SRV_PAYOUT_SIGNATURE)
+    : SRV_PAYOUT_PGATOUR;
   const maxPos = Math.max(...Object.keys(table).map(Number));
   const g = {};
   players.forEach(p => {
