@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: playoff-archive-guard-v149-20260622-1600
+// build: manual-rotate-action-v150-20260622-1700
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1203,6 +1203,124 @@ export async function POST(request) {
       });
       await savePayments(poolId, cleaned);
       return Response.json({ ok:true, removed, remaining: Object.keys(cleaned).length });
+    }
+
+    // ─── MANUAL ROTATE TO NEXT PGA TOUR EVENT (pool commissioner) ──────────
+    // FINGERPRINT_V150_MANUAL_ROTATE
+    // Archives the current pgatour event (with server-computed earnings), wipes entries + payments,
+    // advances meta.currentPgatourEvent to DataGolf's current pre-tournament event, and resets the
+    // pool to locked + unpaid for the new event. Mirrors the auto-rotation, but on demand. Roster is
+    // preserved (separate key). Only works when the pool is in pgatour mode.
+    if (body.action === 'rotate-pgatour-now') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId);
+      if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
+      if ((meta.major || '') !== 'pgatour') {
+        return Response.json({ error:'Pool is not in PGA Tour mode. Switch to pgatour first.' }, { status:400 });
+      }
+      const year = new Date().getFullYear();
+      const now = Date.now();
+      const poolEventName = (meta.currentPgatourEvent || '').toLowerCase();
+
+      // Resolve DataGolf's CURRENT pre-tournament event = the next event to rotate into.
+      let nextEventName = null, schedule = [];
+      try {
+        const ptRes = await fetch(
+          `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          { cache:'no-store', signal: AbortSignal.timeout(5000) }
+        );
+        if (ptRes.ok) { const ptData = await ptRes.json(); nextEventName = ptData.event_name || null; }
+      } catch (e) { /* fall through */ }
+      try {
+        const schedRes = await fetch(
+          `https://feeds.datagolf.com/get-schedule?tour=pga&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          { cache:'no-store', signal: AbortSignal.timeout(5000) }
+        );
+        if (schedRes.ok) { const sd = await schedRes.json(); schedule = (sd.schedule || sd.events || []).filter(e => e.start_date); }
+      } catch (e) { /* fall through */ }
+
+      // Capture the final leaderboard so the archive has correct earnings (same as auto-rotation).
+      let finalInPlayPlayers = null;
+      try {
+        const ipRes = await fetch(
+          `https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          { cache:'no-store', signal: AbortSignal.timeout(5000) }
+        );
+        if (ipRes.ok) { const ipData = await ipRes.json(); finalInPlayPlayers = ipData.data || ipData.players || []; }
+      } catch (e) { /* fall through */ }
+
+      // ── Archive the current event ──
+      let archivedName = null, archivedEntries = 0;
+      const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
+      if (poolEventName && entries.length > 0) {
+        const slug = poolEventName.replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+        const archiveKey = k(poolId, `archive:pgatour-${slug}_${year}`);
+        let existing = null;
+        try { const ex = await redis('GET', archiveKey); if (ex) existing = JSON.parse(ex); } catch {}
+        const existingEarnings = existing?.earnings || {};
+        const existingHasMoney = Object.values(existingEarnings).some(v => v > 0);
+
+        const concludedEvent = schedule.find(e => (e.event_name||'').toLowerCase() === poolEventName)
+          || schedule.find(e => { const en=(e.event_name||'').toLowerCase(); return en.includes(poolEventName)||poolEventName.includes(en); });
+        const schedPurse = concludedEvent?.purse || concludedEvent?.total_purse || null;
+        const adminPurse = meta?.purses?.pgatour || null;
+        const sigDefault = srvIsTourChampionship(poolEventName) ? 40000000
+          : (srvIsSignature(poolEventName, schedPurse) ? 20000000 : 9000000);
+        const resolvedPurse = adminPurse || schedPurse || sigDefault;
+
+        let earningsByPick = existingEarnings;
+        if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
+          const earnMap = srvComputeEarnings(finalInPlayPlayers, resolvedPurse, poolEventName);
+          earningsByPick = srvEarningsByPick(entries, earnMap);
+        }
+
+        const fee = meta.entryFee || 0;
+        const n = entries.length;
+        const pot = n * fee;
+        let prizes = existing?.prizes || null;
+        if (!prizes && fee > 0 && n >= 1) {
+          const wta = meta.payoutMode === 'winner-take-all' || n <= 4;
+          prizes = wta ? {first:pot, second:0, third:0} : {first:pot-fee*3, second:fee*2, third:fee};
+        }
+
+        let logoUrl = existing?.logoUrl || null, logoNoBg = existing?.logoNoBg ?? null, logoHeight = existing?.logoHeight || null;
+        if (!logoUrl && concludedEvent?.event_id) {
+          logoUrl = `https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:R000.png/tournaments/logos/R${String(concludedEvent.event_id).padStart(3,'0')}.png`;
+          logoNoBg = false; logoHeight = 80;
+        }
+
+        await redis('SET', archiveKey, JSON.stringify({
+          major: 'pgatour', eventName: meta.currentPgatourEvent, year,
+          archivedAt: new Date().toISOString(),
+          entries, payments, earnings: earningsByPick, entryFee: fee,
+          prizes: prizes || null, logoUrl, logoNoBg, logoHeight,
+          tournamentDate: existing?.tournamentDate || new Date().toISOString(),
+          autoArchived: false, manualRotate: true,
+        }));
+        archivedName = meta.currentPgatourEvent; archivedEntries = entries.length;
+      }
+
+      // ── Reset pool for the next event ──
+      meta.paid = false;
+      meta.paidAt = null;
+      meta.reminderSent = false;
+      meta.everPaid = true;
+      if (nextEventName) meta.currentPgatourEvent = nextEventName;
+      await Promise.all([
+        redis('SET', k(poolId,'meta'),         JSON.stringify(meta)),
+        redis('DEL', k(poolId,'entries')),
+        redis('DEL', k(poolId,'payments')),
+        redis('SET', k(poolId,'locked'),       'true'),
+        redis('SET', k(poolId,'picks_hidden'), 'true'),
+      ]);
+
+      return Response.json({
+        ok: true,
+        archived: archivedName,
+        archivedEntries,
+        rotatedTo: nextEventName || '(unchanged — DataGolf event unavailable)',
+        note: 'Entries and payments wiped. Pool is locked + unpaid for the new event. Roster preserved.',
+      });
     }
 
     if (body.action === 'delete-archive') {
