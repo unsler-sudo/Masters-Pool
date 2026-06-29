@@ -1,5 +1,5 @@
 'use client';
-// build: t1-full-share-playoff-v179-20260622-1630
+// build: rotate-pgatour-button-v180-20260622-1700
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -932,6 +932,7 @@ export default function App(){
   const [adminPw,setAdminPw]=useState('');
   const [roster,setRoster]=useState(null); // FINGERPRINT_V141 — past-player roster for invites
   const [inviting,setInviting]=useState(false);
+  const [rotating,setRotating]=useState(false); // FINGERPRINT_V180 — manual pgatour rotation in progress
   const [adminOk,setAdminOk]=useState(false);
   const [adminAuthError,setAdminAuthError]=useState('');
   const [serverLocked,setServerLocked]=useState(false);
@@ -4047,6 +4048,24 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               </label>
               {activeMajor==='pgatour'&&<div style={{marginTop:10,padding:'10px 12px',background:`${T.primary}0a`,borderRadius:8,fontSize:11,color:T.primary}}>
                 ✓ Currently in PGA Tour mode. The pool will track whichever event DataGolf has live this week.
+              </div>}
+              {/* FINGERPRINT_V180_ROTATE_BTN — manual advance to the next PGA Tour event */}
+              {activeMajor==='pgatour'&&<div style={{marginTop:12,paddingTop:12,borderTop:'1px solid #eee'}}>
+                <button type="button" style={{...dan,width:'100%'}} disabled={rotating} onClick={async()=>{
+                  if(!confirm('Rotate to the NEXT PGA Tour event?\n\nThis will:\n• Archive the current event to History (with final earnings)\n• DELETE all current entries and payments\n• Advance the pool to the next event (locked + unpaid)\n\nYour player roster is kept. This cannot be undone.'))return;
+                  if(!confirm('Are you sure? All current entries will be permanently deleted.'))return;
+                  setRotating(true);
+                  const d=await adminAction('rotate-pgatour-now',{});
+                  setRotating(false);
+                  if(d?.ok){
+                    msg(`Rotated to ${d.rotatedTo}. Archived ${d.archivedEntries} entries from ${d.archived||'previous event'}.`);
+                    loadEntries();
+                    setRoster(null);
+                  } else {
+                    msg(d?.error||'Rotation failed');
+                  }
+                }}>{rotating?'Rotating…':'🔄 Rotate to Next PGA Tour Event'}</button>
+                <p style={{fontSize:11,color:'#999',marginTop:6,lineHeight:1.4}}>Archives this event, wipes entries, and advances to the next event. Use after the current tournament finishes.</p>
               </div>}
             </div>
             <div style={sec}><h3 style={stl}>🔑 Join Code</h3>
