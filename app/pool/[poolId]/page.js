@@ -1,5 +1,5 @@
 'use client';
-// build: tour-championship-exact-v178-20260622-1530
+// build: t1-full-share-playoff-v179-20260622-1630
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -831,8 +831,14 @@ function calcEarnings(players, purse, major, tournamentComplete, signatureEventN
   const m={};
   Object.entries(g).forEach(([ps,pls])=>{
     const pos=+ps;
-    // Live tournament: multiple players tied at the LEAD each show full winner share (no split)
-    if(pos===1 && pls.length>1 && !tournamentComplete){
+    // FINGERPRINT_V179_T1_FULL_SHARE
+    // Any time 2+ players are tied at the LEAD (position 1 / "T1"), each shows the FULL winner share
+    // — not a split. This holds during live play AND after R4 when a playoff hasn't been resolved
+    // yet (both leaders read "F" but DataGolf still shows them T1). The win isn't decided until the
+    // feed breaks the tie into a single "1" (and "2"), at which point this branch no longer matches
+    // and the normal lookup pays the real 1st/2nd. Showing the full winner amount avoids implying
+    // a runner-up payout before anyone has actually lost.
+    if(pos===1 && pls.length>1){
       const winnerShare = Math.round(payoutTable[1]*purse);
       pls.forEach(n=>{m[n]=winnerShare;});
       return;
