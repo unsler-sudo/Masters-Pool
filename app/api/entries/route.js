@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: tour-championship-exact-v148-20260622-1530
+// build: playoff-archive-guard-v149-20260622-1600
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -327,12 +327,22 @@ async function autoManage(poolId) {
               const allR4Done = topPlayers.length >= 5 && topPlayers.every(p =>
                 p.R4 != null // R4 stroke count recorded (player completed R4)
               );
+              // FINGERPRINT_V149_PLAYOFF_GUARD
+              // A playoff is NOT over just because R4 is done: the leaders finish R4 tied, then play
+              // extra holes. If 2+ players are tied at the lead (position 1 / "T1"), the winner isn't
+              // decided yet — do NOT conclude/archive. DataGolf resolves the tie to a single "1" (and
+              // "2", "T3", etc.) once the playoff finishes; only then is it safe to archive.
+              const leadersTiedAtOne = (() => {
+                const atOne = madeCut.filter(p => parseInt(String(p.current_pos||'').replace('T',''),10) === 1);
+                return atOne.length > 1; // 2+ players showing position 1 = unresolved (playoff or tie for win)
+              })();
               // Also check timestamp — if last_updated > 12 hours ago, event is definitely over
               const lastUpdated = ipData.last_updated ? new Date(ipData.last_updated).getTime() : 0;
               const hoursStale = (now - lastUpdated) / (1000 * 60 * 60);
               const dataIsStale = lastUpdated > 0 && hoursStale > 12;
-              priorEventConcluded = allR4Done || dataIsStale;
-              console.log(`[pgatour rotation] event ${dgCurrentEventName} ≠ pool ${poolEventName}, R4done=${allR4Done}, stale=${dataIsStale}, concluded=${priorEventConcluded}`);
+              // Conclude only if R4 done AND the win is resolved (no tie at the top), OR data is stale.
+              priorEventConcluded = (allR4Done && !leadersTiedAtOne) || dataIsStale;
+              console.log(`[pgatour rotation] event ${dgCurrentEventName} ≠ pool ${poolEventName}, R4done=${allR4Done}, tiedAt1=${leadersTiedAtOne}, stale=${dataIsStale}, concluded=${priorEventConcluded}`);
             }
           } catch (e) {
             console.log('[pgatour rotation] in-play check failed:', e.message);
