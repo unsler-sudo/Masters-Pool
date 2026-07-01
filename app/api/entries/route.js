@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: manual-rotate-action-v150-20260622-1700
+// build: schedule-endpoint-v151-20260622-1730
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1762,6 +1762,53 @@ export async function POST(request) {
         return (MAJOR_ORDER[b.major] || 0) - (MAJOR_ORDER[a.major] || 0);
       });
       return Response.json({ ok:true, archives });
+    }
+
+    // ─── PUBLIC PGA TOUR SCHEDULE (live from DataGolf, cached) ─────────────
+    // FINGERPRINT_V151_SCHEDULE
+    // Serves the full-season PGA Tour schedule for the end-user Schedule view. Cached in Redis for
+    // 6 hours so we don't hit DataGolf on every tab open. The API key stays server-side.
+    if (body.action==='get-schedule-public') {
+      const year = new Date().getFullYear();
+      const cacheKey = k(poolId, `schedule-cache_${year}`);
+      // Try cache first (schedule barely changes; 6h freshness is plenty)
+      try {
+        const cached = await redis('GET', cacheKey);
+        if (cached) {
+          const c = JSON.parse(cached);
+          if (c.fetchedAt && (Date.now() - c.fetchedAt) < 6*60*60*1000 && Array.isArray(c.events)) {
+            return Response.json({ ok:true, events:c.events, year, cached:true });
+          }
+        }
+      } catch {}
+      // Fetch fresh from DataGolf
+      let events = [];
+      try {
+        const res = await fetch(
+          `https://feeds.datagolf.com/get-schedule?tour=pga&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          { cache:'no-store', signal: AbortSignal.timeout(6000) }
+        );
+        if (res.ok) {
+          const sd = await res.json();
+          const raw = sd.schedule || sd.events || [];
+          events = raw
+            .filter(e => e.event_name && (e.start_date || e.date))
+            .map(e => ({
+              eventName: e.event_name,
+              startDate: e.start_date || e.date || null,
+              course: e.course || e.course_name || null,
+              location: e.location || null,
+              purse: e.purse || e.total_purse || null,
+              eventId: e.event_id || null,
+            }))
+            .sort((a,b) => new Date(a.startDate||0) - new Date(b.startDate||0));
+        }
+      } catch (e) { console.warn('schedule fetch failed:', e.message); }
+      // Cache it (even if empty, to avoid hammering on failure — short TTL via fetchedAt check)
+      if (events.length > 0) {
+        try { await redis('SET', cacheKey, JSON.stringify({ fetchedAt: Date.now(), events })); } catch {}
+      }
+      return Response.json({ ok:true, events, year, cached:false });
     }
 
     if (body.action==='get-archives') {
