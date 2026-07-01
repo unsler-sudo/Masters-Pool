@@ -1,5 +1,5 @@
 'use client';
-// build: rotate-pgatour-button-v180-20260622-1700
+// build: schedule-view-v181-20260622-1730
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -980,6 +980,10 @@ export default function App(){
   const [publicArchives,setPublicArchives]=useState([]);
   const [expandedYears,setExpandedYears]=useState({}); // History year accordion — newest open by default
   const [historyLoaded,setHistoryLoaded]=useState(false);
+  // FINGERPRINT_V181_SCHEDULE — History tab has two sub-views: past Results and the season Schedule
+  const [historyView,setHistoryView]=useState('results'); // 'results' | 'schedule'
+  const [schedule,setSchedule]=useState(null);
+  const [scheduleLoaded,setScheduleLoaded]=useState(false);
   const [chatMessages,setChatMessages]=useState([]);
   const [lastSeenChatCount,setLastSeenChatCount]=useState(()=>{
     // FINGERPRINT_V125_UNREAD_CHAT
@@ -2468,6 +2472,19 @@ export default function App(){
     })();
   },[tab,historyLoaded,poolId]);
 
+  // FINGERPRINT_V181_SCHEDULE — load the season schedule when the Schedule sub-view is first opened
+  useEffect(()=>{
+    if(tab!=='History'||historyView!=='schedule'||scheduleLoaded)return;
+    (async()=>{
+      try{
+        const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'get-schedule-public'})});
+        const d=await r.json();
+        if(d?.events){setSchedule(d.events);}
+      }catch(e){console.warn('schedule load failed:',e.message);}
+      setScheduleLoaded(true);
+    })();
+  },[tab,historyView,scheduleLoaded,poolId]);
+
   const deleteOwnEntry=async(name)=>{
     if(!confirm(`Remove your entry "${name}"?`))return;
     try{
@@ -3830,9 +3847,52 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
 
         {tab==='History'&&<>
           <div style={{textAlign:'center',marginBottom:16}}>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800,color:T.primary,marginBottom:4}}>📚 Past Results</div>
-            <div style={{fontSize:12,color:'#8a9580'}}>Final standings from previous events</div>
+            {/* FINGERPRINT_V181_SCHEDULE — dropdown to switch between Past Results and the Schedule */}
+            <div style={{display:'inline-flex',alignItems:'center',gap:8,marginBottom:10}}>
+              <select value={historyView} onChange={e=>setHistoryView(e.target.value)} style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,border:`1.5px solid ${T.primary}33`,borderRadius:8,padding:'4px 30px 4px 12px',background:`${T.primary}08`,cursor:'pointer',appearance:'none',WebkitAppearance:'none',backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23${T.primary.replace('#','')}' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E")`,backgroundRepeat:'no-repeat',backgroundPosition:'right 10px center'}}>
+                <option value="results">📚 Past Results</option>
+                <option value="schedule">📅 Schedule</option>
+              </select>
+            </div>
+            <div style={{fontSize:12,color:'#8a9580'}}>{historyView==='results'?'Final standings from previous events':`${schedule&&schedule.length?new Date().getFullYear():''} PGA Tour season schedule`}</div>
           </div>
+          {historyView==='schedule'?(
+            !scheduleLoaded
+              ?<div style={{textAlign:'center',padding:40,color:'#8a9580',fontSize:13}}>Loading schedule...</div>
+              :!schedule||schedule.length===0
+                ?<div style={bx}><div style={{fontSize:44,marginBottom:10}}>📅</div><p style={{color:'#8a9580'}}>Schedule unavailable right now — check back soon.</p></div>
+                :(()=>{
+                  const now=Date.now();
+                  const fmtDate=(d)=>{try{return new Date(d+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});}catch{return d;}};
+                  const fmtPurse=(p)=>p?`$${(p/1e6).toFixed(p%1e6===0?0:1)}M`:'';
+                  // Find the next upcoming event to highlight
+                  const nextIdx=schedule.findIndex(e=>{try{return new Date(e.startDate+'T00:00:00').getTime()+4*864e5>=now;}catch{return false;}});
+                  return <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    {schedule.map((e,i)=>{
+                      const isPast=(()=>{try{return new Date(e.startDate+'T00:00:00').getTime()+4*864e5<now;}catch{return false;}})();
+                      const isNext=i===nextIdx;
+                      const isSig=(()=>{const n=(e.eventName||'').toLowerCase();return['sentry','pebble beach','genesis invitational','arnold palmer','rbc heritage','truist','memorial','travelers','st. jude','bmw championship','tour championship'].some(k=>n.includes(k));})();
+                      const isMajor=(()=>{const n=(e.eventName||'').toLowerCase();return['masters','pga championship','u.s. open','open championship','players championship'].some(k=>n.includes(k));})();
+                      return <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'11px 14px',borderRadius:10,background:isNext?`${T.primary}12`:'#fff',border:isNext?`1.5px solid ${T.primary}`:'1px solid #eee',opacity:isPast?0.5:1}}>
+                        <div style={{minWidth:52,textAlign:'center'}}>
+                          <div style={{fontSize:13,fontWeight:800,color:isNext?T.primary:'#556',lineHeight:1.1}}>{fmtDate(e.startDate)}</div>
+                        </div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13.5,fontWeight:700,color:'#2a3a1e',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.eventName}</div>
+                          {e.course&&<div style={{fontSize:11,color:'#8a9580',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{e.course}{e.location?` · ${e.location}`:''}</div>}
+                        </div>
+                        <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
+                          {isNext&&<span style={{fontSize:9,fontWeight:800,color:'#fff',background:T.primary,padding:'2px 7px',borderRadius:8,whiteSpace:'nowrap'}}>NEXT</span>}
+                          {isMajor&&<span style={{fontSize:9,fontWeight:700,color:'#7a5c00',background:'#f5e6a8',padding:'2px 7px',borderRadius:8}}>MAJOR</span>}
+                          {!isMajor&&isSig&&<span style={{fontSize:9,fontWeight:700,color:'#5a4a1a',background:'#f0e6c8',padding:'2px 7px',borderRadius:8}}>SIG</span>}
+                          {e.purse&&<span style={{fontSize:10,color:'#8a9580',fontWeight:600}}>{fmtPurse(e.purse)}</span>}
+                        </div>
+                      </div>;
+                    })}
+                  </div>;
+                })()
+          ):(
+          <>
           {!historyLoaded
             ?<div style={{textAlign:'center',padding:40,color:'#8a9580',fontSize:13}}>Loading past results...</div>
             :publicArchives.length===0
@@ -3967,6 +4027,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 })}</>;
               })()
           }
+          </>
+          )}
         </>}
 
         {tab==='Admin'&&(!adminOk?
