@@ -1,5 +1,5 @@
 'use client';
-// build: inplay-event-name-gate-v182-20260702-0800
+// build: entries-open-till-real-tee-v185-20260702-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -412,7 +412,9 @@ const LIVE_MODEL_DELAY_MS = 15 * 60 * 1000; // 15 minutes
 // Lenient match: normalized, mutual-includes. If the feed omits info.event_name we can't confirm a
 // mismatch, so we return true and defer to the tee-time gate (never block on missing data).
 const inPlayMatchesEvent = (inPlayInfo, eventName) => {
-  const norm = s => (s||'').toLowerCase().replace(/^the\s+/,'').replace(/\s+\d{4}$/,'').trim();
+  // Strip punctuation and collapse whitespace so "St. Jude" == "St Jude", "AT&T" == "ATT", etc.
+  const norm = s => (s||'').toLowerCase().replace(/^the\s+/,'').replace(/\s+\d{4}$/,'')
+    .replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();
   const a = norm(inPlayInfo?.event_name);
   const b = norm(eventName);
   if (!a || !b) return true; // can't confirm a mismatch — tee gate still applies
@@ -1049,21 +1051,30 @@ export default function App(){
   const TOURNAMENT = { name: T.eventName, purse: effectivePurse };
   const TIERS = TIER_DEFS.map(t => t.id===2 ? {...t, color:T.primary} : t);
 
-  // FINGERPRINT_V153_REAL_TEE
-  // pastTeeTime must reflect the ACTUAL earliest tee time, not just the hardcoded theme time.
-  // field-updates publishes real R1 tees into eventStartRef; for a major the true first tee is
-  // often earlier than the theme's placeholder (e.g. US Open first groups ~6:45 AM ET vs theme
-  // 7:00 AM). If we only trust the theme time, there's a window where play has started, scores
-  // exist in DataGolf, but the app still thinks it's pre-tournament → no live scores shown.
-  const realEarliestTee = eventStartRef.current && eventStartRef.current > 0 ? eventStartRef.current : TEE_TIME;
-  const effectiveTeeStart = Math.min(TEE_TIME, realEarliestTee);
+  // FINGERPRINT_V153_REAL_TEE / FINGERPRINT_V185_TRUST_REAL_TEE
+  // pastTeeTime must reflect the ACTUAL earliest tee time, not the theme placeholder (schedule
+  // start_date at a flat 11:00 UTC / 7:00 AM ET). field-updates publishes real R1 tees into
+  // eventStartRef, venue-timezone-corrected (v183). Once published, trust it OUTRIGHT — in BOTH
+  // directions: a major's real first tee can be EARLIER than the placeholder (US Open ~6:45 AM),
+  // and a pgatour event's can be LATER (John Deere 7:40 AM vs 7:00 placeholder). The old
+  // Math.min() only handled the earlier case, so entries wrongly locked 40 min before the John
+  // Deere's first tee. Sanity clamp: only trust the real tee if it's within 3 days of the theme
+  // time, so a corrupted value can't hold entries open (or lock them) absurdly.
+  const realEarliestTee = eventStartRef.current && eventStartRef.current > 0 ? eventStartRef.current : 0;
+  const teeSane = realEarliestTee > 0 && Math.abs(realEarliestTee - TEE_TIME) < 3 * 24 * 60 * 60 * 1000;
+  const effectiveTeeStart = teeSane ? realEarliestTee : TEE_TIME;
   const pastTeeTime = now >= effectiveTeeStart && now <= TOURNAMENT_END;
   const isLive = pastTeeTime || activeMajor === 'pgatour'; // pgatour mode always shows live data
   const locked = serverLocked || pastTeeTime;
   const picksHidden = serverPicksHidden && !pastTeeTime;
 
+  // FINGERPRINT_V184_COUNTDOWN_REAL_TEE
+  // The countdown must count to the SAME instant that actually locks entries (effectiveTeeStart =
+  // real venue-corrected earliest tee, min'd with the theme time), not the theme placeholder.
+  // Previously it counted to TEE_TIME while pastTeeTime/locked used effectiveTeeStart — so the
+  // countdown could show time remaining after entries had already locked.
   const getCountdown = () => {
-    const diff = TEE_TIME - now;
+    const diff = effectiveTeeStart - now;
     if (diff <= 0) return null;
     const days = Math.floor(diff / 86400000);
     const hrs = Math.floor((diff % 86400000) / 3600000);
@@ -1075,7 +1086,7 @@ export default function App(){
     return `${secs}s until entries lock`;
   };
   const getCountdownShort = () => {
-    const diff = TEE_TIME - now;
+    const diff = effectiveTeeStart - now;
     if (diff <= 0) return null;
     const days = Math.floor(diff / 86400000);
     const hrs = Math.floor((diff % 86400000) / 3600000);
@@ -1344,7 +1355,14 @@ export default function App(){
               // For the IN-PLAY GATE, always look at R1 specifically — R1 is event start and never moves.
               const r1 = teetimes.find(t => t.round_num === 1);
               if (r1?.teetime) {
-                const r1Ms = new Date(r1.teetime).getTime();
+                // FINGERPRINT_V183_GATE_VENUE_TZ
+                // The feed's teetime is COURSE-LOCAL ("2026-07-02 06:40" = 6:40 AM at the venue).
+                // The old raw new Date() parsed it in the USER's timezone: an ET user watching a
+                // Central-time event got a gate 1 hour early; a Pacific user watching an Eastern
+                // event got a gate 3 hours LATE (live scores delayed). Use the same venue-aware
+                // conversion the displayed tee times already use, so the gate is the true instant.
+                const gateDate = convertTeeTimeToUserTZ(r1.teetime, venueLat, venueLng);
+                const r1Ms = gateDate ? gateDate.getTime() : new Date(r1.teetime).getTime();
                 if (r1Ms > 0 && (earliestTeeMs === 0 || r1Ms < earliestTeeMs)) earliestTeeMs = r1Ms;
               }
               // Default display = lowest round we have a tee time for (R1 at start)
