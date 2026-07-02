@@ -1,5 +1,5 @@
 'use client';
-// build: schedule-view-v181-20260622-1730
+// build: inplay-event-name-gate-v182-20260702-0800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -403,6 +403,21 @@ const TIER_CUTS = [12, 68]; // Default fallback (matches standard majors)
 // scores. Delay the in-play merge by this buffer past the earliest R1 tee so we don't briefly
 // show an empty/stale leaderboard right at tee-off.
 const LIVE_MODEL_DELAY_MS = 15 * 60 * 1000; // 15 minutes
+
+// FINGERPRINT_V182_INPLAY_NAME_GATE
+// The in-play feed self-identifies via info.event_name. Merging is only safe when that name matches
+// the event we're displaying: the feed keeps serving LAST week's event until roughly 15+ minutes
+// after the new event's first tee, and the exact flip time varies — so a clock-based gate alone can
+// let stale prior-event scores through (e.g. St. Jude data merging onto the John Deere field).
+// Lenient match: normalized, mutual-includes. If the feed omits info.event_name we can't confirm a
+// mismatch, so we return true and defer to the tee-time gate (never block on missing data).
+const inPlayMatchesEvent = (inPlayInfo, eventName) => {
+  const norm = s => (s||'').toLowerCase().replace(/^the\s+/,'').replace(/\s+\d{4}$/,'').trim();
+  const a = norm(inPlayInfo?.event_name);
+  const b = norm(eventName);
+  if (!a || !b) return true; // can't confirm a mismatch — tee gate still applies
+  return a === b || a.includes(b) || b.includes(a);
+};
 
 // Per-major payout distribution percentages
 // PGA Championship: Per PGA of America 2026 distribution (verified against $3.69M winner / $20.5M purse)
@@ -1515,13 +1530,22 @@ export default function App(){
               const liveRes = await fetch('/api/scores?endpoint=in-play');
               if(liveRes.ok){
                 const liveData = await liveRes.json();
-                const liveRaw = liveData.data || liveData.players || [];
-                if(liveRaw.length > 0){
-                  rawScoresRef.current = liveRaw;
-                  const merged = mergeScoresIntoField(enriched, liveRaw);
-                  setField(merged);
-                  setFields(prev => ({...prev, [major]: merged}));
-                  setLastUp(new Date().toLocaleTimeString());
+                // FINGERPRINT_V182_INPLAY_NAME_GATE — the in-play feed says which event its data
+                // belongs to (info.event_name). If it's still serving LAST week's event (the flip
+                // happens ~15+ min after first tee, timing varies), refuse to merge — a clock gate
+                // alone let prior-event scores land on this week's field.
+                if (major === 'pgatour' && !inPlayMatchesEvent(liveData.info, curEvName)) {
+                  rawScoresRef.current = null;
+                  console.warn(`[in-play gate] feed still on "${liveData.info?.event_name}", waiting for "${curEvName}" — not merging`);
+                } else {
+                  const liveRaw = liveData.data || liveData.players || [];
+                  if(liveRaw.length > 0){
+                    rawScoresRef.current = liveRaw;
+                    const merged = mergeScoresIntoField(enriched, liveRaw);
+                    setField(merged);
+                    setFields(prev => ({...prev, [major]: merged}));
+                    setLastUp(new Date().toLocaleTimeString());
+                  }
                 }
               }
             } catch(e) { console.warn('pgatour scores fetch failed:', e.message); }
@@ -1882,6 +1906,13 @@ export default function App(){
       const r=await fetch('/api/scores?endpoint=in-play');
       if(!r.ok)throw new Error('API '+r.status);
       const data=await r.json();
+      // FINGERPRINT_V182_INPLAY_NAME_GATE — refuse to merge another event's data. The in-play feed
+      // self-identifies (info.event_name); until it flips to the current event (~15+ min after the
+      // first tee, timing varies) it's still LAST week's leaderboard.
+      if (currentMajor === 'pgatour' && !inPlayMatchesEvent(data.info, eventStartNameRef.current)) {
+        rawScoresRef.current = null;
+        throw new Error('Live data not started for this event yet');
+      }
       const raw=data.data||data.players||data||[];
       if(!Array.isArray(raw)||raw.length===0)throw new Error('No live scores yet');
 
