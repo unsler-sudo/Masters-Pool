@@ -1,5 +1,5 @@
 'use client';
-// build: entries-open-till-real-tee-v185-20260702-1000
+// build: pgatour-single-paint-v186-20260702-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1507,51 +1507,35 @@ export default function App(){
 
         setFields(prev => ({...prev, [major]: enriched}));
         if(updateDisplay){
-          setField(enriched);
           const evName = ptData.event_name || 'PGA Tour Event';
-          setFieldSource(`📡 datagolf.com · ${enriched.length} in ${evName} field`);
-          // FINGERPRINT_V93_FIELDUPDATES_GATE
-          // The current event has started once we're past the earliest R1 tee time (from field-updates).
-          // in-play feed NEVER includes event_name, so we can't match on it. Instead:
-          //   - Before earliest tee time → in-play data is stale (prior event) → skip merge
-          // FINGERPRINT_V109_REQUIRE_PUBLISHED_R1
-          // The ONLY reliable signal that the current event has started: field-updates has
-          // published R1 tee times AND we're past the earliest one. in-play carries no event_name
-          // and lags a full week behind (it still shows the PRIOR event's scores until the new
-          // event's Thursday R1 actually begins). So:
-          //   - earliestTeeMs === 0  → R1 tees not published yet → event hasn't started → DO NOT merge
-          //   - earliestTeeMs in future → not started → DO NOT merge
-          //   - earliestTeeMs in past → event underway → merge
-          // We deliberately do NOT fall back to T.teeTime here, because a stale/guessed tee time
-          // is exactly what let last week's data through.
+          // FINGERPRINT_V93_FIELDUPDATES_GATE / FINGERPRINT_V109_REQUIRE_PUBLISHED_R1
+          // Gate refs: reset per event, lock to the earliest published R1 tee (venue-corrected).
           const curEvName = (ptData.event_name||'').toLowerCase().trim();
           if (curEvName && curEvName !== eventStartNameRef.current) {
             eventStartRef.current = 0;
             eventStartNameRef.current = curEvName;
           }
-          // Lock the gate to the earliest published R1 tee for THIS event (only set once, only if real)
           if (earliestTeeMs > 0 && eventStartRef.current === 0) {
             eventStartRef.current = earliestTeeMs;
           }
           const effectiveGate = eventStartRef.current;
-          // FINGERPRINT_V128_CLEAN_GATE
-          // Merge in-play ONLY when field-updates has published this event's R1 tee AND we're past it
-          // (plus the model warm-up delay). This is the single deterministic signal. No holdover, no
-          // field-overlap heuristics: after an event finishes and field-updates flips to the next
-          // event, that next event's R1 tee is in the future → gate stays closed → no stale merge.
-          // The just-finished event's final leaderboard lives in History (the archive), so it's never
-          // actually lost — it just moves from the live tab to History when rotation fires.
+          // FINGERPRINT_V128_CLEAN_GATE — merge in-play only past this event's R1 tee + warm-up.
           const eventHasStarted = effectiveGate > 0 && Date.now() >= (effectiveGate + LIVE_MODEL_DELAY_MS);
 
+          // FINGERPRINT_V186_SINGLE_PAINT
+          // Decide the FINAL field BEFORE painting. The old flow painted scoreless `enriched`,
+          // awaited the in-play fetch, then painted the merged field — a visible flash on every
+          // cold load / mobile reopen (Standings re-ranked as earnings went $0 → live). Now:
+          // merged live data when the gates pass; enriched otherwise; enriched + cached same-event
+          // scores if the fetch fails mid-live. One setField, no intermediate scoreless render.
+          let toPaint = enriched;
+          let mergedLive = false;
           if (major !== 'pgatour' || eventHasStarted) {
             try {
               const liveRes = await fetch('/api/scores?endpoint=in-play');
               if(liveRes.ok){
                 const liveData = await liveRes.json();
-                // FINGERPRINT_V182_INPLAY_NAME_GATE — the in-play feed says which event its data
-                // belongs to (info.event_name). If it's still serving LAST week's event (the flip
-                // happens ~15+ min after first tee, timing varies), refuse to merge — a clock gate
-                // alone let prior-event scores land on this week's field.
+                // FINGERPRINT_V182_INPLAY_NAME_GATE — refuse to merge another event's data.
                 if (major === 'pgatour' && !inPlayMatchesEvent(liveData.info, curEvName)) {
                   rawScoresRef.current = null;
                   console.warn(`[in-play gate] feed still on "${liveData.info?.event_name}", waiting for "${curEvName}" — not merging`);
@@ -1559,14 +1543,24 @@ export default function App(){
                   const liveRaw = liveData.data || liveData.players || [];
                   if(liveRaw.length > 0){
                     rawScoresRef.current = liveRaw;
-                    const merged = mergeScoresIntoField(enriched, liveRaw);
-                    setField(merged);
-                    setFields(prev => ({...prev, [major]: merged}));
-                    setLastUp(new Date().toLocaleTimeString());
+                    toPaint = mergeScoresIntoField(enriched, liveRaw);
+                    mergedLive = true;
                   }
                 }
               }
-            } catch(e) { console.warn('pgatour scores fetch failed:', e.message); }
+            } catch(e) {
+              console.warn('pgatour scores fetch failed:', e.message);
+              // Mid-live fetch hiccup: carry the cached same-event scores so this paint
+              // doesn't downgrade the board to scoreless for one cycle.
+              if (rawScoresRef.current) toPaint = mergeScoresIntoField(enriched, rawScoresRef.current);
+            }
+          }
+
+          setField(toPaint);
+          setFieldSource(`📡 datagolf.com · ${enriched.length} in ${evName} field`);
+          if (mergedLive) {
+            setFields(prev => ({...prev, [major]: toPaint}));
+            setLastUp(new Date().toLocaleTimeString());
           }
         }
         return;
