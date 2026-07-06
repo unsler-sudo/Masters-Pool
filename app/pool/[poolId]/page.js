@@ -1,5 +1,5 @@
 'use client';
-// build: pgatour-single-paint-v186-20260702-1100
+// build: final-board-holdover-v187-20260705-1800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1295,6 +1295,53 @@ export default function App(){
         const ptRes = await fetch('/api/scores?endpoint=pre-tournament');
         if(!ptRes.ok) return;
         const ptData = await ptRes.json();
+
+        // FINGERPRINT_V187_FINAL_BOARD_HOLDOVER
+        // DataGolf's pre-tournament feed flips to NEXT week's event a couple hours after R4 ends.
+        // The pool, though, hasn't rotated yet — and in-play still serves the finished event's FINAL
+        // leaderboard. Previously we rebuilt the field from the flipped pre-tournament feed →
+        // scoreless board, $0 earnings, "-" positions right after the tournament ended. Instead:
+        // while the POOL's event still matches what in-play is serving, keep displaying the final
+        // board (scores + earnings + standings). Holdover ends when rotation updates
+        // meta.currentPgatourEvent, or when in-play itself moves on — whichever comes first.
+        const poolEvName = poolMetaRef.current?.currentPgatourEvent || '';
+        const ptFlipped = poolEvName && !inPlayMatchesEvent({ event_name: ptData.event_name }, poolEvName);
+        if (ptFlipped) {
+          try {
+            const liveRes = await fetch('/api/scores?endpoint=in-play');
+            if (liveRes.ok) {
+              const liveData = await liveRes.json();
+              const liveRaw = liveData.data || liveData.players || [];
+              if (inPlayMatchesEvent(liveData.info, poolEvName) && liveRaw.length > 0) {
+                rawScoresRef.current = liveRaw;
+                // Keep the fetchScores name-gate keyed to the POOL's event so 60s refreshes of the
+                // final board keep working during the holdover.
+                eventStartNameRef.current = poolEvName.toLowerCase().trim();
+                // Skeleton: prefer the cached field (keeps odds/tiers); on a cold reload build a
+                // minimal one straight from the in-play roster.
+                const cached = fieldsRef.current?.[major];
+                const skeleton = (cached && cached.length > 5) ? cached : liveRaw.map((p, i) => {
+                  const rawName = p.player_name || '';
+                  const displayName = rawName.includes(',') ? rawName.split(',').reverse().map(s=>s.trim()).join(' ') : rawName;
+                  return { name: displayName, country: p.country || 'USA', dgId: p.dg_id || null,
+                    odds: 'n/a', tier: 3, rank: i, dgRank: i + 1, win: p.win || 0,
+                    confirmed: true, onTrack: true, teeTime: null, startHole: null, teeRoundNum: null,
+                    allRoundsTees: null, pairingTeeTime: null, pairingStartHole: null, pairingRoundNum: null,
+                    pos: '-', score: 'E', today: '', thru: '', earnings: 0, r1: null, r2: null, r3: null, r4: null };
+                });
+                const finalBoard = mergeScoresIntoField(skeleton, liveRaw);
+                setFields(prev => ({ ...prev, [major]: finalBoard }));
+                if (updateDisplay) {
+                  setField(finalBoard);
+                  setFieldSource(`🏁 ${poolMetaRef.current?.currentPgatourEvent || 'Event'} · final leaderboard`);
+                  setLastUp(new Date().toLocaleTimeString());
+                }
+                return;
+              }
+            }
+          } catch (e) { console.warn('holdover check failed:', e.message); }
+        }
+
         const players = ptData.baseline_history_fit || ptData.baseline || ptData.players || [];
         if(players.length < 5) return;
 
