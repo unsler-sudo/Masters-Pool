@@ -1,5 +1,5 @@
 'use client';
-// build: final-board-holdover-v187-20260705-1800
+// build: name-gate-primary-v188-20260705-1900
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1562,45 +1562,54 @@ export default function App(){
             eventStartRef.current = 0;
             eventStartNameRef.current = curEvName;
           }
-          if (earliestTeeMs > 0 && eventStartRef.current === 0) {
+          // FINGERPRINT_V188_GATE_EVENT_MATCH — field-updates flips to NEXT week's event even
+          // before pre-tournament does. Locking eventStartRef to ITS earliest tee then poisons the
+          // gate with a future time while the current event is still live/finishing. Only lock the
+          // gate when field-updates is describing THIS event (or doesn't say).
+          if (earliestTeeMs > 0 && eventStartRef.current === 0 &&
+              (!fuEventName || inPlayMatchesEvent({ event_name: fuEventName }, curEvName))) {
             eventStartRef.current = earliestTeeMs;
           }
           const effectiveGate = eventStartRef.current;
           // FINGERPRINT_V128_CLEAN_GATE — merge in-play only past this event's R1 tee + warm-up.
           const eventHasStarted = effectiveGate > 0 && Date.now() >= (effectiveGate + LIVE_MODEL_DELAY_MS);
 
-          // FINGERPRINT_V186_SINGLE_PAINT
-          // Decide the FINAL field BEFORE painting. The old flow painted scoreless `enriched`,
-          // awaited the in-play fetch, then painted the merged field — a visible flash on every
-          // cold load / mobile reopen (Standings re-ranked as earnings went $0 → live). Now:
-          // merged live data when the gates pass; enriched otherwise; enriched + cached same-event
-          // scores if the fetch fails mid-live. One setField, no intermediate scoreless render.
+          // FINGERPRINT_V186_SINGLE_PAINT / FINGERPRINT_V188_NAME_GATE_PRIMARY
+          // Decide the FINAL field BEFORE painting (no intermediate scoreless render). The v182
+          // name gate is now the PRIMARY discriminator: the in-play feed self-identifies via
+          // info.event_name, so when both names are known, the name decides — regardless of the
+          // tee clock. The tee gate applies only when the feed omits its name. (The old
+          // tee-gate-first order blocked merging the CURRENT event's live data whenever
+          // field-updates had already flipped and poisoned the gate with next week's tee.)
           let toPaint = enriched;
           let mergedLive = false;
-          if (major !== 'pgatour' || eventHasStarted) {
-            try {
-              const liveRes = await fetch('/api/scores?endpoint=in-play');
-              if(liveRes.ok){
-                const liveData = await liveRes.json();
-                // FINGERPRINT_V182_INPLAY_NAME_GATE — refuse to merge another event's data.
-                if (major === 'pgatour' && !inPlayMatchesEvent(liveData.info, curEvName)) {
-                  rawScoresRef.current = null;
-                  console.warn(`[in-play gate] feed still on "${liveData.info?.event_name}", waiting for "${curEvName}" — not merging`);
-                } else {
-                  const liveRaw = liveData.data || liveData.players || [];
-                  if(liveRaw.length > 0){
-                    rawScoresRef.current = liveRaw;
-                    toPaint = mergeScoresIntoField(enriched, liveRaw);
-                    mergedLive = true;
-                  }
+          try {
+            const liveRes = await fetch('/api/scores?endpoint=in-play');
+            if(liveRes.ok){
+              const liveData = await liveRes.json();
+              const feedName = (liveData.info?.event_name || '').trim();
+              let allowMerge;
+              if (major !== 'pgatour') allowMerge = true;
+              else if (feedName && curEvName) allowMerge = inPlayMatchesEvent(liveData.info, curEvName);
+              else allowMerge = eventHasStarted; // feed didn't self-identify — tee gate decides
+              if (major === 'pgatour' && feedName && !allowMerge) {
+                // Confirmed another event's data — clear it so nothing downstream repaints it.
+                rawScoresRef.current = null;
+                console.warn(`[in-play gate] feed still on "${feedName}", waiting for "${curEvName}" — not merging`);
+              } else if (allowMerge) {
+                const liveRaw = liveData.data || liveData.players || [];
+                if(liveRaw.length > 0){
+                  rawScoresRef.current = liveRaw;
+                  toPaint = mergeScoresIntoField(enriched, liveRaw);
+                  mergedLive = true;
                 }
               }
-            } catch(e) {
-              console.warn('pgatour scores fetch failed:', e.message);
-              // Mid-live fetch hiccup: carry the cached same-event scores so this paint
-              // doesn't downgrade the board to scoreless for one cycle.
-              if (rawScoresRef.current) toPaint = mergeScoresIntoField(enriched, rawScoresRef.current);
             }
+          } catch(e) {
+            console.warn('pgatour scores fetch failed:', e.message);
+            // Mid-live fetch hiccup: carry the cached same-event scores so this paint
+            // doesn't downgrade the board to scoreless for one cycle.
+            if (rawScoresRef.current) toPaint = mergeScoresIntoField(enriched, rawScoresRef.current);
           }
 
           setField(toPaint);
@@ -1945,32 +1954,34 @@ export default function App(){
       rawScoresRef.current=null;
       return;
     }
-    // PGA Tour mode: skip in-play until the current event has actually started.
-    // FINGERPRINT_V93_FETCHSCORES_GATE
-    // Gate on earliest tee time (set by fetchField from field-updates). in-play has no event_name
-    // to match on, so the tee-time gate is the reliable discriminator against stale prior-event data.
-    if (currentMajor === 'pgatour') {
-      // FINGERPRINT_V109_FETCHSCORES_REQUIRE_R1
-      // Only merge once fetchField has locked eventStartRef to a real, published R1 tee.
-      // No fallback to T.teeTime — a guessed/stale schedule time is what let prior-event data through.
-      // Wait LIVE_MODEL_DELAY_MS past tee time (DataGolf model warm-up, ~15 min).
-      const gateMs = eventStartRef.current;
-      if (!gateMs || Date.now() < (gateMs + LIVE_MODEL_DELAY_MS)) {
-        rawScoresRef.current = null;
-        return;
-      }
-    }
+    // PGA Tour mode: FINGERPRINT_V188_NAME_GATE_PRIMARY
+    // We no longer hard-bail on the tee gate BEFORE fetching. The in-play feed self-identifies
+    // (info.event_name), so the fetch happens first and the NAME decides whether to merge. The tee
+    // gate (eventStartRef + warm-up) applies only if the feed omits its name. Bailing pre-fetch on
+    // the tee clock blocked live merges whenever field-updates had flipped early and poisoned
+    // eventStartRef with next week's future tee.
     setRefreshing(true);
     try{
       const r=await fetch('/api/scores?endpoint=in-play');
       if(!r.ok)throw new Error('API '+r.status);
       const data=await r.json();
-      // FINGERPRINT_V182_INPLAY_NAME_GATE — refuse to merge another event's data. The in-play feed
-      // self-identifies (info.event_name); until it flips to the current event (~15+ min after the
-      // first tee, timing varies) it's still LAST week's leaderboard.
-      if (currentMajor === 'pgatour' && !inPlayMatchesEvent(data.info, eventStartNameRef.current)) {
-        rawScoresRef.current = null;
-        throw new Error('Live data not started for this event yet');
+      if (currentMajor === 'pgatour') {
+        const feedName = (data.info?.event_name || '').trim();
+        const ourName = (eventStartNameRef.current || '').trim();
+        if (feedName && ourName) {
+          // Both sides known — the name is authoritative.
+          if (!inPlayMatchesEvent(data.info, ourName)) {
+            rawScoresRef.current = null;
+            throw new Error('Live data not started for this event yet');
+          }
+        } else {
+          // Feed (or our event name) unknown — fall back to the tee gate.
+          const gateMs = eventStartRef.current;
+          if (!gateMs || Date.now() < (gateMs + LIVE_MODEL_DELAY_MS)) {
+            rawScoresRef.current = null;
+            throw new Error('Waiting for event start');
+          }
+        }
       }
       const raw=data.data||data.players||data||[];
       if(!Array.isArray(raw)||raw.length===0)throw new Error('No live scores yet');
