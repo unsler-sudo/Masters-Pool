@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: schedule-endpoint-v151-20260622-1730
+// build: scottish-open-exact-v152-20260706-1200
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -47,6 +47,19 @@ const SRV_PAYOUT_TOUR_CHAMP = {
   21:0.0105625,22:0.0105625,23:0.009875,24:0.009875,25:0.0094375,26:0.0094375,27:0.0091875,28:0.0091875,29:0.009,30:0.008875
 };
 function srvIsTourChampionship(eventName){ return (eventName||'').toLowerCase().includes('tour championship'); }
+// FINGERPRINT_V152_SRV_SCOTTISH — Genesis Scottish Open (co-sanctioned): $9M, 17.5% winner, pays to 90.
+const SRV_PAYOUT_SCOTTISH = {
+  1:0.175,2:0.1095,3:0.06565,4:0.049,5:0.0415,6:0.0358,7:0.03195,8:0.0282,9:0.0259,10:0.0237,
+  11:0.0219,12:0.02025,13:0.0187,14:0.0173,15:0.0165,16:0.0157,17:0.0149,18:0.0141,19:0.01335,20:0.01265,
+  21:0.01195,22:0.0114,23:0.01085,24:0.0103,25:0.00975,26:0.0092,27:0.0089,28:0.0086,29:0.0083,30:0.008,
+  31:0.0077,32:0.0074,33:0.0071,34:0.006825,35:0.00655,36:0.006275,37:0.00605,38:0.00585,39:0.00565,40:0.00545,
+  41:0.00525,42:0.00505,43:0.00485,44:0.00465,45:0.00445,46:0.00425,47:0.00405,48:0.00387,49:0.0037,50:0.00356,
+  51:0.00343,52:0.0033,53:0.00318,54:0.00306,55:0.003,56:0.00294,57:0.00288,58:0.00282,59:0.00276,60:0.0027,
+  61:0.00264,62:0.00258,63:0.00252,64:0.00246,65:0.0024,66:0.0022,67:0.00218,68:0.00216,69:0.00214,70:0.00212,
+  71:0.0021,72:0.00208,73:0.00206,74:0.00204,75:0.00202,76:0.002,77:0.00198,78:0.00196,79:0.00194,80:0.00192,
+  81:0.0019,82:0.00188,83:0.00186,84:0.00184,85:0.00182,86:0.0018,87:0.00178,88:0.00176,89:0.00174,90:0.00172
+};
+function srvIsScottishOpen(eventName){ return (eventName||'').toLowerCase().includes('scottish open'); }
 function srvIsSignature(eventName, purse) {
   const n = (eventName||'').toLowerCase();
   if (SRV_SIGNATURE_KEYS.some(k => n.includes(k))) return true;
@@ -98,6 +111,9 @@ function srvComputeEarnings(players, purse, eventName) {
     table = SRV_PAYOUT_TOUR_CHAMP;
   } else if (useSig) {
     table = srvIsNoCutSignature(eventName) ? SRV_PAYOUT_SIGNATURE_NOCUT : SRV_PAYOUT_SIGNATURE;
+  } else if (srvIsScottishOpen(eventName)) {
+    // FINGERPRINT_V152_SRV_SCOTTISH — co-sanctioned: 17.5% winner, pays to 90.
+    table = SRV_PAYOUT_SCOTTISH;
   } else {
     table = SRV_PAYOUT_PGATOUR;
   }
