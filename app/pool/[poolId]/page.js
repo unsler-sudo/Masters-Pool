@@ -1,5 +1,5 @@
 'use client';
-// build: name-gate-primary-v188-20260705-1900
+// build: scottish-open-exact-v189-20260706-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -635,6 +635,33 @@ const PAYOUT_TOUR_CHAMP = {
   26:0.00943750,27:0.00918750,28:0.00918750,29:0.00900000,30:0.00887500,
 };
 
+// FINGERPRINT_V189_SCOTTISH_OPEN
+// Genesis Scottish Open — co-sanctioned with the DP World Tour: $9M purse, 17.5% winner (not the
+// standard 18%), and pays 90 positions deep (bigger field/cut than a normal Tour stop). Exact
+// per-position percentages from the official 2026 purse breakdown (pgatour.com); verified that
+// tie-averaging reproduces every official tie column. Routed by event name below.
+const PAYOUT_SCOTTISH = {
+  1:0.17500000,2:0.10950000,3:0.06565000,4:0.04900000,5:0.04150000,
+  6:0.03580000,7:0.03195000,8:0.02820000,9:0.02590000,10:0.02370000,
+  11:0.02190000,12:0.02025000,13:0.01870000,14:0.01730000,15:0.01650000,
+  16:0.01570000,17:0.01490000,18:0.01410000,19:0.01335000,20:0.01265000,
+  21:0.01195000,22:0.01140000,23:0.01085000,24:0.01030000,25:0.00975000,
+  26:0.00920000,27:0.00890000,28:0.00860000,29:0.00830000,30:0.00800000,
+  31:0.00770000,32:0.00740000,33:0.00710000,34:0.00682500,35:0.00655000,
+  36:0.00627500,37:0.00605000,38:0.00585000,39:0.00565000,40:0.00545000,
+  41:0.00525000,42:0.00505000,43:0.00485000,44:0.00465000,45:0.00445000,
+  46:0.00425000,47:0.00405000,48:0.00387000,49:0.00370000,50:0.00356000,
+  51:0.00343000,52:0.00330000,53:0.00318000,54:0.00306000,55:0.00300000,
+  56:0.00294000,57:0.00288000,58:0.00282000,59:0.00276000,60:0.00270000,
+  61:0.00264000,62:0.00258000,63:0.00252000,64:0.00246000,65:0.00240000,
+  66:0.00220000,67:0.00218000,68:0.00216000,69:0.00214000,70:0.00212000,
+  71:0.00210000,72:0.00208000,73:0.00206000,74:0.00204000,75:0.00202000,
+  76:0.00200000,77:0.00198000,78:0.00196000,79:0.00194000,80:0.00192000,
+  81:0.00190000,82:0.00188000,83:0.00186000,84:0.00184000,85:0.00182000,
+  86:0.00180000,87:0.00178000,88:0.00176000,89:0.00174000,90:0.00172000,
+};
+const isScottishOpen = (eventName) => (eventName||'').toLowerCase().includes('scottish open');
+
 // Known 2026 PGA Tour signature events (normalized substrings for matching against event names)
 const SIGNATURE_EVENT_KEYS = [
   'sentry', 'pebble beach', 'genesis invitational', 'arnold palmer',
@@ -828,6 +855,9 @@ function calcEarnings(players, purse, major, tournamentComplete, signatureEventN
       // with an 18% winner share; cut signature events (Memorial etc.) use the 20% top-heavy curve.
       payoutTable = isNoCutSignature(signatureEventName) ? PAYOUT_SIGNATURE_NOCUT : PAYOUT_SIGNATURE;
     }
+  } else if (major === 'pgatour' && isScottishOpen(signatureEventName)) {
+    // FINGERPRINT_V189_SCOTTISH_OPEN — co-sanctioned: 17.5% winner, pays to 90.
+    payoutTable = PAYOUT_SCOTTISH;
   }
   const maxPos = Math.max(...Object.keys(payoutTable).map(Number));
   const g={};
