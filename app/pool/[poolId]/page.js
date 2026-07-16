@@ -1,5 +1,5 @@
 'use client';
-// build: open-exact-payouts-v192-20260716-1030
+// build: unpaid-blink-after-r1-v193-20260716-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2790,6 +2790,13 @@ export default function App(){
     const isCut = /CUT|WD|DQ|MC/i.test(p.pos);
     return isCut || p.r4 != null;
   });
+  // FINGERPRINT_V193_R1_COMPLETE
+  // R1 is done once every player still in the event has an R1 stroke count. Used to start nagging
+  // unpaid entries — by then everyone has had a full round to settle up, and the pool is real.
+  const roundOneComplete = field.length > 0 && field.every(p => {
+    const isCut = /CUT|WD|DQ|MC/i.test(p.pos);
+    return isCut || p.r1 != null;
+  });
   // Detect pre-tournament state: no live data yet (no positions, no thru values).
   // FINGERPRINT_V74_PRETOURNSORT / FINGERPRINT_V145_MAJOR_PRETOURN
   // Applies to BOTH pgatour mode AND majors before tee-off. Previously pgatour-only, so majors
@@ -3575,7 +3582,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       {/* FINGERPRINT_V166_MR_CHALK — chalkiest picks (highest combined win prob) */}
                       {mrChalk===e.name&&<span title="Picked all the favorites — chalkiest entry in the pool" style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#5a4a1a',background:'#f0e6c8',border:'1px solid #c9a84c80',padding:'1px 7px',borderRadius:9,whiteSpace:'nowrap',verticalAlign:'middle'}}>Mr. Chalk</span>}
                       {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${prize}</span>}
-                      {!paymentsHidden&&<span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,background:paid?'#e8f5e8':'#f5f5f5',color:paid?'#2d7a1e':'#aaa',border:`1px solid ${paid?'#2d7a1e30':'#ddd'}`}}>{paid?'✓ Paid':'Unpaid'}</span>}
+                      {/* FINGERPRINT_V193_UNPAID_BLINK — nag unpaid entries once R1 is in the books */}
+                      {!paymentsHidden&&(()=>{
+                        const nag = !paid && roundOneComplete;
+                        return <span title={nag?'Still owes the pot':undefined} style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,
+                          background:paid?'#e8f5e8':(nag?'#fdeaea':'#f5f5f5'),
+                          color:paid?'#2d7a1e':(nag?'#c62828':'#aaa'),
+                          border:`1px solid ${paid?'#2d7a1e30':(nag?'#c6282866':'#ddd')}`,
+                          animation:nag?'glow 1.1s ease-in-out infinite':'none'}}>{paid?'✓ Paid':'Unpaid'}</span>;
+                      })()}
                     </div>
                     <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Picks locked in':'Tap to '+(op?'collapse':'expand')}</div>
                   </div>
