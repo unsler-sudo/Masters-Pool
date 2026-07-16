@@ -1,5 +1,5 @@
 'use client';
-// build: scottish-open-exact-v189-20260706-1200
+// build: fieldupdates-authoritative-v190-20260716-0900
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1664,6 +1664,7 @@ export default function App(){
       // current week's odds, so applying them to non-active majors is incorrect
       const oddsMap = {};
       const teeTimeMap = {};
+      let fuMajorPlayers = []; // FINGERPRINT_V190_FU_AUTHORITATIVE — field-updates roster, kept for the late-addition append below
       // Use the dynamically populated tee time (works for both majors and pgatour mode)
       // Falls back to the static theme tee time if schedule data hasn't loaded yet
       const dynamicTeeTime = scheduleData[major]?.teeTime || THEMES[major]?.teeTime;
@@ -1712,6 +1713,7 @@ export default function App(){
           if(fuRes.ok){
             const fd = await fuRes.json();
             const fieldPlayers = fd.field || fd.players || [];
+            fuMajorPlayers = fieldPlayers; // FINGERPRINT_V190_FU_AUTHORITATIVE
             // Determine current tournament round (default to 1 if not specified)
             const currentRound = fd.current_round || 1;
             // Get venue coords for this major
@@ -1852,6 +1854,42 @@ export default function App(){
           pos:'-',score:'E',today:'',thru:'',earnings:0,r1:null,r2:null,r3:null,r4:null,
         };
       });
+
+      // FINGERPRINT_V190_FU_AUTHORITATIVE
+      // field-updates is authoritative for who's actually PLAYING. Late qualifiers/alternates
+      // (e.g. Potgieter at The Open) can be missing from the major-field source entirely while
+      // field-updates already publishes their tee times. Previously such players only reached the
+      // display via the in-play append (v160) — with no tee time or start hole, so they slotted
+      // into the wrong spot. Append any field-updates player with published tee times who isn't
+      // already in the built field, with their tee data attached (tier 3 / no odds — they were
+      // never in the odds window). The in-play score merge then matches them by name normally.
+      {
+        const _n2 = (s)=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim();
+        const _t2 = (s)=>_n2(s).split(' ').sort().join(' ');
+        const have = new Set(enriched.map(p=>_t2(p.name)));
+        fuMajorPlayers.forEach(p=>{
+          const rawName = p.player_name || '';
+          if(!rawName) return;
+          if(!(p.teetimes||[]).some(t=>t.teetime)) return; // no published tee = not confirmed playing
+          const disp = rawName.includes(',') ? rawName.split(',').reverse().map(s=>s.trim()).join(' ') : rawName;
+          if(have.has(_t2(disp))) return;
+          const key = disp.toLowerCase().trim();
+          const teeInfo = teeTimeMap[key] || teeTimeMap[_n2(key)] || teeTimeMap[_t2(key)] || null;
+          enriched.push({
+            name: disp, country: p.country || 'USA', dgId: p.dg_id || null,
+            odds:'n/a', tier:3, rank:9998, dgRank:9999, win:0,
+            confirmed:true, onTrack:true,
+            teeTime: teeInfo?.teeTime || null,
+            startHole: teeInfo?.startHole || null,
+            teeRoundNum: teeInfo?.roundNum || null,
+            pairingTeeTime: teeInfo?.teeTime || null,
+            pairingStartHole: teeInfo?.startHole || null,
+            pairingRoundNum: teeInfo?.roundNum || null,
+            pos:'-',score:'E',today:'',thru:'',earnings:0,r1:null,r2:null,r3:null,r4:null,
+          });
+          have.add(_t2(disp));
+        });
+      }
 
       setFields(prev=>({...prev,[major]:enriched}));
 
