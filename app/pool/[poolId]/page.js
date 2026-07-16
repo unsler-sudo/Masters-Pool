@@ -1,5 +1,5 @@
 'use client';
-// build: fieldupdates-authoritative-v190-20260716-0900
+// build: major-name-gate-v191-20260716-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1733,7 +1733,15 @@ export default function App(){
                 }
               });
             });
-            if(majorEarliestR1 > 0) eventStartRef.current = majorEarliestR1;
+            // FINGERPRINT_V191_MAJOR_NAME_GATE — only lock the gate when field-updates is
+            // describing THIS major (or doesn't say). After the major ends, field-updates flips to
+            // the next tour event; its future tee must not poison the major's gate (v188 parity).
+            const fuEvNameMajor = (fd.event_name || '').trim();
+            const majorThemeName = THEMES[major]?.eventName || '';
+            if(majorEarliestR1 > 0 &&
+               (!fuEvNameMajor || !majorThemeName || inPlayMatchesEvent({ event_name: fuEvNameMajor }, majorThemeName))) {
+              eventStartRef.current = majorEarliestR1;
+            }
             fieldPlayers.forEach(p=>{
               const pname = (p.player_name||'').toLowerCase().trim();
               if(!pname) return;
@@ -1910,19 +1918,28 @@ export default function App(){
         const isThisMajorActive = realTeeT > 0 && nowMs >= realTeeT && nowMs <= cutoff;
 
         // Only merge with current field/raw scores if this major is in tournament window
-        // FINGERPRINT_V161_NO_FLASH
+        // FINGERPRINT_V161_NO_FLASH / FINGERPRINT_V191_MAJOR_NAME_GATE
         // On the active major during live play, if we don't yet have cached scores (first load),
         // fetch in-play inline BEFORE the first setField so the field appears already-populated in
-        // one render — no scoreless flash. (pgatour mode looks seamless because it merges in one
-        // step; this gives majors the same single-render behavior.)
+        // one render — no scoreless flash. The NAME gate (v182/v188, same as pgatour) is primary:
+        // in-play self-identifies via info.event_name, and around a major's first tee it can still
+        // be serving the PRIOR week's event (e.g. Scottish Open final board at The Open's 1:35 AM
+        // ET R1 start). The major's expected name comes from the theme. Confirmed mismatch → don't
+        // cache, don't merge; missing names → the existing time window decides (unchanged).
         if(updateDisplay && isThisMajorActive && !rawScoresRef.current){
           try{
             const liveRes = await fetch('/api/scores?endpoint=in-play');
             if(liveRes.ok){
               const liveData = await liveRes.json();
-              const liveRaw = liveData.data || liveData.players || [];
-              if(Array.isArray(liveRaw) && liveRaw.length > 0){
-                rawScoresRef.current = liveRaw;
+              const majorEvName = THEMES[major]?.eventName || '';
+              const feedName = (liveData.info?.event_name || '').trim();
+              if (feedName && majorEvName && !inPlayMatchesEvent(liveData.info, majorEvName)) {
+                console.warn(`[major in-play gate] feed still on "${feedName}", waiting for "${majorEvName}" — not merging`);
+              } else {
+                const liveRaw = liveData.data || liveData.players || [];
+                if(Array.isArray(liveRaw) && liveRaw.length > 0){
+                  rawScoresRef.current = liveRaw;
+                }
               }
             }
           }catch{}
@@ -2033,16 +2050,23 @@ export default function App(){
       const r=await fetch('/api/scores?endpoint=in-play');
       if(!r.ok)throw new Error('API '+r.status);
       const data=await r.json();
-      if (currentMajor === 'pgatour') {
+      // FINGERPRINT_V188_NAME_GATE_PRIMARY / FINGERPRINT_V191_MAJOR_NAME_GATE
+      // The name gate applies to ALL modes now. Our expected event name: pgatour →
+      // eventStartNameRef (from pre-tournament); majors → the theme's eventName. When both names
+      // are known the name decides; when either is missing, pgatour falls back to the tee gate and
+      // majors to the time window already applied before the fetch.
+      {
         const feedName = (data.info?.event_name || '').trim();
-        const ourName = (eventStartNameRef.current || '').trim();
+        const ourName = currentMajor === 'pgatour'
+          ? (eventStartNameRef.current || '').trim()
+          : (THEMES[currentMajor]?.eventName || '').trim();
         if (feedName && ourName) {
           // Both sides known — the name is authoritative.
           if (!inPlayMatchesEvent(data.info, ourName)) {
             rawScoresRef.current = null;
             throw new Error('Live data not started for this event yet');
           }
-        } else {
+        } else if (currentMajor === 'pgatour') {
           // Feed (or our event name) unknown — fall back to the tee gate.
           const gateMs = eventStartRef.current;
           if (!gateMs || Date.now() < (gateMs + LIVE_MODEL_DELAY_MS)) {
