@@ -1,5 +1,5 @@
 'use client';
-// build: unpaid-blink-after-r1-v193-20260716-1100
+// build: picked-team-filter-v194-20260716-1130
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1000,6 +1000,7 @@ export default function App(){
   const [favorites,setFavorites]=useState(new Set());
   const [showOnlyFavorites,setShowOnlyFavorites]=useState(false);
   const [showOnlyPicked,setShowOnlyPicked]=useState(false); // FINGERPRINT_V136 — filter field to players in pool entries
+  const [pickedTeamFilter,setPickedTeamFilter]=useState('all'); // FINGERPRINT_V194 — narrow Picked view to one entry ('all' = every team)
   // Load favorites from localStorage on mount
   useEffect(()=>{
     if(typeof window === 'undefined') return;
@@ -2988,7 +2989,14 @@ export default function App(){
     if(showOnlyFavorites && !favorites.has(p.name)) return false;
     // FINGERPRINT_V136_PICKED_FILTER — show only players selected in pool entries.
     // Inert while picks are hidden (pre tee-off) so it can't leak who picked whom.
-    if(showOnlyPicked && !picksHidden && owners(p.name).length===0) return false;
+    // FINGERPRINT_V194_TEAM_FILTER — optionally narrow to one team; a selected team that no
+    // longer exists (entry deleted) behaves like 'all'.
+    if(showOnlyPicked && !picksHidden){
+      const ow = owners(p.name);
+      if(ow.length===0) return false;
+      const teamValid = pickedTeamFilter!=='all' && entries.some(e=>e.name===pickedTeamFilter);
+      if(teamValid && !ow.includes(pickedTeamFilter)) return false;
+    }
     return true;
   });
 
@@ -3707,12 +3715,22 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               background:showOnlyFavorites?'#d4a017':'#fff',
               color:showOnlyFavorites?'#fff':'#5a6555',
             }}>⭐ Favorites ({favorites.size})</button>}
-            {!picksHidden && entries.length>0 && <button onClick={()=>setShowOnlyPicked(v=>!v)} style={{
+            {!picksHidden && entries.length>0 && <button onClick={()=>setShowOnlyPicked(v=>{const nv=!v; if(!nv) setPickedTeamFilter('all'); return nv;})} style={{
               padding:'5px 12px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
               border:`1px solid ${showOnlyPicked?T.primary:'#d0d4d0'}`,
               background:showOnlyPicked?T.primary:'#fff',
               color:showOnlyPicked?'#fff':'#5a6555',
             }}>🎯 Picked ({field.filter(p=>owners(p.name).length>0).length})</button>}
+            {/* FINGERPRINT_V194_TEAM_FILTER — only offered while Picked is active; defaults to all teams */}
+            {!picksHidden && showOnlyPicked && entries.length>0 && <select value={pickedTeamFilter} onChange={e=>setPickedTeamFilter(e.target.value)} style={{
+              padding:'5px 10px',fontSize:11,fontWeight:600,borderRadius:6,cursor:'pointer',
+              border:`1px solid ${pickedTeamFilter!=='all'?T.primary:'#d0d4d0'}`,
+              background:pickedTeamFilter!=='all'?`${T.primary}12`:'#fff',
+              color:pickedTeamFilter!=='all'?T.primary:'#5a6555',maxWidth:150,
+            }}>
+              <option value="all">All Teams</option>
+              {entries.map(e=><option key={e.name} value={e.name}>{e.name}</option>)}
+            </select>}
           </div>
           {!pastTeeTime&&<div style={{marginBottom:8,textAlign:'center'}}>
             {/* FINGERPRINT_V148_HIDE_SOURCE — only show the data-source pill while the field is
