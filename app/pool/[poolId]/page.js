@@ -1,5 +1,5 @@
 'use client';
-// build: open-tail-71-80-v195-20260716-1200
+// build: open-17.75M-official-tail-v196-20260717-0800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -65,7 +65,7 @@ const THEMES = {
     emoji:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', tagline:'The Oldest Major',
     logoUrl:'https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:r000.png/tournaments/logos/r100.png',
     eventName:'The Open Championship', courseName:'Royal Birkdale · Southport, England',
-    teeTime:'2026-07-16T05:35:00Z', purse:17000000,
+    teeTime:'2026-07-16T05:35:00Z', purse:17750000,
     primary:'#5a3e28', dark:'#7a5a3c', mid:'#9a7a58', accent:'#8a6a9a', accentLight:'#f0ecf5',
     navBg:'#fff', navActive:'#f5f1ec', navBorder:'#5a3e28',
     headerBg:'linear-gradient(170deg,#7a5a3c 0%,#9a7a58 35%,#b89a78 65%,#ccb898 100%)',
@@ -490,31 +490,31 @@ const PAYOUT_USOPEN = {
 // Percentages derived from 2025 Open at Royal Portrush ($17M purse)
 // Scottie Scheffler won $3.1M (18.24%). All 19 tied groups verified exact.
 // Note: The Open winner gets ~18.24% (slightly different from PGA's 18% or Masters/USO's 20%)
-// FINGERPRINT_V192_OPEN_EXACT
-// Exact per-position percentages from the official 2026 Open Championship prize money
-// ($17M purse, winner $3,200,000 = 18.82%). All 70 paid positions round-trip to the official
-// dollar exactly at $17M; tie-averaging handles ties as usual. Set pool purse to $17M in admin.
+// FINGERPRINT_V192_OPEN_EXACT / FINGERPRINT_V196_OPEN_1775
+// Exact per-position percentages from the official 2026 Open Championship prize money —
+// purse $17,750,000 (record; R&A announced 7/14), winner $3,200,000 = 18.03%. All 70 published
+// positions round-trip to the official dollar exactly at $17.75M. Tail per the OFFICIAL rule:
+// past 70, money decreases $125 per place to a floor of $39,450 (reached at pos 80, flat after).
+// The remaining purse is missed-cut money ($12,900/$10,750/$9,100) which the app doesn't pay
+// (CUT = $0 by design). Set pool purse to $17,750,000 in admin.
 const PAYOUT_OPEN = {
-  1:0.18823529,2:0.10835294,3:0.06947059,4:0.05394118,5:0.04341176,
-  6:0.03762941,7:0.03233529,8:0.02725000,9:0.02389412,10:0.02158824,
-  11:0.01965882,12:0.01741176,13:0.01638235,14:0.01533529,15:0.01422941,
-  16:0.01310000,17:0.01247059,18:0.01188235,19:0.01138824,20:0.01085294,
-  21:0.01034706,22:0.00982941,23:0.00930000,24:0.00878235,25:0.00848529,
-  26:0.00811765,27:0.00782353,28:0.00755294,29:0.00722353,30:0.00685294,
-  31:0.00662941,32:0.00628824,33:0.00606471,34:0.00589412,35:0.00568824,
-  36:0.00546471,37:0.00520588,38:0.00494706,39:0.00476471,40:0.00461176,
-  41:0.00442353,42:0.00420588,43:0.00401765,44:0.00378824,45:0.00357059,
-  46:0.00338824,47:0.00325294,48:0.00312353,49:0.00298235,50:0.00290588,
-  51:0.00284412,52:0.00279412,53:0.00275294,54:0.00271176,55:0.00266471,
-  56:0.00262941,57:0.00260294,58:0.00258529,59:0.00256618,60:0.00254853,
-  61:0.00253529,62:0.00252353,63:0.00251176,64:0.00250000,65:0.00247941,
-  66:0.00246029,67:0.00244118,68:0.00242353,69:0.00240588,70:0.00239412,
-  // FINGERPRINT_V195_OPEN_TAIL — the cut is top 70 AND TIES, so finishers can land past 70 and
-  // they ARE paid officially (same lesson as US Open 71st/72nd). Projected tail continues the
-  // official ~$200/position decrement; recalibrate from the official list post-event if ties
-  // actually push the field past 70.
-  71:0.00238235,72:0.00237059,73:0.00235882,74:0.00234706,75:0.00233529,
-  76:0.00232353,77:0.00231176,78:0.00230000,79:0.00228824,80:0.00227647
+  1:0.18028169,2:0.10377465,3:0.06653521,4:0.05166197,5:0.04157746,
+  6:0.03603944,7:0.03096901,8:0.02609859,9:0.02288451,10:0.02067606,
+  11:0.01882817,12:0.01667606,13:0.01569014,14:0.01468732,15:0.01362817,
+  16:0.01254648,17:0.01194366,18:0.01138028,19:0.01090704,20:0.01039437,
+  21:0.00990986,22:0.00941408,23:0.00890704,24:0.00841127,25:0.00812676,
+  26:0.00777465,27:0.00749296,28:0.00723380,29:0.00691831,30:0.00656338,
+  31:0.00634930,32:0.00602254,33:0.00580845,34:0.00564507,35:0.00544789,
+  36:0.00523380,37:0.00498592,38:0.00473803,39:0.00456338,40:0.00441690,
+  41:0.00423662,42:0.00402817,43:0.00384789,44:0.00362817,45:0.00341972,
+  46:0.00324507,47:0.00311549,48:0.00299155,49:0.00285634,50:0.00278310,
+  51:0.00272394,52:0.00267606,53:0.00263662,54:0.00259718,55:0.00255211,
+  56:0.00251831,57:0.00249296,58:0.00247606,59:0.00245775,60:0.00244085,
+  61:0.00242817,62:0.00241690,63:0.00240563,64:0.00239437,65:0.00237465,
+  66:0.00235634,67:0.00233803,68:0.00232113,69:0.00230423,70:0.00229296,
+  71:0.00228592,72:0.00227887,73:0.00227183,74:0.00226479,75:0.00225775,
+  76:0.00225070,77:0.00224366,78:0.00223662,79:0.00222958,80:0.00222254,
+  81:0.00222254,82:0.00222254,83:0.00222254,84:0.00222254,85:0.00222254
 };
 
 // Masters Tournament payout distribution
