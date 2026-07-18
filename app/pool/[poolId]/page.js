@@ -1,5 +1,5 @@
 'use client';
-// build: picked-team-filter-v194-20260716-1130
+// build: open-tail-71-80-v195-20260716-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -508,7 +508,13 @@ const PAYOUT_OPEN = {
   51:0.00284412,52:0.00279412,53:0.00275294,54:0.00271176,55:0.00266471,
   56:0.00262941,57:0.00260294,58:0.00258529,59:0.00256618,60:0.00254853,
   61:0.00253529,62:0.00252353,63:0.00251176,64:0.00250000,65:0.00247941,
-  66:0.00246029,67:0.00244118,68:0.00242353,69:0.00240588,70:0.00239412
+  66:0.00246029,67:0.00244118,68:0.00242353,69:0.00240588,70:0.00239412,
+  // FINGERPRINT_V195_OPEN_TAIL — the cut is top 70 AND TIES, so finishers can land past 70 and
+  // they ARE paid officially (same lesson as US Open 71st/72nd). Projected tail continues the
+  // official ~$200/position decrement; recalibrate from the official list post-event if ties
+  // actually push the field past 70.
+  71:0.00238235,72:0.00237059,73:0.00235882,74:0.00234706,75:0.00233529,
+  76:0.00232353,77:0.00231176,78:0.00230000,79:0.00228824,80:0.00227647
 };
 
 // Masters Tournament payout distribution
