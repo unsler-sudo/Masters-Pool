@@ -1,5 +1,5 @@
 'use client';
-// build: share-card-prizes-badge-v202-20260719-1800
+// build: share-card-uniform-medals-v203-20260719-1830
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2789,10 +2789,10 @@ export default function App(){
           x.strokeStyle='rgba(201,168,76,.22)';x.lineWidth=1;x.stroke();
         }
         const cy=y+rh/2;
-        // rank/medal
+        // rank/medal — identical size + position for 1st/2nd/3rd
         x.textAlign='left';
-        x.font=(isLead?'56px':'44px')+' -apple-system, "Apple Color Emoji", "Segoe UI Emoji", Arial';
-        if(i<3){x.fillText(medals[i],rx+28,cy+(isLead?20:16));}
+        x.font='44px -apple-system, "Apple Color Emoji", "Segoe UI Emoji", Arial';
+        if(i<3){x.fillText(medals[i],rx+28,cy+16);}
         else{x.fillStyle='#7d947f';x.font='700 40px -apple-system, Helvetica, Arial';x.fillText(String(i+1),rx+40,cy+14);}
         // name (truncate)
         x.fillStyle=isLead?INK:'#f2f2ea';
@@ -2806,12 +2806,6 @@ export default function App(){
         x.fillStyle=isLead?INK:(i<3?GOLD_LT:'#93a897');
         x.font=(isLead?'800 48px':'700 38px')+' -apple-system, Helvetica, Arial';
         x.fillText(fmt(total),rx+rw-32,cy+(isLead?17:13));
-        if(isLead){
-          x.textAlign='left';x.fillStyle='rgba(12,22,16,.72)';
-          x.font='800 24px -apple-system, "Apple Color Emoji", "Segoe UI Emoji", Helvetica, Arial';
-          const badge='🏆 1ST PLACE'+(pz1>0?` — WINS $${Math.round(pz1).toLocaleString()}`:'');
-          x.fillText(badge,rx+118,y+rh-16);
-        }
         y+=rh+16;
       });
       if(ranked.length>8){
