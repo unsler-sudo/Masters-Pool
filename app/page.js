@@ -191,13 +191,6 @@ export default function LandingPage() {
             Run your pool on any PGA Tour event — not just the majors. Live scoring, payouts, and dynamic event branding all rotate weekly.
           </div>
         </div>
-        <div style={{maxWidth:440,margin:'0 auto 28px',padding:'14px 18px',background:'linear-gradient(135deg,rgba(201,168,76,.18),rgba(201,168,76,.08))',borderRadius:12,border:'1px solid rgba(201,168,76,.4)'}}>
-          <div style={{fontSize:11,fontWeight:700,color:'#c9a84c',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🎁 Limited Time</div>
-          <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:6}}>Free Pool for The Open Championship</div>
-          <div style={{fontSize:12,opacity:.7,lineHeight:1.5}}>
-            Use promo code <code style={{background:'rgba(255,255,255,.15)',padding:'2px 8px',borderRadius:4,fontFamily:'monospace',fontWeight:700,color:'#fff',letterSpacing:1}}>THEOPEN26</code> at signup to skip the $10 fee for your first major. Expires July 16 at 5 AM ET.
-          </div>
-        </div>
         <button type="button" onClick={()=>setStep('create')} style={{
           background:'#c9a84c',color:'#1a2a5c',border:'none',borderRadius:10,
           padding:'16px 40px',fontSize:17,fontWeight:800,cursor:'pointer',
