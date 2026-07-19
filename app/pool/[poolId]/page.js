@@ -1,5 +1,5 @@
 'use client';
-// build: open-final-78-v197-20260719-1400
+// build: wta-archive-prizes-v198-20260719-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -4180,10 +4180,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const fullEntryCount = a.entries.length;
                 const computedPot = fullEntryCount * archiveFee;
                 const savedPrizes = a.prizes;
-                // FINGERPRINT_V122_ARCHIVE_WTA
-                // Fallback when no saved prizes: ≤4 entries = winner-take-all (whole pot to 1st),
-                // 5+ = standard 1st/2nd/3rd split. Matches the live pool's payout rules.
-                const archiveWTA = fullEntryCount <= 4;
+                // FINGERPRINT_V122_ARCHIVE_WTA / FINGERPRINT_V198_FALLBACK_WTA
+                // Fallback when no saved prizes: winner-take-all if ≤4 entries OR the pool's
+                // payout-mode toggle is winner-take-all (older archives saved before prizes were
+                // stored per-archive). Saved prizes always win over this fallback.
+                const archiveWTA = fullEntryCount <= 4 || poolMeta?.payoutMode === 'winner-take-all';
                 const showPrizes = savedPrizes ? true : (archiveFee > 0 && fullEntryCount >= 1);
                 const prizes = savedPrizes
                   ? [savedPrizes.first||0, savedPrizes.second||0, savedPrizes.third||0]
