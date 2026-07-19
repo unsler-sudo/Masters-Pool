@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: open-purse-17.75M-v153-20260717-0800
+// build: major-archive-prizes-v154-20260719-1500
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -521,16 +521,31 @@ async function autoManage(poolId) {
       if (entries.length > 0) {
         const year = new Date().getFullYear();
         const archiveKey = k(poolId, `archive:${currentMajor}_${year}`);
-        let existingEarnings = {};
-        try { const ex = await redis('GET', archiveKey); if (ex) existingEarnings = JSON.parse(ex).earnings || {}; } catch {}
-        // Get current entryFee before we reset for next major
-        let currentEntryFee = 0;
-        try { const m = await redis('GET', k(poolId,'meta')); if (m) currentEntryFee = JSON.parse(m).entryFee || 0; } catch {}
+        let existingArc = null;
+        try { const ex = await redis('GET', archiveKey); if (ex) existingArc = JSON.parse(ex); } catch {}
+        const existingEarnings = existingArc?.earnings || {};
+        // Get current meta before we reset for next major (fee + payout mode)
+        let currentEntryFee = 0, curPayoutMode = 'standard';
+        try { const m = await redis('GET', k(poolId,'meta')); if (m) { const pm=JSON.parse(m); currentEntryFee = pm.entryFee || 0; curPayoutMode = pm.payoutMode || 'standard'; } } catch {}
+        // FINGERPRINT_V154_MAJOR_ARCHIVE_PRIZES
+        // The major-rotation archive previously saved NO prizes (and dropped any the frontend had
+        // stored), so History fell back to the entry-count heuristic — a winner-take-all pool with
+        // 5+ entries rendered as a 1st/2nd/3rd split. Save the prize split at archive time using
+        // the pool's payout mode, and preserve any existing archive fields instead of clobbering.
+        let prizes = existingArc?.prizes || null;
+        const n = entries.length;
+        if (!prizes && currentEntryFee > 0 && n >= 1) {
+          const pot = n * currentEntryFee;
+          const wta = curPayoutMode === 'winner-take-all' || n <= 4;
+          prizes = wta ? {first:pot, second:0, third:0} : {first:pot-currentEntryFee*3, second:currentEntryFee*2, third:currentEntryFee};
+        }
         await redis('SET', archiveKey, JSON.stringify({
+          ...(existingArc || {}),
           major: currentMajor, year,
           archivedAt: new Date().toISOString(),
           entries, payments, earnings: existingEarnings,
           entryFee: currentEntryFee,
+          prizes: prizes || null,
         }));
       }
       // Mark pool as unpaid for next major — commissioner must pay $10 to unlock
