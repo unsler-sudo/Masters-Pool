@@ -1,5 +1,5 @@
 'use client';
-// build: share-card-uniform-medals-v203-20260719-1830
+// build: medal-visible-v204-20260719-1900
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2789,9 +2789,14 @@ export default function App(){
           x.strokeStyle='rgba(201,168,76,.22)';x.lineWidth=1;x.stroke();
         }
         const cy=y+rh/2;
-        // rank/medal — identical size + position for 1st/2nd/3rd
+        // rank/medal — identical size + position for 1st/2nd/3rd.
+        // FINGERPRINT_V204_MEDAL_VISIBLE — fillStyle was still the row's GOLD gradient when the
+        // leader's medal drew; on monochrome-emoji fallback that's gold-on-gold → invisible.
+        // Set a contrasting fill per row (ignored by color-emoji glyphs, decisive for fallback)
+        // and lead the font stack with the emoji fonts.
         x.textAlign='left';
-        x.font='44px -apple-system, "Apple Color Emoji", "Segoe UI Emoji", Arial';
+        x.fillStyle=isLead?INK:'#f2f2ea';
+        x.font='44px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",-apple-system,Arial';
         if(i<3){x.fillText(medals[i],rx+28,cy+16);}
         else{x.fillStyle='#7d947f';x.font='700 40px -apple-system, Helvetica, Arial';x.fillText(String(i+1),rx+40,cy+14);}
         // name (truncate)
