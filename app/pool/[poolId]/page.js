@@ -1,5 +1,5 @@
 'use client';
-// build: share-card-v199-20260719-1600
+// build: share-image-only-v201-20260719-1730
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2718,7 +2718,15 @@ export default function App(){
   const shareStandingsImage = async () => {
     try{
       await (document.fonts?.ready || Promise.resolve());
-      const W=1080,H=1350,c=document.createElement('canvas');c.width=W;c.height=H;
+      // FINGERPRINT_V200_DYNAMIC_HEIGHT — size the canvas to the content. With 8 rows the list ran
+      // past the fixed footer position and the text stacked on itself; now height = header + rows
+      // (+ "more" line) + footer, so small pools get a tight card and big pools get a taller one.
+      const W=1080;
+      const nRows=Math.min(ranked.length,8);
+      const hasMore=ranked.length>8;
+      const rowsH=(nRows>0?144:0)+Math.max(0,nRows-1)*112; // leader 128+16, others 96+16
+      const H=Math.max(900, 330+rowsH+(hasMore?58:0)+216);
+      const c=document.createElement('canvas');c.width=W;c.height=H;
       const x=c.getContext('2d');
       const GOLD='#c9a84c', GOLD_LT='#e6cf8f', INK='#0c1610';
       // ── background: deep-green vertical gradient + soft radial glow ──
@@ -2800,7 +2808,9 @@ export default function App(){
       if(!blob){msg('Share failed');return;}
       const file=new File([blob],'standings.png',{type:'image/png'});
       if(navigator.canShare&&navigator.canShare({files:[file]})){
-        try{await navigator.share({files:[file],title:poolMeta?.poolName||'Golf Pool'});}catch{}
+        // Image only — a title/text field gets pasted as literal plain text next to the image in
+        // iMessage and looks odd. The card itself carries the pool name and URL.
+        try{await navigator.share({files:[file]});}catch{}
       }else{
         const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='standings.png';a.click();
         setTimeout(()=>URL.revokeObjectURL(a.href),4000);
