@@ -1,5 +1,5 @@
 'use client';
-// build: open-17.75M-official-tail-v196-20260717-0800
+// build: open-final-78-v197-20260719-1400
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -513,8 +513,11 @@ const PAYOUT_OPEN = {
   61:0.00242817,62:0.00241690,63:0.00240563,64:0.00239437,65:0.00237465,
   66:0.00235634,67:0.00233803,68:0.00232113,69:0.00230423,70:0.00229296,
   71:0.00228592,72:0.00227887,73:0.00227183,74:0.00226479,75:0.00225775,
-  76:0.00225070,77:0.00224366,78:0.00223662,79:0.00222958,80:0.00222254,
-  81:0.00222254,82:0.00222254,83:0.00222254,84:0.00222254,85:0.00222254
+  // FINGERPRINT_V197_OPEN_FINAL — final field: 78 professionals completed 72 holes.
+  // 77/78 encoded per the published final list ($38,825/$38,700). NOTE: those two values break
+  // the R&A's stated $125-per-place rule (which yields $39,825/$39,700) and sit below its $39,450
+  // floor — likely a source typo (39→38 thousands digit), kept as published per commissioner call.
+  76:0.00225070,77:0.00218732,78:0.00218028
 };
 
 // Masters Tournament payout distribution
