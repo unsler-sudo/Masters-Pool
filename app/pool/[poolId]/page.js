@@ -1,5 +1,5 @@
 'use client';
-// build: share-image-only-v201-20260719-1730
+// build: share-card-prizes-badge-v202-20260719-1800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2724,8 +2724,15 @@ export default function App(){
       const W=1080;
       const nRows=Math.min(ranked.length,8);
       const hasMore=ranked.length>8;
+      // FINGERPRINT_V202_CARD_PRIZES — pot/prize strip under the header + 1st-place badge on the
+      // leader row. Strip only renders when there's an entry fee; header grows to make room.
+      const cardFee=poolMeta?.entryFee||0;
+      const cardPot=ranked.length*cardFee;
+      const [pz1,pz2,pz3]=cardFee>0?computePrizes(ranked.length,cardPot,cardFee):[0,0,0];
+      const stripH=cardFee>0?58:0;
+      const headerH=330+stripH;
       const rowsH=(nRows>0?144:0)+Math.max(0,nRows-1)*112; // leader 128+16, others 96+16
-      const H=Math.max(900, 330+rowsH+(hasMore?58:0)+216);
+      const H=Math.max(900, headerH+rowsH+(hasMore?58:0)+216);
       const c=document.createElement('canvas');c.width=W;c.height=H;
       const x=c.getContext('2d');
       const GOLD='#c9a84c', GOLD_LT='#e6cf8f', INK='#0c1610';
@@ -2753,11 +2760,21 @@ export default function App(){
       // divider
       x.strokeStyle='rgba(201,168,76,.45)';x.lineWidth=2;
       x.beginPath();x.moveTo(140,292);x.lineTo(W-140,292);x.stroke();
+      // FINGERPRINT_V202_CARD_PRIZES — pot + prize split strip
+      if(cardFee>0){
+        x.textAlign='center';x.fillStyle=GOLD_LT;
+        x.font='700 30px -apple-system, "Apple Color Emoji", "Segoe UI Emoji", Helvetica, Arial';
+        const money=v=>'$'+Math.round(v).toLocaleString();
+        const strip = pz2>0
+          ? `💰 POT ${money(cardPot)}    🥇 ${money(pz1)}   🥈 ${money(pz2)}   🥉 ${money(pz3)}`
+          : `💰 WINNER TAKE ALL — 🥇 ${money(pz1)}`;
+        x.fillText(strip,W/2,338);
+      }
       // ── rows ──
       const rows=ranked.slice(0,8);
       const medals=['🥇','🥈','🥉'];
       const fmt=v=>'$'+Math.round(v).toLocaleString();
-      let y=330;
+      let y=headerH;
       rows.forEach((e,i)=>{
         const total=teamE(e);
         const isLead=i===0;
@@ -2789,7 +2806,12 @@ export default function App(){
         x.fillStyle=isLead?INK:(i<3?GOLD_LT:'#93a897');
         x.font=(isLead?'800 48px':'700 38px')+' -apple-system, Helvetica, Arial';
         x.fillText(fmt(total),rx+rw-32,cy+(isLead?17:13));
-        if(isLead){x.textAlign='left';x.fillStyle='rgba(12,22,16,.65)';x.font='700 22px -apple-system, Helvetica, Arial';x.fillText('LEADER'.split('').join('\u2009'),rx+118,y+rh-18);}
+        if(isLead){
+          x.textAlign='left';x.fillStyle='rgba(12,22,16,.72)';
+          x.font='800 24px -apple-system, "Apple Color Emoji", "Segoe UI Emoji", Helvetica, Arial';
+          const badge='🏆 1ST PLACE'+(pz1>0?` — WINS $${Math.round(pz1).toLocaleString()}`:'');
+          x.fillText(badge,rx+118,y+rh-16);
+        }
         y+=rh+16;
       });
       if(ranked.length>8){
