@@ -1,5 +1,5 @@
 'use client';
-// build: wta-archive-prizes-v198-20260719-1500
+// build: share-card-v199-20260719-1600
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -2709,6 +2709,105 @@ export default function App(){
   const isWinnerTakeAll = (count) => poolMeta?.payoutMode === 'winner-take-all' || count <= 4;
   // Standard split prizes for a given pot/fee: [1st, 2nd, 3rd]. Winner-take-all → [pot,0,0].
   const computePrizes = (count, pot, fee) => isWinnerTakeAll(count) ? [pot, 0, 0] : [pot-fee*3, fee*2, fee];
+
+  // FINGERPRINT_V199_SHARE_CARD
+  // Renders the standings as a premium share image (1080×1350, dark + gold) and hands it to the
+  // phone's share sheet (navigator.share with files); falls back to a straight download on
+  // desktop/unsupported browsers. Built for the group-chat brag: pool name, event, top entries
+  // with live money, leader spotlighted, site URL as the footer.
+  const shareStandingsImage = async () => {
+    try{
+      await (document.fonts?.ready || Promise.resolve());
+      const W=1080,H=1350,c=document.createElement('canvas');c.width=W;c.height=H;
+      const x=c.getContext('2d');
+      const GOLD='#c9a84c', GOLD_LT='#e6cf8f', INK='#0c1610';
+      // ── background: deep-green vertical gradient + soft radial glow ──
+      const bg=x.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#0b1710');bg.addColorStop(.55,'#101f16');bg.addColorStop(1,'#0a130d');
+      x.fillStyle=bg;x.fillRect(0,0,W,H);
+      const glow=x.createRadialGradient(W/2,220,60,W/2,220,700);glow.addColorStop(0,'rgba(201,168,76,.14)');glow.addColorStop(1,'rgba(201,168,76,0)');
+      x.fillStyle=glow;x.fillRect(0,0,W,H);
+      // gold frame
+      x.strokeStyle='rgba(201,168,76,.55)';x.lineWidth=3;x.strokeRect(28,28,W-56,H-56);
+      x.strokeStyle='rgba(201,168,76,.18)';x.lineWidth=1;x.strokeRect(40,40,W-80,H-80);
+      // ── header ──
+      const poolNm=(poolMeta?.poolName||'GOLF POOL').toUpperCase();
+      x.textAlign='center';x.fillStyle=GOLD;
+      x.font='700 30px -apple-system, Helvetica, Arial';
+      x.fillText('⛳  '+poolNm+'  ⛳',W/2,118);
+      const evNm = activeMajor==='pgatour' ? (poolMeta?.currentPgatourEvent||'PGA Tour') : (T.eventName||'');
+      x.fillStyle='#ffffff';x.font='700 76px Georgia, "Times New Roman", serif';
+      // shrink-to-fit event name
+      let evSize=76;while(x.measureText(evNm).width>W-180&&evSize>40){evSize-=4;x.font=`700 ${evSize}px Georgia, "Times New Roman", serif`;}
+      x.fillText(evNm,W/2,206);
+      x.fillStyle=GOLD_LT;x.font='600 26px -apple-system, Helvetica, Arial';
+      const status=(tournamentComplete?'FINAL RESULTS':'LIVE STANDINGS')+'  ·  '+new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}).toUpperCase();
+      x.fillText(status.split('').join('\u200a'),W/2,252);
+      // divider
+      x.strokeStyle='rgba(201,168,76,.45)';x.lineWidth=2;
+      x.beginPath();x.moveTo(140,292);x.lineTo(W-140,292);x.stroke();
+      // ── rows ──
+      const rows=ranked.slice(0,8);
+      const medals=['🥇','🥈','🥉'];
+      const fmt=v=>'$'+Math.round(v).toLocaleString();
+      let y=330;
+      rows.forEach((e,i)=>{
+        const total=teamE(e);
+        const isLead=i===0;
+        const rh=isLead?128:96, rx=88, rw=W-176;
+        x.beginPath();x.roundRect(rx,y,rw,rh,20);
+        if(isLead){
+          const lg=x.createLinearGradient(rx,y,rx+rw,y);lg.addColorStop(0,'#d9b95f');lg.addColorStop(.5,'#f0dc9a');lg.addColorStop(1,'#c9a84c');
+          x.fillStyle=lg;x.fill();
+          x.strokeStyle='rgba(255,255,255,.5)';x.lineWidth=2;x.stroke();
+        }else{
+          x.fillStyle='rgba(255,255,255,.055)';x.fill();
+          x.strokeStyle='rgba(201,168,76,.22)';x.lineWidth=1;x.stroke();
+        }
+        const cy=y+rh/2;
+        // rank/medal
+        x.textAlign='left';
+        x.font=(isLead?'56px':'44px')+' -apple-system, "Apple Color Emoji", "Segoe UI Emoji", Arial';
+        if(i<3){x.fillText(medals[i],rx+28,cy+(isLead?20:16));}
+        else{x.fillStyle='#7d947f';x.font='700 40px -apple-system, Helvetica, Arial';x.fillText(String(i+1),rx+40,cy+14);}
+        // name (truncate)
+        x.fillStyle=isLead?INK:'#f2f2ea';
+        x.font=(isLead?'800 46px':'700 38px')+' Georgia, serif';
+        let nm=e.name||'';const maxW=rw-420;
+        while(x.measureText(nm).width>maxW&&nm.length>3)nm=nm.slice(0,-2);
+        if(nm!==(e.name||''))nm+='…';
+        x.fillText(nm,rx+118,cy+(isLead?16:13));
+        // money
+        x.textAlign='right';
+        x.fillStyle=isLead?INK:(i<3?GOLD_LT:'#93a897');
+        x.font=(isLead?'800 48px':'700 38px')+' -apple-system, Helvetica, Arial';
+        x.fillText(fmt(total),rx+rw-32,cy+(isLead?17:13));
+        if(isLead){x.textAlign='left';x.fillStyle='rgba(12,22,16,.65)';x.font='700 22px -apple-system, Helvetica, Arial';x.fillText('LEADER'.split('').join('\u2009'),rx+118,y+rh-18);}
+        y+=rh+16;
+      });
+      if(ranked.length>8){
+        x.textAlign='center';x.fillStyle='#7d947f';x.font='600 28px -apple-system, Helvetica, Arial';
+        x.fillText('+ '+(ranked.length-8)+' more entries',W/2,y+18);y+=52;
+      }
+      // ── footer ──
+      x.strokeStyle='rgba(201,168,76,.45)';x.lineWidth=2;
+      x.beginPath();x.moveTo(140,H-150);x.lineTo(W-140,H-150);x.stroke();
+      x.textAlign='center';x.fillStyle=GOLD;x.font='800 38px Georgia, serif';
+      x.fillText('tunagolfpool.com',W/2,H-96);
+      x.fillStyle='#7d947f';x.font='600 24px -apple-system, Helvetica, Arial';
+      x.fillText('LIVE MONEY GOLF POOLS'.split('').join('\u2009'),W/2,H-58);
+      // ── ship it ──
+      const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+      if(!blob){msg('Share failed');return;}
+      const file=new File([blob],'standings.png',{type:'image/png'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        try{await navigator.share({files:[file],title:poolMeta?.poolName||'Golf Pool'});}catch{}
+      }else{
+        const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='standings.png';a.click();
+        setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+        msg('Standings image downloaded');
+      }
+    }catch(err){console.warn('share card failed:',err);msg('Share failed');}
+  };
   // Only re-rank entries once field has earnings data, otherwise keep stable order
   // This eliminates the loading flicker where rankings briefly shift as data streams in
   const fieldHasEarnings = field.some(f => f.earnings > 0);
@@ -3460,6 +3559,10 @@ export default function App(){
       <main style={{padding:'12px 12px 80px',maxWidth:660,margin:'0 auto',animation:'fu .35s ease'}}>
 
         {tab==='Standings'&&(<>
+          {/* FINGERPRINT_V199_SHARE_CARD — brag button */}
+          {!picksHidden&&entries.length>=2&&field.some(f=>f.earnings>0)&&<div style={{display:'flex',justifyContent:'flex-end',marginBottom:8}}>
+            <button type="button" onClick={shareStandingsImage} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'6px 14px',fontSize:12,fontWeight:700,borderRadius:20,cursor:'pointer',border:'1px solid #c9a84c88',background:'linear-gradient(135deg,#f5e9c8,#e8d391)',color:'#5a4a1a',boxShadow:'0 1px 4px rgba(201,168,76,.35)'}}>📸 Share Standings</button>
+          </div>}
           {!pastTeeTime&&poolMeta?.entryFee>0&&entries.length>=2&&(()=>{
             const fee=poolMeta.entryFee;
             const pot=entries.length*fee;
