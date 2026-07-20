@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: major-archive-prizes-v154-20260719-1500
+// build: archive-collision-guard-v155-20260720-0900
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1696,7 +1696,31 @@ export async function POST(request) {
       const archiveKey = (major === 'pgatour' && slug)
         ? k(poolId, `archive:pgatour-${slug}_${year}`)
         : k(poolId, `archive:${major}_${year}`);
+      // FINGERPRINT_V155_COLLISION_GUARD — if an archive already exists at this key for a DIFFERENT
+      // event, don't clobber it. Guards against a blank/rotated evName resolving to the wrong slug
+      // and overwriting a good archive (how The Open got wiped by a 3M Open save).
+      try {
+        const existingRaw = await redis('GET', archiveKey);
+        if (existingRaw) {
+          const ex = JSON.parse(existingRaw);
+          const exName = (ex.eventName||'').toLowerCase().trim();
+          const newName = (evName||'').toLowerCase().trim();
+          const exHasEntries = Array.isArray(ex.entries) && ex.entries.length > 0;
+          if (exHasEntries && exName && newName && exName !== newName) {
+            return Response.json({ ok:true, skipped:`key collision: "${exName}" already here, not overwriting with "${newName}"` });
+          }
+        }
+      } catch {}
       const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
+      // FINGERPRINT_V155_EMPTY_ARCHIVE_GUARD
+      // Never write an archive with ZERO entries. This fires when the pool has already rotated
+      // (entries wiped) but a late completion-triggered save still lands: it would create a bogus
+      // 0-entry archive AND, on a key collision, blank out a good prior archive (this is how the
+      // 3M Open's empty save clobbered The Open). Also refuse to overwrite an EXISTING archive that
+      // has entries with a now-empty one.
+      if (!entries || entries.length === 0) {
+        return Response.json({ ok:true, skipped:'no entries — refusing to save empty archive' });
+      }
       const archiveData = {
         major,
         year,
