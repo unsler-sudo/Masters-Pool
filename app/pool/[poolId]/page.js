@@ -1,5 +1,5 @@
 'use client';
-// build: players-tour-section-v205-20260719-1930
+// build: archive-entrycount-v206-20260720-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -4335,7 +4335,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     {!savedLogo && <span style={{fontSize:24}}>{THEME.emoji}</span>}
                     <div style={{flex:1}}>
                       <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:'#fff'}}>{a.eventName || THEME.eventName}</div>
-                      <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{displayDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entries.length} entries{showPrizes&&<> · ${pot} pot</>}</div>
+                      <div style={{fontSize:10,color:'rgba(255,255,255,0.6)'}}>{displayDate.toLocaleDateString('en-US',{month:'long',year:'numeric'})} · {a.entryCount||a.entries.length} entries{showPrizes&&<> · ${pot} pot</>}</div>
                     </div>
                     <span style={{fontSize:18,color:'rgba(255,255,255,0.6)'}}>{isExpanded?'▲':'▼'}</span>
                   </div>
