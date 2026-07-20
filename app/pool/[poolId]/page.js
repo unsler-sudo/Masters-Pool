@@ -1,5 +1,5 @@
 'use client';
-// build: medal-visible-v204-20260719-1900
+// build: players-tour-section-v205-20260719-1930
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -4363,7 +4363,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   </div>}
                 </div>;
                 };
-                const majorKeys=['players','masters','pga','usopen','open'];
+                // FINGERPRINT_V205_PLAYERS_TOUR_SECTION — The Players is scheduled alongside the
+                // majors in the app, but it's not a major; History files it under PGA Tour Events.
+                const majorKeys=['masters','pga','usopen','open'];
                 const sectionHdr=(txt)=>(<div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:800,color:T.primary,margin:'4px 0 10px',paddingBottom:6,borderBottom:`2px solid ${T.primary}22`}}>{txt}</div>);
                 // FINGERPRINT_V135_YEAR_ACCORDION
                 // Stack archives by season in collapsible year groups so History scales year after
@@ -4377,7 +4379,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 return <>{years.map(y=>{
                   const yearArchives=publicArchives.filter(a=>archYear(a)===y);
                   const majorArchives=yearArchives.filter(a=>majorKeys.includes(a.major)).sort(byDate);
-                  const tourArchives=yearArchives.filter(a=>a.major==='pgatour').sort(byDate);
+                  const tourArchives=yearArchives.filter(a=>a.major==='pgatour'||a.major==='players').sort(byDate);
                   const isOpen=expandedYears[y]??(y===newestYear);
                   return <div key={y} style={{marginBottom:14}}>
                     <button onClick={()=>setExpandedYears(prev=>({...prev,[y]:!isOpen}))}
