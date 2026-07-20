@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: archive-collision-guard-v155-20260720-0900
+// build: rebuild-archive-v156-20260720-1000
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1352,6 +1352,40 @@ export async function POST(request) {
         rotatedTo: nextEventName || '(unchanged — DataGolf event unavailable)',
         note: 'Entries and payments wiped. Pool is locked + unpaid for the new event. Roster preserved.',
       });
+    }
+
+    // ─── REBUILD A LOST ARCHIVE (pool commissioner) ───────────────────────
+    // FINGERPRINT_V156_REBUILD_ARCHIVE
+    // Manually write an archive from supplied entries + earnings. Used to restore an archive that
+    // was wiped/overwritten (e.g. The Open getting clobbered by a stray 3M Open save). The caller
+    // provides the event name, major key, year, entries[] (each {name, picks[], earnings{}}) and the
+    // prize split. We store it under the correct key and mark it manually rebuilt.
+    if (body.action === 'rebuild-archive') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const { major, year, eventName, entries, earnings, prizes, entryFee, note } = body;
+      if (!major || !year || !Array.isArray(entries) || entries.length === 0) {
+        return Response.json({ error:'need major, year, and non-empty entries' }, { status:400 });
+      }
+      const slug = (eventName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
+      const archiveKey = (major === 'pgatour' && slug)
+        ? k(poolId, `archive:pgatour-${slug}_${year}`)
+        : k(poolId, `archive:${major}_${year}`);
+      const archiveData = {
+        major, year,
+        eventName: eventName || undefined,
+        archivedAt: new Date().toISOString(),
+        entries,
+        payments: [],
+        earnings: earnings || {},
+        entryFee: entryFee || 0,
+        prizes: prizes || null,
+        logoUrl: null, logoNoBg: null, logoHeight: null,
+        tournamentDate: body.tournamentDate || new Date().toISOString(),
+        manualRebuild: true,
+        rebuildNote: note || null,
+      };
+      await redis('SET', archiveKey, JSON.stringify(archiveData));
+      return Response.json({ ok:true, archived:{ key:archiveKey, entries:entries.length } });
     }
 
     if (body.action === 'delete-archive') {
