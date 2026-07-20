@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: rebuild-archive-v156-20260720-1000
+// build: rebuild-archive-entrycount-v157-20260720-1100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1362,7 +1362,7 @@ export async function POST(request) {
     // prize split. We store it under the correct key and mark it manually rebuilt.
     if (body.action === 'rebuild-archive') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
-      const { major, year, eventName, entries, earnings, prizes, entryFee, note } = body;
+      const { major, year, eventName, entries, earnings, prizes, entryFee, note, entryCount } = body;
       if (!major || !year || !Array.isArray(entries) || entries.length === 0) {
         return Response.json({ error:'need major, year, and non-empty entries' }, { status:400 });
       }
@@ -1383,6 +1383,7 @@ export async function POST(request) {
         tournamentDate: body.tournamentDate || new Date().toISOString(),
         manualRebuild: true,
         rebuildNote: note || null,
+        entryCount: (typeof entryCount === 'number' && entryCount > 0) ? entryCount : undefined,
       };
       await redis('SET', archiveKey, JSON.stringify(archiveData));
       return Response.json({ ok:true, archived:{ key:archiveKey, entries:entries.length } });
