@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: rebuild-archive-entrycount-v157-20260720-1100
+// build: roll-past-majors-v158-20260721-1500
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -174,9 +174,19 @@ function buildFallbackSchedule(year) {
     { key:'usopen',  month:5, nth:3, hour:11 },
     { key:'open',    month:6, nth:3, hour:5  },
   ];
+  const now = Date.now();
   return majors.map(({ key, month, nth, hour }) => {
-    const y = key === 'players' ? year + 1 : year;
-    const thu = nthWeekday(y, month, THU, nth);
+    // FINGERPRINT_V158_ROLL_PAST_MAJORS
+    // Use next year's date for any major whose current-year running is already OVER. Otherwise a
+    // past-dated major keeps endTime in the past, so autoManage sees "tournament over" on every
+    // request and re-fires the Tuesday rotation — advancing the major on each refresh. Rolling the
+    // date forward puts endTime in the future so the pool holds steady on the upcoming edition.
+    let y = year;
+    let thu = nthWeekday(y, month, THU, nth);
+    if (thu) {
+      const end = new Date(thu); end.setUTCDate(end.getUTCDate() + 5);
+      if (end.getTime() < now) { y = year + 1; thu = nthWeekday(y, month, THU, nth); }
+    }
     if (!thu) return null;
     const teeTime = new Date(thu); teeTime.setUTCHours(hour, 0, 0, 0);
     const endDate = new Date(thu); endDate.setUTCDate(endDate.getUTCDate() + 5); endDate.setUTCHours(12, 0, 0, 0);
@@ -204,6 +214,9 @@ async function getMajorSchedule() {
       const teeTime = `${ev.start_date}T11:00:00Z`;
       const end = ev.end_date || ev.start_date;
       const endDate = new Date(new Date(end).getTime() + 2*24*60*60*1000).toISOString().slice(0,10) + 'T12:00:00Z';
+      // FINGERPRINT_V158_ROLL_PAST_MAJORS — ignore an API event whose running is already over; the
+      // rolled fallback (next year's date) is the correct "next" edition to schedule against.
+      if (new Date(endDate).getTime() < Date.now()) continue;
       apiMap[majorKey] = { key: majorKey, teeTime, endDate };
     }
     return fallback.map(fb => apiMap[fb.key] || fb);
