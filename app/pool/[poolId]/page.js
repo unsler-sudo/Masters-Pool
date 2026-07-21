@@ -1,5 +1,5 @@
 'use client';
-// build: archive-entrycount-v206-20260720-1100
+// build: edition-year-v207-20260720-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1195,7 +1195,16 @@ export default function App(){
           const teeTime = startDate ? `${startDate}T11:00:00Z` : null;
           const purse = ev.purse || ev.total_purse || null;
           const evName = ev.event_name || ev.name || '';
-          const eventName = evName ? `${evName} ${year}` : '';
+          // FINGERPRINT_V207_EDITION_YEAR — label the event with the year of the edition being
+          // played next, not the current calendar year. A major that already happened this year
+          // (e.g. The Players in March) shows its NEXT running when the pool wraps around to it —
+          // so a past start_date rolls the label to year+1.
+          let editionYear = year;
+          if (startDate) {
+            const sd = new Date(startDate + (startDate.length===10?'T12:00:00Z':''));
+            if (!isNaN(sd) && sd.getTime() < Date.now() - 3*24*60*60*1000) editionYear = year + 1;
+          }
+          const eventName = evName ? `${evName} ${editionYear}` : '';
           if(majorKey) updates[majorKey] = {
             ...(eventName && { eventName }),
             ...(courseName && { courseName }),
