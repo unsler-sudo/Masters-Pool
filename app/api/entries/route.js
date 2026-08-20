@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: roll-past-majors-v158-20260721-1500
+// build: chat-seen-receipts-v159-20260721-1700
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1010,7 +1010,33 @@ export async function POST(request) {
     if (body.action === 'chat-fetch') {
       const raw = await redis('GET', k(poolId, 'chat'));
       const messages = raw ? JSON.parse(raw) : [];
-      return Response.json({ ok:true, messages });
+      // FINGERPRINT_V159_CHAT_SEEN — return the read-receipt map alongside messages so the client
+      // can show who's caught up. Shape: { "<entry name>": <ts of newest message they'd seen> }.
+      let seen = {};
+      try { const s = await redis('GET', k(poolId, 'chat_seen')); if (s) seen = JSON.parse(s); } catch {}
+      return Response.json({ ok:true, messages, seen });
+    }
+
+    // FINGERPRINT_V159_CHAT_SEEN
+    // Record that a verified chat user has read up to a given message timestamp. Called when the
+    // Chat tab is open. Monotonic: never moves a user's marker backwards (out-of-order requests,
+    // a second device on an older view). Same 30-day TTL as the chat itself.
+    if (body.action === 'chat-seen') {
+      const { name, code, ts } = body;
+      if (!name || !code) return Response.json({ error:'Verification required' }, { status:401 });
+      const stamp = Number(ts);
+      if (!stamp || !isFinite(stamp)) return Response.json({ error:'Bad timestamp' }, { status:400 });
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e =>
+        e.name.toLowerCase() === name.toLowerCase() &&
+        e.editCode?.toUpperCase() === code.toUpperCase()
+      );
+      if (!entry) return Response.json({ error:'Invalid credentials' }, { status:401 });
+      let seen = {};
+      try { const s = await redis('GET', k(poolId, 'chat_seen')); if (s) seen = JSON.parse(s); } catch {}
+      if (!seen[entry.name] || stamp > seen[entry.name]) seen[entry.name] = stamp;
+      await redis('SETEX', k(poolId, 'chat_seen'), 2592000, JSON.stringify(seen));
+      return Response.json({ ok:true, seen });
     }
 
     if (body.action === 'chat-post') {
