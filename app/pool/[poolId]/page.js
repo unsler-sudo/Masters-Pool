@@ -1,5 +1,5 @@
 'use client';
-// build: unread-count-badge-v208-20260721-1600
+// build: chat-seen-receipts-v209-20260721-1700
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1046,6 +1046,7 @@ export default function App(){
   const [schedule,setSchedule]=useState(null);
   const [scheduleLoaded,setScheduleLoaded]=useState(false);
   const [chatMessages,setChatMessages]=useState([]);
+  const [chatSeen,setChatSeen]=useState({}); // FINGERPRINT_V209_CHAT_SEEN — { entryName: ts of newest message read }
   const [lastSeenChatCount,setLastSeenChatCount]=useState(()=>{
     // FINGERPRINT_V125_UNREAD_CHAT
     // Persist the count of messages the user has seen, so the unread dot survives reloads.
@@ -2540,6 +2541,7 @@ export default function App(){
       const d=await r.json();
       if(d.messages){
         setChatMessages(d.messages);
+        if(d.seen)setChatSeen(d.seen); // FINGERPRINT_V209_CHAT_SEEN — read receipts
         // Auto-scroll to bottom
         setTimeout(()=>{if(chatScrollRef.current)chatScrollRef.current.scrollTop=chatScrollRef.current.scrollHeight;},50);
       }
@@ -2647,6 +2649,14 @@ export default function App(){
     if(tab==='Chat' && chatVerified && chatMessages.length>0){
       setLastSeenChatCount(chatMessages.length);
       try{ window.localStorage.setItem('tgp_chatseen_'+window.location.pathname, String(chatMessages.length)); }catch{}
+      // FINGERPRINT_V209_CHAT_SEEN — publish the read receipt so others can see we're caught up.
+      // Fire-and-forget; optimistically update our own marker so the UI doesn't wait a poll cycle.
+      const newest = chatMessages[chatMessages.length-1]?.ts;
+      if(newest && chatName && chatCode && (chatSeen[chatName]||0) < newest){
+        setChatSeen(prev=>({...prev,[chatName]:newest}));
+        fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({poolId,action:'chat-seen',name:chatName,code:chatCode,ts:newest})}).catch(()=>{});
+      }
     }
   },[tab,chatVerified,chatMessages.length]);
 
@@ -4212,6 +4222,23 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     );
                   })
                 }
+                {/* FINGERPRINT_V209_CHAT_SEEN — who's caught up on the latest message */}
+                {chatVerified&&chatMessages.length>0&&(()=>{
+                  const newest=chatMessages[chatMessages.length-1]?.ts||0;
+                  const others=entries.map(e=>e.name).filter(n=>n!==chatName);
+                  if(others.length===0)return null;
+                  const caught=others.filter(n=>(chatSeen[n]||0)>=newest);
+                  const behind=others.filter(n=>(chatSeen[n]||0)<newest);
+                  const list=(arr)=>arr.length<=3?arr.join(', '):`${arr.slice(0,3).join(', ')} +${arr.length-3}`;
+                  return <div style={{marginTop:10,paddingTop:8,borderTop:`1px solid ${T.cardBorder}`,fontSize:10,lineHeight:1.6,color:'#8a9580'}}>
+                    {behind.length===0
+                      ? <span style={{color:T.primary,fontWeight:600}}>👀 Everyone's caught up</span>
+                      : <>
+                          {caught.length>0&&<div>👀 <b style={{color:T.primary}}>Seen:</b> {list(caught)}</div>}
+                          <div>⏳ <b style={{color:'#b5892c'}}>Not caught up:</b> {list(behind)}</div>
+                        </>}
+                  </div>;
+                })()}
               </div>
               <div style={{display:'flex',gap:8}}>
                 <input type="text" placeholder="Say something..." value={chatInput} maxLength={300}
