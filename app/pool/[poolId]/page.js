@@ -1,5 +1,5 @@
 'use client';
-// build: small-field-tiers-v214-20260721-2000
+// build: tc-six-picks-v215-20260721-2030
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1158,7 +1158,20 @@ export default function App(){
   const TOURNAMENT_END = TEE_TIME + 6 * 24 * 60 * 60 * 1000; // 6 days after tee-off
   const effectivePurse = (dynamicPurses && dynamicPurses[activeMajor]) || T.purse;
   const TOURNAMENT = { name: T.eventName, purse: effectivePurse };
-  const TIERS = TIER_DEFS.map(t => t.id===2 ? {...t, color:T.primary} : t);
+  // FINGERPRINT_V215_TC_SIX_PICKS
+  // The TOUR Championship is a 30-player field, so a 10-pick entry would take a third of it and
+  // every team would look alike. Drop to 2/2/2 = 6 picks for that event only; every other event
+  // keeps the standard 2/4/4 = 10.
+  const tcEventName = activeMajor === 'pgatour'
+    ? (poolMeta?.currentPgatourEvent || T.eventName || '')
+    : (T.eventName || '');
+  const isTourChampPool = isTourChampionship(tcEventName);
+  const TIERS = TIER_DEFS.map(t => {
+    const base = t.id === 2 ? {...t, color: T.primary} : {...t};
+    if (isTourChampPool) base.picks = 2;
+    return base;
+  });
+  const TOTAL_PICKS_REQ = TIERS.reduce((s,t)=>s+t.picks, 0);
 
   // FINGERPRINT_V153_REAL_TEE / FINGERPRINT_V185_TRUST_REAL_TEE
   // pastTeeTime must reflect the ACTUAL earliest tee time, not the theme placeholder (schedule
@@ -3735,7 +3748,7 @@ export default function App(){
                 :'';
             const countdownLine=countdown?`⏱ Entries close ${countdown.replace(' until entries lock','')}\n\n`:'';
             // Pick counts from tier definitions (e.g. "2 favorites, 4 contenders, 4 longshots")
-            const picksDesc = TIER_DEFS.map(t=>`${t.picks} ${t.name.toLowerCase()}`).join(', ');
+            const picksDesc = TIERS.map(t=>`${t.picks} ${t.name.toLowerCase()}`).join(', ');
             // Event name: strip leading "the " so "Join my the Memorial..." reads "Join my Memorial..."
             const evNameClean = (T.eventName||'').replace(/^the\s+/i,'');
             const shareText=`Join my ${evNameClean} pool on Tuna Golf Pool!
@@ -3892,7 +3905,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={{display:'flex',gap:8,marginBottom:8}}>
               <input style={inp} placeholder="Your Name" value={entryName} disabled={editMode} onChange={e=>setEntryName(e.target.value)}/>
               <div style={{background:T.primary,color:'#faf6ed',minWidth:50,height:44,borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'0 6px'}}>
-                <span style={{fontSize:18,fontWeight:800}}>{totalPicked}</span><span style={{fontSize:9,opacity:.6}}>/{TOTAL_PICKS}</span>
+                <span style={{fontSize:18,fontWeight:800}}>{totalPicked}</span><span style={{fontSize:9,opacity:.6}}>/{TOTAL_PICKS_REQ}</span>
               </div>
             </div>
             {!editMode&&<input style={{...inp,marginBottom:10,width:'100%'}} type="email" placeholder="Your Email (for edit code)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>}
@@ -3922,8 +3935,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <div style={sel?{width:20,height:20,borderRadius:'50%',background:T.primary,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}:{width:20,height:20,borderRadius:'50%',border:`2px solid ${T.inputBorder}`}}>{sel?'✓':''}</div>
                 </button>);})}
             </div>
-            <button type="button" disabled={submitting||totalPicked!==TOTAL_PICKS} style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:10,borderRadius:9,opacity:(submitting||totalPicked!==TOTAL_PICKS)?.4:1}} onClick={submit}>
-              {submitting?(editMode?'Updating...':'Submitting...'):(editMode?'Update Picks ('+totalPicked+'/'+TOTAL_PICKS+')':'Submit Entry ('+totalPicked+'/'+TOTAL_PICKS+')')}
+            <button type="button" disabled={submitting||totalPicked!==TOTAL_PICKS_REQ} style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:10,borderRadius:9,opacity:(submitting||totalPicked!==TOTAL_PICKS_REQ)?.4:1}} onClick={submit}>
+              {submitting?(editMode?'Updating...':'Submitting...'):(editMode?'Update Picks ('+totalPicked+'/'+TOTAL_PICKS_REQ+')':'Submit Entry ('+totalPicked+'/'+TOTAL_PICKS_REQ+')')}
             </button>
           </>)}
 
