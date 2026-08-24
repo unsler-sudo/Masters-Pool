@@ -1,5 +1,5 @@
 'use client';
-// build: st-jude-verified-v213-20260721-1930
+// build: small-field-tiers-v214-20260721-2000
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1553,10 +1553,22 @@ export default function App(){
         // Fixed 12/56 left signature events with a tiny Tier C and full fields with an oversized one.
         // Scale: A=top 12, B≈next 45%, C=rest.
         const fieldSize = sorted.length;
-        const tierAMax = 12; // top 12 favorites always Tier A
-        const tierBMax = fieldSize <= 80
-          ? Math.round(fieldSize * 0.55)   // ~72-player signature: A=12, B→~40, C→~20
-          : Math.min(68, Math.round(fieldSize * 0.52)); // full field: A=12, B→~68, C→rest
+        // FINGERPRINT_V214_SMALL_FIELD_TIERS
+        // Tier A was hardcoded at 12 regardless of field size. In a 30-player Tour Championship
+        // field that left A=12, B=5, C=13 — and since an entry must take 4 from Tier B, there were
+        // only C(5,4)=5 possible B combinations, so every team looked the same. For small fields
+        // split into even thirds instead, giving each tier real depth (30 → 10/10/10, which yields
+        // 45 × 210 × 210 ≈ 2M distinct lineups).
+        let tierAMax, tierBMax;
+        if (fieldSize <= 40) {
+          tierAMax = Math.max(TIER_DEFS[0].picks, Math.round(fieldSize / 3));
+          tierBMax = Math.max(tierAMax + TIER_DEFS[1].picks, Math.round(fieldSize * 2 / 3));
+        } else {
+          tierAMax = 12; // top 12 favorites always Tier A
+          tierBMax = fieldSize <= 80
+            ? Math.round(fieldSize * 0.55)   // ~72-player signature: A=12, B→~40, C→~20
+            : Math.min(68, Math.round(fieldSize * 0.52)); // full field: A=12, B→~68, C→rest
+        }
         // Build enriched player list
         const enriched = sorted.map((p, i) => {
           const name = p.player_name || p.name || '';
