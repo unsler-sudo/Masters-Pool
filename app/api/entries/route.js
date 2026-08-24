@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: chat-seen-receipts-v159-20260721-1700
+// build: bmw-payouts-v160-20260721-1800
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -41,6 +41,16 @@ const SRV_PAYOUT_SIGNATURE_NOCUT = {
 };
 const SRV_NOCUT_KEYS = ['sentry','pebble beach','rbc heritage','truist','travelers','st. jude','st jude','fedex st','bmw championship','tour championship'];
 // FINGERPRINT_V148_SRV_TOURCHAMP — Tour Championship: 30 players, $40M, 25% winner, its own table.
+// FINGERPRINT_V160_SRV_BMW — BMW Championship: $20M, 18% winner, 50-player playoff field.
+const SRV_PAYOUT_BMW = {
+  1:0.18,2:0.108,3:0.068,4:0.0495,5:0.0415,6:0.0375,7:0.03475,8:0.032,9:0.03,10:0.028,
+  11:0.026,12:0.024,13:0.02205,14:0.0201,15:0.0191,16:0.0181,17:0.0171,18:0.0161,19:0.0151,20:0.0141,
+  21:0.0131,22:0.01225,23:0.01145,24:0.01065,25:0.00985,26:0.00905,27:0.0087,28:0.00835,29:0.008,30:0.00765,
+  31:0.0073,32:0.00695,33:0.0066,34:0.00635,35:0.0061,36:0.00585,37:0.0056,38:0.0054,39:0.0052,40:0.005,
+  41:0.0048,42:0.0046,43:0.0044,44:0.0042,45:0.004,46:0.0038,47:0.0036,48:0.0035,49:0.0034,50:0.0033
+};
+function srvIsBMW(eventName){ return (eventName||'').toLowerCase().includes('bmw championship'); }
+
 const SRV_PAYOUT_TOUR_CHAMP = {
   1:0.25,2:0.1088125,3:0.1088125,4:0.06541667,5:0.06541667,6:0.06541667,7:0.02804167,8:0.02804167,9:0.02804167,10:0.017875,
   11:0.017875,12:0.0165,13:0.01425,14:0.01425,15:0.01425,16:0.01425,17:0.0120625,18:0.0120625,19:0.0113125,20:0.0113125,
@@ -109,6 +119,9 @@ function srvComputeEarnings(players, purse, eventName) {
   let table;
   if (useSig && srvIsTourChampionship(eventName)) {
     table = SRV_PAYOUT_TOUR_CHAMP;
+  } else if (useSig && srvIsBMW(eventName)) {
+    // FINGERPRINT_V160_SRV_BMW — 50-player playoff field, distinct from generic no-cut signature.
+    table = SRV_PAYOUT_BMW;
   } else if (useSig) {
     table = srvIsNoCutSignature(eventName) ? SRV_PAYOUT_SIGNATURE_NOCUT : SRV_PAYOUT_SIGNATURE;
   } else if (srvIsScottishOpen(eventName)) {
