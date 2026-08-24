@@ -1,5 +1,5 @@
 'use client';
-// build: bmw-payouts-v210-20260721-1800
+// build: st-jude-verified-v213-20260721-1930
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -624,6 +624,38 @@ const PAYOUT_SIGNATURE = {
 // wrong at 47 of 50 positions. Exact per-position percentages from the official 2026 breakdown;
 // all 50 round-trip to the official dollar at $20M and tie-averaging reproduces the published
 // tie columns. Routed by event name below.
+// FINGERPRINT_V212_ST_JUDE
+// FedEx St. Jude Championship — playoff event #1. $20M purse, 18% winner ($3.6M), ~70-player
+// no-cut field. Needs its own table for the same reason BMW does: the generic no-cut signature
+// curve spreads $20M across ~72 positions and misprices a playoff field. Exact per-position
+// percentages from the official 2026 breakdown; all 68 published positions round-trip to the
+// official dollar at $20M. Positions 69-70 continue the tail's -$400/place step (projected — the
+// source list stops at 68 because two players withdrew).
+// VERIFIED against the official per-player results: every solo position and all 16 tie columns
+// (T3 through T63) reproduce exactly by averaging this ladder — including T7 $582,800, T12
+// $369,571, T19 $243,200, T24 $162,500 and T34 $103,700. The listed positions sum to $19,959,000;
+// the $41,000 remainder is WD money outside the finishing ladder and doesn't affect scoring.
+const PAYOUT_ST_JUDE = {
+  1:0.18000000,2:0.10800000,3:0.06800000,4:0.04800000,5:0.04000000,
+  6:0.03600000,7:0.03350000,8:0.03105000,9:0.02905000,10:0.02705000,
+  11:0.02505000,12:0.02305000,13:0.02105000,14:0.01905000,15:0.01805000,
+  16:0.01705000,17:0.01605000,18:0.01505000,19:0.01405000,20:0.01305000,
+  21:0.01205000,22:0.01122500,23:0.01042500,24:0.00962500,25:0.00882500,
+  26:0.00802500,27:0.00772500,28:0.00742500,29:0.00712500,30:0.00682500,
+  31:0.00652500,32:0.00622500,33:0.00592500,34:0.00567500,35:0.00542500,
+  36:0.00517500,37:0.00492500,38:0.00472500,39:0.00452500,40:0.00432500,
+  41:0.00412500,42:0.00392500,43:0.00372500,44:0.00352500,45:0.00332500,
+  46:0.00312500,47:0.00292500,48:0.00276500,49:0.00262500,50:0.00255000,
+  51:0.00249000,52:0.00243000,53:0.00239000,54:0.00235000,55:0.00233000,
+  56:0.00231000,57:0.00229000,58:0.00227000,59:0.00225000,60:0.00223000,
+  61:0.00221000,62:0.00219000,63:0.00217000,64:0.00215000,65:0.00213000,
+  66:0.00211000,67:0.00209000,68:0.00207000,69:0.00205000,70:0.00203000,
+};
+const isStJude = (eventName) => {
+  const n = (eventName||'').toLowerCase();
+  return n.includes('st. jude') || n.includes('st jude');
+};
+
 const PAYOUT_BMW = {
   1:0.18000000,2:0.10800000,3:0.06800000,4:0.04950000,5:0.04150000,
   6:0.03750000,7:0.03475000,8:0.03200000,9:0.03000000,10:0.02800000,
@@ -660,13 +692,18 @@ const PAYOUT_SIGNATURE_NOCUT = {
 // Tour Championship — unique 30-player, no-cut, $40M finale. Winner takes 25% ($10M); the whole
 // purse is paid out as position money (sums to 100%). Exact per-position percentages from the
 // official 2025 payouts (same $40M structure). Its own table — NOT the 18% no-cut signature curve.
+// FINGERPRINT_V211_TOUR_CHAMP_EXACT
+// TOUR Championship — $40M purse, 30-player field, winner $10,000,000 (25%). Exact per-position
+// percentages from the official breakdown; all 30 round-trip to the official dollar and the list
+// sums to exactly $40M. Replaces the earlier grouped approximation (which had 2nd/3rd identical,
+// 4th-6th identical, etc. — an artifact of a past year's tie structure, wrong as a ladder).
 const PAYOUT_TOUR_CHAMP = {
-  1:0.25000000,2:0.10881250,3:0.10881250,4:0.06541667,5:0.06541667,
-  6:0.06541667,7:0.02804167,8:0.02804167,9:0.02804167,10:0.01787500,
-  11:0.01787500,12:0.01650000,13:0.01425000,14:0.01425000,15:0.01425000,
-  16:0.01425000,17:0.01206250,18:0.01206250,19:0.01131250,20:0.01131250,
-  21:0.01056250,22:0.01056250,23:0.00987500,24:0.00987500,25:0.00943750,
-  26:0.00943750,27:0.00918750,28:0.00918750,29:0.00900000,30:0.00887500,
+  1:0.25000000,2:0.12500000,3:0.09262500,4:0.08000000,5:0.06875000,
+  6:0.04750000,7:0.03500000,8:0.02662500,9:0.02250000,10:0.01837500,
+  11:0.01737500,12:0.01650000,13:0.01562500,14:0.01475000,15:0.01400000,
+  16:0.01262500,17:0.01225000,18:0.01187500,19:0.01150000,20:0.01112500,
+  21:0.01075000,22:0.01037500,23:0.01000000,24:0.00975000,25:0.00950000,
+  26:0.00937500,27:0.00925000,28:0.00912500,29:0.00900000,30:0.00887500,
 };
 
 // FINGERPRINT_V189_SCOTTISH_OPEN
@@ -887,6 +924,9 @@ function calcEarnings(players, purse, major, tournamentComplete, signatureEventN
     } else if (isBMW(signatureEventName)) {
       // FINGERPRINT_V210_BMW — 50-player playoff field: same 18% winner, different spread.
       payoutTable = PAYOUT_BMW;
+    } else if (isStJude(signatureEventName)) {
+      // FINGERPRINT_V212_ST_JUDE — 70-player playoff field, own distribution.
+      payoutTable = PAYOUT_ST_JUDE;
     } else {
       // FINGERPRINT_V175_SIGNATURE_NOCUT — no-cut signature events (Sentry, Travelers, etc.) pay all
       // with an 18% winner share; cut signature events (Memorial etc.) use the 20% top-heavy curve.
