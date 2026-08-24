@@ -1,5 +1,5 @@
 'use client';
-// build: chat-seen-receipts-v209-20260721-1700
+// build: bmw-payouts-v210-20260721-1800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -617,6 +617,27 @@ const PAYOUT_SIGNATURE = {
 // share (vs the cut signature events like Memorial which pay 20% to a smaller paid field). Exact
 // per-position percentages derived from the official 2026 Travelers payouts (purse $20M, winner
 // $3.6M = 18%). Sums to 100% since every position is paid. Tie-averaging handles ties.
+// FINGERPRINT_V210_BMW
+// BMW Championship — FedEx Cup playoff event #2. $20M purse, 18% winner ($3.6M), but only a
+// 50-PLAYER field, so the money concentrates differently than a normal no-cut signature event
+// (which spreads the same purse across ~72 positions). Using the generic no-cut table here was
+// wrong at 47 of 50 positions. Exact per-position percentages from the official 2026 breakdown;
+// all 50 round-trip to the official dollar at $20M and tie-averaging reproduces the published
+// tie columns. Routed by event name below.
+const PAYOUT_BMW = {
+  1:0.18000000,2:0.10800000,3:0.06800000,4:0.04950000,5:0.04150000,
+  6:0.03750000,7:0.03475000,8:0.03200000,9:0.03000000,10:0.02800000,
+  11:0.02600000,12:0.02400000,13:0.02205000,14:0.02010000,15:0.01910000,
+  16:0.01810000,17:0.01710000,18:0.01610000,19:0.01510000,20:0.01410000,
+  21:0.01310000,22:0.01225000,23:0.01145000,24:0.01065000,25:0.00985000,
+  26:0.00905000,27:0.00870000,28:0.00835000,29:0.00800000,30:0.00765000,
+  31:0.00730000,32:0.00695000,33:0.00660000,34:0.00635000,35:0.00610000,
+  36:0.00585000,37:0.00560000,38:0.00540000,39:0.00520000,40:0.00500000,
+  41:0.00480000,42:0.00460000,43:0.00440000,44:0.00420000,45:0.00400000,
+  46:0.00380000,47:0.00360000,48:0.00350000,49:0.00340000,50:0.00330000,
+};
+const isBMW = (eventName) => (eventName||'').toLowerCase().includes('bmw championship');
+
 const PAYOUT_SIGNATURE_NOCUT = {
   1:0.18000000,2:0.10800000,3:0.06800000,4:0.04800000,5:0.04000000,
   6:0.03600000,7:0.03350000,8:0.03100000,9:0.02900000,10:0.02700000,
@@ -863,6 +884,9 @@ function calcEarnings(players, purse, major, tournamentComplete, signatureEventN
     // FINGERPRINT_V178_TOUR_CHAMP — Tour Championship first (its own 25% table), then no-cut vs cut.
     if (isTourChampionship(signatureEventName)) {
       payoutTable = PAYOUT_TOUR_CHAMP;
+    } else if (isBMW(signatureEventName)) {
+      // FINGERPRINT_V210_BMW — 50-player playoff field: same 18% winner, different spread.
+      payoutTable = PAYOUT_BMW;
     } else {
       // FINGERPRINT_V175_SIGNATURE_NOCUT — no-cut signature events (Sentry, Travelers, etc.) pay all
       // with an 18% winner share; cut signature events (Memorial etc.) use the 20% top-heavy curve.
