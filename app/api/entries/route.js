@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: bmw-payouts-v160-20260721-1800
+// build: st-jude-payouts-v162-20260721-1900
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -41,6 +41,18 @@ const SRV_PAYOUT_SIGNATURE_NOCUT = {
 };
 const SRV_NOCUT_KEYS = ['sentry','pebble beach','rbc heritage','truist','travelers','st. jude','st jude','fedex st','bmw championship','tour championship'];
 // FINGERPRINT_V148_SRV_TOURCHAMP — Tour Championship: 30 players, $40M, 25% winner, its own table.
+// FINGERPRINT_V162_SRV_ST_JUDE — FedEx St. Jude: $20M, 18% winner, ~70-player playoff field.
+const SRV_PAYOUT_ST_JUDE = {
+  1:0.18,2:0.108,3:0.068,4:0.048,5:0.04,6:0.036,7:0.0335,8:0.03105,9:0.02905,10:0.02705,
+  11:0.02505,12:0.02305,13:0.02105,14:0.01905,15:0.01805,16:0.01705,17:0.01605,18:0.01505,19:0.01405,20:0.01305,
+  21:0.01205,22:0.011225,23:0.010425,24:0.009625,25:0.008825,26:0.008025,27:0.007725,28:0.007425,29:0.007125,30:0.006825,
+  31:0.006525,32:0.006225,33:0.005925,34:0.005675,35:0.005425,36:0.005175,37:0.004925,38:0.004725,39:0.004525,40:0.004325,
+  41:0.004125,42:0.003925,43:0.003725,44:0.003525,45:0.003325,46:0.003125,47:0.002925,48:0.002765,49:0.002625,50:0.00255,
+  51:0.00249,52:0.00243,53:0.00239,54:0.00235,55:0.00233,56:0.00231,57:0.00229,58:0.00227,59:0.00225,60:0.00223,
+  61:0.00221,62:0.00219,63:0.00217,64:0.00215,65:0.00213,66:0.00211,67:0.00209,68:0.00207,69:0.00205,70:0.00203
+};
+function srvIsStJude(eventName){ const n=(eventName||'').toLowerCase(); return n.includes('st. jude')||n.includes('st jude'); }
+
 // FINGERPRINT_V160_SRV_BMW — BMW Championship: $20M, 18% winner, 50-player playoff field.
 const SRV_PAYOUT_BMW = {
   1:0.18,2:0.108,3:0.068,4:0.0495,5:0.0415,6:0.0375,7:0.03475,8:0.032,9:0.03,10:0.028,
@@ -51,10 +63,11 @@ const SRV_PAYOUT_BMW = {
 };
 function srvIsBMW(eventName){ return (eventName||'').toLowerCase().includes('bmw championship'); }
 
+// FINGERPRINT_V161_SRV_TOUR_CHAMP_EXACT — $40M, 30 players, winner $10M (25%). Exact ladder.
 const SRV_PAYOUT_TOUR_CHAMP = {
-  1:0.25,2:0.1088125,3:0.1088125,4:0.06541667,5:0.06541667,6:0.06541667,7:0.02804167,8:0.02804167,9:0.02804167,10:0.017875,
-  11:0.017875,12:0.0165,13:0.01425,14:0.01425,15:0.01425,16:0.01425,17:0.0120625,18:0.0120625,19:0.0113125,20:0.0113125,
-  21:0.0105625,22:0.0105625,23:0.009875,24:0.009875,25:0.0094375,26:0.0094375,27:0.0091875,28:0.0091875,29:0.009,30:0.008875
+  1:0.25,2:0.125,3:0.092625,4:0.08,5:0.06875,6:0.0475,7:0.035,8:0.026625,9:0.0225,10:0.018375,
+  11:0.017375,12:0.0165,13:0.015625,14:0.01475,15:0.014,16:0.012625,17:0.01225,18:0.011875,19:0.0115,20:0.011125,
+  21:0.01075,22:0.010375,23:0.01,24:0.00975,25:0.0095,26:0.009375,27:0.00925,28:0.009125,29:0.009,30:0.008875
 };
 function srvIsTourChampionship(eventName){ return (eventName||'').toLowerCase().includes('tour championship'); }
 // FINGERPRINT_V152_SRV_SCOTTISH — Genesis Scottish Open (co-sanctioned): $9M, 17.5% winner, pays to 90.
@@ -122,6 +135,9 @@ function srvComputeEarnings(players, purse, eventName) {
   } else if (useSig && srvIsBMW(eventName)) {
     // FINGERPRINT_V160_SRV_BMW — 50-player playoff field, distinct from generic no-cut signature.
     table = SRV_PAYOUT_BMW;
+  } else if (useSig && srvIsStJude(eventName)) {
+    // FINGERPRINT_V162_SRV_ST_JUDE — 70-player playoff field, own distribution.
+    table = SRV_PAYOUT_ST_JUDE;
   } else if (useSig) {
     table = srvIsNoCutSignature(eventName) ? SRV_PAYOUT_SIGNATURE_NOCUT : SRV_PAYOUT_SIGNATURE;
   } else if (srvIsScottishOpen(eventName)) {
