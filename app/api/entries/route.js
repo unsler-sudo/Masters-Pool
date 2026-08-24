@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: st-jude-payouts-v162-20260721-1900
+// build: tc-six-picks-v163-20260721-2030
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -62,6 +62,21 @@ const SRV_PAYOUT_BMW = {
   41:0.0048,42:0.0046,43:0.0044,44:0.0042,45:0.004,46:0.0038,47:0.0036,48:0.0035,49:0.0034,50:0.0033
 };
 function srvIsBMW(eventName){ return (eventName||'').toLowerCase().includes('bmw championship'); }
+
+// FINGERPRINT_V163_TC_SIX_PICKS
+// Required entry size depends on the event: the TOUR Championship is a 30-player field, so it uses
+// 2/2/2 = 6 picks; everything else uses the standard 2/4/4 = 10. Mirrors the frontend's TIERS.
+async function srvRequiredPicks(poolId) {
+  try {
+    const raw = await redis('GET', k(poolId, 'meta'));
+    if (!raw) return 10;
+    const meta = JSON.parse(raw);
+    const evName = meta.major === 'pgatour'
+      ? (meta.currentPgatourEvent || '')
+      : (meta.major === 'tourchamp' ? 'tour championship' : '');
+    return srvIsTourChampionship(evName) ? 6 : 10;
+  } catch { return 10; }
+}
 
 // FINGERPRINT_V161_SRV_TOUR_CHAMP_EXACT — $40M, 30 players, winner $10M (25%). Exact ladder.
 const SRV_PAYOUT_TOUR_CHAMP = {
@@ -835,7 +850,8 @@ export async function POST(request) {
       if (!name?.trim()) return Response.json({ error:'Name required' }, { status:400 });
       if (!email?.trim()) return Response.json({ error:'Email required' }, { status:400 });
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return Response.json({ error:'Invalid email' }, { status:400 });
-      if (!picks || picks.length !== 10) return Response.json({ error:'10 picks required' }, { status:400 });
+      const reqPicks = await srvRequiredPicks(poolId);
+      if (!picks || picks.length !== reqPicks) return Response.json({ error:`${reqPicks} picks required` }, { status:400 });
       const entries = await getEntries(poolId);
       if (entries.find(e=>e.name.toLowerCase()===name.trim().toLowerCase()))
         return Response.json({ error:'Name already taken!' }, { status:409 });
@@ -910,7 +926,8 @@ export async function POST(request) {
       if (locked) return Response.json({ error:'Entries are locked' }, { status:403 });
       const { name, code, picks } = body;
       if (!name || !code) return Response.json({ error:'Name and code required' }, { status:400 });
-      if (!picks || picks.length !== 10) return Response.json({ error:'10 picks required' }, { status:400 });
+      const reqPicks = await srvRequiredPicks(poolId);
+      if (!picks || picks.length !== reqPicks) return Response.json({ error:`${reqPicks} picks required` }, { status:400 });
       const entries = await getEntries(poolId);
       const idx = entries.findIndex(e =>
         e.name.toLowerCase() === name.toLowerCase() &&
