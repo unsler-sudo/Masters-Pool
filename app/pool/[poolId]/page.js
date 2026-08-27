@@ -1,5 +1,5 @@
 'use client';
-// build: tc-six-picks-v215-20260721-2030
+// build: tier-color-clash-v216-20260721-2100
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1166,8 +1166,27 @@ export default function App(){
     ? (poolMeta?.currentPgatourEvent || T.eventName || '')
     : (T.eventName || '');
   const isTourChampPool = isTourChampionship(tcEventName);
+  // FINGERPRINT_V216_TIER_COLOR_CLASH
+  // Group B normally borrows the theme's primary so it feels event-branded. But a gold-primary
+  // theme (Tour Championship = #cba135) sits right on top of Group A's gold (#b8960c), making the
+  // two groups indistinguishable. Only adopt the theme color when it's far enough from Group A;
+  // otherwise fall back to Group B's own navy.
+  const hexRGB = (h) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(h||''));
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return [(n>>16)&255, (n>>8)&255, n&255];
+  };
+  const colorGap = (a, b) => {
+    const x = hexRGB(a), y = hexRGB(b);
+    if (!x || !y) return 999; // unknown format → assume distinct, keep existing behaviour
+    return Math.sqrt((x[0]-y[0])**2 + (x[1]-y[1])**2 + (x[2]-y[2])**2);
+  };
+  const groupBColor = colorGap(T.primary, TIER_DEFS[0].color) >= 100
+    ? T.primary
+    : TIER_DEFS[1].color;
   const TIERS = TIER_DEFS.map(t => {
-    const base = t.id === 2 ? {...t, color: T.primary} : {...t};
+    const base = t.id === 2 ? {...t, color: groupBColor} : {...t};
     if (isTourChampPool) base.picks = 2;
     return base;
   });
