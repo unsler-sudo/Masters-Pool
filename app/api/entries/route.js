@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dpworld-setmajor-fix-v167-20260831-1730
+// build: dpworld-rotation-fix-v168-20260831-1900
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -362,7 +362,7 @@ async function autoManage(poolId) {
           `https://feeds.datagolf.com/get-schedule?tour=${srvTour(tourKey)}&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
           { cache:'no-store', signal: AbortSignal.timeout(5000) }
         );
-        if (!schedRes.ok) return 'pgatour';
+        if (!schedRes.ok) return tourKey;
         const schedData = await schedRes.json();
         const events = (schedData.schedule || schedData.events || []).filter(e => e.start_date);
 
@@ -372,7 +372,7 @@ async function autoManage(poolId) {
           `https://feeds.datagolf.com/preds/pre-tournament?tour=${srvTour(tourKey)}&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
           { cache:'no-store', signal: AbortSignal.timeout(5000) }
         );
-        if (!ptRes.ok) return 'pgatour';
+        if (!ptRes.ok) return tourKey;
         const ptData = await ptRes.json();
         const dgCurrentEventName = (ptData.event_name || '').toLowerCase();
 
@@ -383,7 +383,7 @@ async function autoManage(poolId) {
         if (!poolEventName && dgCurrentEventName) {
           meta.currentPgatourEvent = ptData.event_name;
           await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
-          return 'pgatour';
+          return tourKey;
         }
 
         // If DataGolf's current event ≠ pool's locked-in event, time to rotate
@@ -504,7 +504,7 @@ async function autoManage(poolId) {
             }
 
             await redis('SET', archiveKey, JSON.stringify({
-              major: 'pgatour', eventName: meta.currentPgatourEvent, year,
+              major: tourKey, eventName: meta.currentPgatourEvent, year,
               archivedAt: new Date().toISOString(),
               entries, payments, earnings: earningsByPick,
               entryFee: fee,
@@ -562,7 +562,7 @@ async function autoManage(poolId) {
       } catch (e) {
         console.warn('[autoManage] pgatour rotation error:', e.message);
       }
-      return 'pgatour';
+      return tourKey;
     }
 
     const MAJOR_SCHEDULE = await getMajorSchedule();
@@ -1431,7 +1431,7 @@ export async function POST(request) {
         }
 
         await redis('SET', archiveKey, JSON.stringify({
-          major: 'pgatour', eventName: meta.currentPgatourEvent, year,
+          major: meta.major, eventName: meta.currentPgatourEvent, year,
           archivedAt: new Date().toISOString(),
           entries, payments, earnings: earningsByPick, entryFee: fee,
           prizes: prizes || null, logoUrl, logoNoBg, logoHeight,
