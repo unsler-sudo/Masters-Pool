@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dpworld-mode-v165-20260831-1500
+// build: dpworld-copy-v166-20260831-1600
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -653,6 +653,7 @@ async function autoManage(poolId) {
         const MAJOR_NAMES = {
           players:'The Players Championship', masters:'The Masters',
           pga:'PGA Championship', usopen:'U.S. Open', open:'The Open Championship',
+          pgatour:'the current PGA Tour event', dpworld:'the current DP World Tour event',
         };
         const nextMajorName = MAJOR_NAMES[nextKey] || nextKey;
         const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
