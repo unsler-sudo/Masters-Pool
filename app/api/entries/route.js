@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: tc-six-picks-v163-20260721-2030
+// build: dpworld-payouts-v164-20260831-1300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -41,6 +41,18 @@ const SRV_PAYOUT_SIGNATURE_NOCUT = {
 };
 const SRV_NOCUT_KEYS = ['sentry','pebble beach','rbc heritage','truist','travelers','st. jude','st jude','fedex st','bmw championship','tour championship'];
 // FINGERPRINT_V148_SRV_TOURCHAMP — Tour Championship: 30 players, $40M, 25% winner, its own table.
+// FINGERPRINT_V164_SRV_DPWORLD — DP World Tour: fixed 17%-winner ladder, 69 positions, scales to
+// any purse. Verified vs 2026 Omega European Masters ($3.75M). USD.
+const SRV_PAYOUT_DPWORLD = {
+  1:0.17,2:0.11,3:0.0626,4:0.05,5:0.0424,6:0.035,7:0.03,8:0.025,9:0.0224,10:0.02,
+  11:0.0184,12:0.0172,13:0.0161,14:0.0153,15:0.0147,16:0.0141,17:0.0135,18:0.0129,19:0.0124,20:0.012,
+  21:0.0116,22:0.0113,23:0.011,24:0.0107,25:0.0104,26:0.0101,27:0.0098,28:0.0095,29:0.0092,30:0.0089,
+  31:0.0086,32:0.0083,33:0.008,34:0.0077,35:0.0074,36:0.0071,37:0.0069,38:0.0067,39:0.0065,40:0.0063,
+  41:0.0061,42:0.0059,43:0.0057,44:0.0055,45:0.0053,46:0.0051,47:0.0049,48:0.0047,49:0.0045,50:0.0043,
+  51:0.0041,52:0.0039,53:0.0037,54:0.0035,55:0.0034,56:0.0033,57:0.0032,58:0.0031,59:0.003,60:0.0029,
+  61:0.0028,62:0.0027,63:0.0026,64:0.0025,65:0.0024,66:0.0023,67:0.0022,68:0.0021,69:0.002
+};
+
 // FINGERPRINT_V162_SRV_ST_JUDE — FedEx St. Jude: $20M, 18% winner, ~70-player playoff field.
 const SRV_PAYOUT_ST_JUDE = {
   1:0.18,2:0.108,3:0.068,4:0.048,5:0.04,6:0.036,7:0.0335,8:0.03105,9:0.02905,10:0.02705,
