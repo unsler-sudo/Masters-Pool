@@ -1,5 +1,5 @@
 'use client';
-// build: tier-color-clash-v216-20260721-2100
+// build: dpworld-payouts-v217-20260831-1300
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -635,6 +635,29 @@ const PAYOUT_SIGNATURE = {
 // (T3 through T63) reproduce exactly by averaging this ladder — including T7 $582,800, T12
 // $369,571, T19 $243,200, T24 $162,500 and T34 $103,700. The listed positions sum to $19,959,000;
 // the $41,000 remainder is WD money outside the finishing ladder and doesn't affect scoring.
+// FINGERPRINT_V217_DPWORLD
+// DP World Tour standard payout distribution — 17% to the winner, paying 69 positions. Verified
+// against the 2026 Omega European Masters ($3,750,000 purse): all 69 positions round-trip to the
+// official dollar. The percentages are clean round numbers, which means the DP World Tour uses a
+// FIXED percentage ladder — so this one table scales to any DP World purse (regular ~$3M events
+// through $9M Rolex Series) just by setting the purse in admin. Money is displayed in USD.
+const PAYOUT_DPWORLD = {
+  1:0.17000000,2:0.11000000,3:0.06260000,4:0.05000000,5:0.04240000,
+  6:0.03500000,7:0.03000000,8:0.02500000,9:0.02240000,10:0.02000000,
+  11:0.01840000,12:0.01720000,13:0.01610000,14:0.01530000,15:0.01470000,
+  16:0.01410000,17:0.01350000,18:0.01290000,19:0.01240000,20:0.01200000,
+  21:0.01160000,22:0.01130000,23:0.01100000,24:0.01070000,25:0.01040000,
+  26:0.01010000,27:0.00980000,28:0.00950000,29:0.00920000,30:0.00890000,
+  31:0.00860000,32:0.00830000,33:0.00800000,34:0.00770000,35:0.00740000,
+  36:0.00710000,37:0.00690000,38:0.00670000,39:0.00650000,40:0.00630000,
+  41:0.00610000,42:0.00590000,43:0.00570000,44:0.00550000,45:0.00530000,
+  46:0.00510000,47:0.00490000,48:0.00470000,49:0.00450000,50:0.00430000,
+  51:0.00410000,52:0.00390000,53:0.00370000,54:0.00350000,55:0.00340000,
+  56:0.00330000,57:0.00320000,58:0.00310000,59:0.00300000,60:0.00290000,
+  61:0.00280000,62:0.00270000,63:0.00260000,64:0.00250000,65:0.00240000,
+  66:0.00230000,67:0.00220000,68:0.00210000,69:0.00200000,
+};
+
 const PAYOUT_ST_JUDE = {
   1:0.18000000,2:0.10800000,3:0.06800000,4:0.04800000,5:0.04000000,
   6:0.03600000,7:0.03350000,8:0.03105000,9:0.02905000,10:0.02705000,
