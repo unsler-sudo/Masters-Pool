@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dpworld-copy-v166-20260831-1600
+// build: dpworld-setmajor-fix-v167-20260831-1730
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1749,8 +1749,9 @@ export async function POST(request) {
 
     if (body.action==='set-major') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
-      const validMajors = ['players','masters','pga','usopen','open','pgatour'];
-      if (!validMajors.includes(body.major)) {
+      // FINGERPRINT_V167_DPWORLD_SETMAJOR — use the shared VALID_MAJORS; a local duplicate list
+      // here silently rejected 'dpworld' even though the rest of the app supported it.
+      if (!VALID_MAJORS.includes(body.major)) {
         return Response.json({ error:'Invalid major' }, { status:400 });
       }
       // Switch the pool's active major and reset entries
