@@ -1,5 +1,5 @@
 'use client';
-// build: dpworld-payouts-v217-20260831-1300
+// build: dpworld-mode-v218-20260831-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -75,6 +75,19 @@ const THEMES = {
   // ─── PGA TOUR MODE — generic theme for any current PGA Tour event ────────────
   // Activated via admin toggle. Pulls current event name/course from DataGolf live model.
   // Pool admins use this to run their pool on whichever PGA Tour event is happening this week.
+  dpworld: {
+    emoji:'🌍', tagline:'DP World Tour Event',
+    logoUrl:null,
+    logoNoBg:true,
+    logoHeight:90,
+    eventName:'DP World Tour Event', courseName:'Current DP World Tour event',
+    teeTime:null, purse:3750000,
+    primary:'#0b3b5c', dark:'#0f4a72', mid:'#1a6091', accent:'#d4a017', accentLight:'#fdf6e3',
+    navBg:'#fff', navActive:'#e3eef5', navBorder:'#0b3b5c',
+    headerBg:'linear-gradient(170deg,#0f4a72 0%,#1a6091 35%,#2478ad 65%,#3a94cc 100%)',
+    bg:'linear-gradient(180deg,#bfd4e2 0%,#e3eef5 300px)',
+    bodyBg:'#e3eef5', cardBorder:'#bfd4e2', inputBorder:'#a8c0d2', stripeBg:'#eef5fa', rowHl:'#d2e3ee',
+  },
   pgatour: {
     emoji:'🏌️', tagline:'PGA Tour Event',
     logoUrl:'/logos/pga-tour.svg',
@@ -378,6 +391,18 @@ const PGATOUR_EVENT_THEMES = {
 };
 
 const DG_EVENT_IDS = { 11:'players', 14:'masters', 33:'pga', 26:'usopen', 100:'open' };
+
+// FINGERPRINT_V218_DPWORLD_MODE
+// "Tour mode" = a rolling weekly pool that follows whatever event a tour is playing, as opposed to
+// the fixed major pools. Both PGA Tour and DP World Tour work this way and share ONE code path —
+// the field build, gate chain (v182 name gate, v183 venue TZ, v188 name-gate-primary), merge,
+// holdover and rotation are all identical; only the DataGolf `tour` parameter differs. Keeping a
+// single path means every future gate fix benefits both tours instead of drifting apart.
+const TOUR_OF = { pgatour: 'pga', dpworld: 'euro' };
+const isTourMode = (m) => m === 'pgatour' || m === 'dpworld';
+const tourParam = (m) => TOUR_OF[m] || 'pga'; // majors ride the PGA feeds
+const tourQS = (m) => `&tour=${tourParam(m)}`;
+const isDPWorld = (m) => m === 'dpworld';
 
 const TIER_DEFS = [
   { id:1, name:'Favorites',  label:'Group A — Favorites',  color:'#b8960c', picks:2 },
@@ -940,7 +965,10 @@ function calcEarnings(players, purse, major, tournamentComplete, signatureEventN
   // FINGERPRINT_V119_SIGNATURE_SELECT
   // For pgatour signature events, use the top-heavy signature payout curve (winner 20%, etc.).
   let payoutTable = (major && PAYOUT_BY_MAJOR[major]) || PAYOUT;
-  if (major === 'pgatour' && isSignatureEvent(signatureEventName, purse)) {
+  if (isDPWorld(major)) {
+    // FINGERPRINT_V218_DPWORLD — fixed 17%-winner ladder, scales to any DP World purse.
+    payoutTable = PAYOUT_DPWORLD;
+  } else if (major === 'pgatour' && isSignatureEvent(signatureEventName, purse)) {
     // FINGERPRINT_V178_TOUR_CHAMP — Tour Championship first (its own 25% table), then no-cut vs cut.
     if (isTourChampionship(signatureEventName)) {
       payoutTable = PAYOUT_TOUR_CHAMP;
@@ -1154,7 +1182,7 @@ export default function App(){
   const baseTheme = THEMES[activeMajor] || THEMES.pga;
   const scheduleOverrides = scheduleData[activeMajor] || {};
   let eventOverrides = {};
-  if (activeMajor === 'pgatour' && scheduleOverrides.eventName) {
+  if (isTourMode(activeMajor) && scheduleOverrides.eventName) {
     // FINGERPRINT_V112_THEME_MATCH
     // scheduleOverrides.eventName may include a trailing year ("... Workday 2026") and casing.
     // Theme keys are lowercase with no year. Try exact, then year-stripped, then contains-match.
@@ -1175,8 +1203,8 @@ export default function App(){
   // - majors in 2027+: hardcoded teeTime is 2026 → "tournament is over" → blocks legitimate entries
   const hardcodedDate = new Date(baseTheme.teeTime || 0);
   const hardcodedTooOld = baseTheme.teeTime && (Date.now() - hardcodedDate.getTime() > 60 * 24 * 60 * 60 * 1000); // 60 days past
-  const scheduleNotReady = (activeMajor === 'pgatour' && !T.teeTime)
-    || (activeMajor !== 'pgatour' && hardcodedTooOld && !scheduleOverrides.eventName);
+  const scheduleNotReady = (isTourMode(activeMajor) && !T.teeTime)
+    || (!isTourMode(activeMajor) && hardcodedTooOld && !scheduleOverrides.eventName);
   const TEE_TIME = new Date(T.teeTime).getTime();
   const TOURNAMENT_END = TEE_TIME + 6 * 24 * 60 * 60 * 1000; // 6 days after tee-off
   const effectivePurse = (dynamicPurses && dynamicPurses[activeMajor]) || T.purse;
@@ -1185,7 +1213,7 @@ export default function App(){
   // The TOUR Championship is a 30-player field, so a 10-pick entry would take a third of it and
   // every team would look alike. Drop to 2/2/2 = 6 picks for that event only; every other event
   // keeps the standard 2/4/4 = 10.
-  const tcEventName = activeMajor === 'pgatour'
+  const tcEventName = isTourMode(activeMajor)
     ? (poolMeta?.currentPgatourEvent || T.eventName || '')
     : (T.eventName || '');
   const isTourChampPool = isTourChampionship(tcEventName);
@@ -1228,7 +1256,7 @@ export default function App(){
   const teeSane = realEarliestTee > 0 && Math.abs(realEarliestTee - TEE_TIME) < 3 * 24 * 60 * 60 * 1000;
   const effectiveTeeStart = teeSane ? realEarliestTee : TEE_TIME;
   const pastTeeTime = now >= effectiveTeeStart && now <= TOURNAMENT_END;
-  const isLive = pastTeeTime || activeMajor === 'pgatour'; // pgatour mode always shows live data
+  const isLive = pastTeeTime || isTourMode(activeMajor); // pgatour mode always shows live data
   const locked = serverLocked || pastTeeTime;
   const picksHidden = serverPicksHidden && !pastTeeTime;
 
@@ -1298,7 +1326,7 @@ export default function App(){
     let events = [];
     try{
       const year = new Date().getFullYear();
-      const res = await fetch(`/api/scores?endpoint=schedule&season=${year}`);
+      const res = await fetch(`/api/scores?endpoint=schedule&season=${year}${tourQS(curMajor)}`);
       if(res.ok){
         const data = await res.json();
         events = data.schedule || data.events || data || [];
@@ -1344,9 +1372,9 @@ export default function App(){
     // the mount-time closure / interval callbacks). This is why pgatour schedule never loaded
     // without tapping "Try Again": the closure's activeMajor was 'pga' from first mount.
     const curMajor = activeMajorRef.current || activeMajor;
-    if(curMajor === 'pgatour'){
+    if(isTourMode(curMajor)){
         try {
-          const ptRes = await fetch(`/api/scores?endpoint=pre-tournament`);
+          const ptRes = await fetch(`/api/scores?endpoint=pre-tournament${tourQS(curMajor)}`);
           if(ptRes.ok){
             const ptData = await ptRes.json();
             const eventName = ptData.event_name || ptData.name || 'PGA Tour Event';
@@ -1464,8 +1492,8 @@ export default function App(){
     }
     try{
       // ─── PGA TOUR MODE — bypass scraper, fetch field from DataGolf directly ─
-      if(major === 'pgatour'){
-        const ptRes = await fetch('/api/scores?endpoint=pre-tournament');
+      if(isTourMode(major)){
+        const ptRes = await fetch(`/api/scores?endpoint=pre-tournament${tourQS(major)}`);
         if(!ptRes.ok) return;
         const ptData = await ptRes.json();
 
@@ -1481,7 +1509,7 @@ export default function App(){
         const ptFlipped = poolEvName && !inPlayMatchesEvent({ event_name: ptData.event_name }, poolEvName);
         if (ptFlipped) {
           try {
-            const liveRes = await fetch('/api/scores?endpoint=in-play');
+            const liveRes = await fetch(`/api/scores?endpoint=in-play${tourQS(major)}`);
             if (liveRes.ok) {
               const liveData = await liveRes.json();
               const liveRaw = liveData.data || liveData.players || [];
@@ -1527,7 +1555,7 @@ export default function App(){
         if (venueLat == null || venueLng == null) {
           try {
             const year = new Date().getFullYear();
-            const schedRes = await fetch(`/api/scores?endpoint=schedule&season=${year}`);
+            const schedRes = await fetch(`/api/scores?endpoint=schedule&season=${year}${tourQS(major)}`);
             if (schedRes.ok) {
               const schedData = await schedRes.json();
               const events = schedData.schedule || schedData.events || [];
@@ -1547,7 +1575,7 @@ export default function App(){
         let fuRawPlayers = []; // raw field-updates roster — authoritative for late substitutions
         let fuEventName = '';
         try {
-          const fuRes = await fetch('/api/scores?endpoint=field-updates');
+          const fuRes = await fetch(`/api/scores?endpoint=field-updates${tourQS(major)}`);
           if(fuRes.ok){
             const fd = await fuRes.json();
             const fieldPlayers = fd.field || fd.players || [];
@@ -1769,15 +1797,15 @@ export default function App(){
           let toPaint = enriched;
           let mergedLive = false;
           try {
-            const liveRes = await fetch('/api/scores?endpoint=in-play');
+            const liveRes = await fetch(`/api/scores?endpoint=in-play${tourQS(major)}`);
             if(liveRes.ok){
               const liveData = await liveRes.json();
               const feedName = (liveData.info?.event_name || '').trim();
               let allowMerge;
-              if (major !== 'pgatour') allowMerge = true;
+              if (!isTourMode(major)) allowMerge = true;
               else if (feedName && curEvName) allowMerge = inPlayMatchesEvent(liveData.info, curEvName);
               else allowMerge = eventHasStarted; // feed didn't self-identify — tee gate decides
-              if (major === 'pgatour' && feedName && !allowMerge) {
+              if (isTourMode(major) && feedName && !allowMerge) {
                 // Confirmed another event's data — clear it so nothing downstream repaints it.
                 rawScoresRef.current = null;
                 console.warn(`[in-play gate] feed still on "${feedName}", waiting for "${curEvName}" — not merging`);
@@ -1849,7 +1877,7 @@ export default function App(){
       const isThisMajorInWindow = teeT > 0 && nowMs >= oddsFetchStart && nowMs <= cutoff;
       if(updateDisplay && isThisMajorInWindow){
         let preds = [];
-        const preRes = await fetch('/api/scores?endpoint=pre-tournament');
+        const preRes = await fetch(`/api/scores?endpoint=pre-tournament${tourQS(major)}`);
         if(preRes.ok){
           const pd = await preRes.json();
           preds = pd.baseline_history_fit||pd.baseline||pd.players||[];
@@ -1864,7 +1892,7 @@ export default function App(){
 
         // Fetch tee times from field-updates endpoint
         try {
-          const fuRes = await fetch('/api/scores?endpoint=field-updates');
+          const fuRes = await fetch(`/api/scores?endpoint=field-updates${tourQS(major)}`);
           if(fuRes.ok){
             const fd = await fuRes.json();
             const fieldPlayers = fd.field || fd.players || [];
@@ -2083,7 +2111,7 @@ export default function App(){
         // cache, don't merge; missing names → the existing time window decides (unchanged).
         if(updateDisplay && isThisMajorActive && !rawScoresRef.current){
           try{
-            const liveRes = await fetch('/api/scores?endpoint=in-play');
+            const liveRes = await fetch(`/api/scores?endpoint=in-play${tourQS(major)}`);
             if(liveRes.ok){
               const liveData = await liveRes.json();
               const majorEvName = THEMES[major]?.eventName || '';
@@ -2189,7 +2217,7 @@ export default function App(){
       : themeTeeMs;
     const tournEndMs = themeTeeMs + 6 * 24 * 60 * 60 * 1000;
     const livePastTee = realTeeMs > 0 && Date.now() >= realTeeMs && Date.now() <= tournEndMs;
-    if(!livePastTee && currentMajor !== 'pgatour'){
+    if(!livePastTee && !isTourMode(currentMajor)){
       // Clear any stale score data and exit
       rawScoresRef.current=null;
       return;
@@ -2202,7 +2230,7 @@ export default function App(){
     // eventStartRef with next week's future tee.
     setRefreshing(true);
     try{
-      const r=await fetch('/api/scores?endpoint=in-play');
+      const r=await fetch(`/api/scores?endpoint=in-play${tourQS(currentMajor)}`);
       if(!r.ok)throw new Error('API '+r.status);
       const data=await r.json();
       // FINGERPRINT_V188_NAME_GATE_PRIMARY / FINGERPRINT_V191_MAJOR_NAME_GATE
@@ -2212,7 +2240,7 @@ export default function App(){
       // majors to the time window already applied before the fetch.
       {
         const feedName = (data.info?.event_name || '').trim();
-        const ourName = currentMajor === 'pgatour'
+        const ourName = isTourMode(currentMajor)
           ? (eventStartNameRef.current || '').trim()
           : (THEMES[currentMajor]?.eventName || '').trim();
         if (feedName && ourName) {
@@ -2221,7 +2249,7 @@ export default function App(){
             rawScoresRef.current = null;
             throw new Error('Live data not started for this event yet');
           }
-        } else if (currentMajor === 'pgatour') {
+        } else if (isTourMode(currentMajor)) {
           // Feed (or our event name) unknown — fall back to the tee gate.
           const gateMs = eventStartRef.current;
           if (!gateMs || Date.now() < (gateMs + LIVE_MODEL_DELAY_MS)) {
@@ -2405,11 +2433,11 @@ export default function App(){
     const liveTheme = THEMES[liveMajor] || THEMES.pga;
     // Purse priority: admin-set (dynamicPurses) → resolved event purse (schedule/theme) → base theme.
     // Admin override always wins so the commissioner can correct any wrong auto-detected purse.
-    const livePurse = liveMajor === 'pgatour'
+    const livePurse = isTourMode(liveMajor)
       ? ((livePurses && livePurses[liveMajor]) || pgatourPurseRef.current || liveTheme.purse)
       : ((livePurses && livePurses[liveMajor]) || liveTheme.purse);
     // Event name (used both for signature-payout detection and archive saving)
-    const evName = liveMajor==='pgatour' ? (poolMetaRef.current?.currentPgatourEvent || THEMES.pgatour?.eventName || '') : undefined;
+    const evName = isTourMode(liveMajor) ? (poolMetaRef.current?.currentPgatourEvent || THEMES[liveMajor]?.eventName || '') : undefined;
     const em=calcEarnings(updated, livePurse, liveMajor, isComplete, evName);
     updated.forEach(p=>{p.earnings=em[p.name]||0;});
     if(Object.keys(em).length>0){
@@ -2418,7 +2446,7 @@ export default function App(){
       // so the History tab has correct data even before/independent of backend rotation.
       // During play, just update earnings on an existing archive.
       const action = isComplete ? 'save-full-archive' : 'save-archive-earnings';
-      const logoData = liveMajor==='pgatour' ? (pgatourLogoRef.current||{}) : {};
+      const logoData = isTourMode(liveMajor) ? (pgatourLogoRef.current||{}) : {};
       // FINGERPRINT_V122_SAVE_PRIZES
       // On completion, also store the pool prize split so the archive doesn't rely on a fallback.
       // Uses the same winner-take-all rules as the live pool (toggle or ≤4 entries).
@@ -2450,7 +2478,7 @@ export default function App(){
     }
     setHoleData({round:roundNum,holes:[],loading:true,error:null});
     try{
-      const r=await fetch('/api/scores?endpoint=hole-scores');
+      const r=await fetch(`/api/scores?endpoint=hole-scores${tourQS(activeMajor)}`);
       if(!r.ok)throw new Error('DataGolf unavailable ('+r.status+')');
       const data=await r.json();
       const all=data.data||data.players||data.scores||[];
@@ -2505,7 +2533,7 @@ export default function App(){
   const fetchLiveStats=async()=>{
     if(liveStatsRef.current) return liveStatsRef.current;
     try{
-      const r=await fetch('/api/scores?endpoint=live-stats');
+      const r=await fetch(`/api/scores?endpoint=live-stats${tourQS(activeMajor)}`);
       if(!r.ok)return null;
       const data=await r.json();
       const stats=data.live_stats||data.players||data.stats||[];
@@ -2902,7 +2930,7 @@ export default function App(){
       x.textAlign='center';x.fillStyle=GOLD;
       x.font='700 30px -apple-system, Helvetica, Arial';
       x.fillText('⛳  '+poolNm+'  ⛳',W/2,118);
-      const evNm = activeMajor==='pgatour' ? (poolMeta?.currentPgatourEvent||'PGA Tour') : (T.eventName||'');
+      const evNm = isTourMode(activeMajor) ? (poolMeta?.currentPgatourEvent|| (isDPWorld(activeMajor)?'DP World Tour':'PGA Tour')) : (T.eventName||'');
       x.fillStyle='#ffffff';x.font='700 76px Georgia, "Times New Roman", serif';
       // shrink-to-fit event name
       let evSize=76;while(x.measureText(evNm).width>W-180&&evSize>40){evSize-=4;x.font=`700 ${evSize}px Georgia, "Times New Roman", serif`;}
@@ -3077,7 +3105,7 @@ export default function App(){
     return { teeTime: p.pairingTeeTime || p.teeTime, startHole: p.pairingStartHole || p.startHole || 1 };
   };
   // Only consider this major "active" if it's actually within its tournament window
-  const isActiveMajor = pastTeeTime || activeMajor === 'pgatour';
+  const isActiveMajor = pastTeeTime || isTourMode(activeMajor);
   // Detect if the tournament is fully complete: everyone has R4 score OR is cut
   const tournamentComplete = field.length > 0 && field.every(p => {
     const isCut = /CUT|WD|DQ|MC/i.test(p.pos);
@@ -3692,7 +3720,7 @@ export default function App(){
         <div style={{position:'absolute',top:0,left:0,right:0,bottom:0,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 20px'}}>
           <div style={{maxWidth:'36%'}}>
             {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,opacity:.95,letterSpacing:.5,marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{poolMeta.poolName}</div>}
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:9,fontWeight:activeMajor==='pgatour'?600:400,fontStyle:'italic',opacity:.85,letterSpacing:.6,marginBottom:3,lineHeight:1.2}}>{activeMajor==='pgatour'?(T.tagline&&T.tagline!=='PGA Tour Event'?T.tagline:T.eventName):T.tagline}</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:9,fontWeight:isTourMode(activeMajor)?600:400,fontStyle:'italic',opacity:.85,letterSpacing:.6,marginBottom:3,lineHeight:1.2}}>{isTourMode(activeMajor)?(T.tagline&&T.tagline!==THEMES[activeMajor]?.tagline?T.tagline:T.eventName):T.tagline}</div>
             <div style={{fontSize:10,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
           </div>
           {(()=>{
@@ -3825,7 +3853,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             boxShadow:`0 4px 16px ${T.primary}40`,
           }}>
             <div>
-              <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',fontWeight:600,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{activeMajor==='pgatour'?'Next Event':'Next Major'}</div>
+              <div style={{fontSize:11,color:'rgba(255,255,255,0.6)',fontWeight:600,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{isTourMode(activeMajor)?'Next Event':'Next Major'}</div>
               <div style={{fontSize:20,fontWeight:800,color:'#fff',fontFamily:"'Playfair Display',serif",letterSpacing:-.5}}>{T.eventName}</div>
               <div style={{fontSize:11,color:'rgba(255,255,255,0.55)',marginTop:3}}>Unlock to start entering picks</div>
             </div>
@@ -4449,7 +4477,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 // base pgatour theme — matched by eventName (lenient, like the live header). Without this
                 // every pgatour card used the generic blue base theme.
                 let THEME = {...(THEMES[a.major]||THEMES.pga)};
-                if (a.major === 'pgatour' && a.eventName) {
+                if (isTourMode(a.major) && a.eventName) {
                   const raw = a.eventName.toLowerCase().trim();
                   const noYear = raw.replace(/\s+\d{4}$/,'').trim();
                   const keys = Object.keys(PGATOUR_EVENT_THEMES);
@@ -4462,7 +4490,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const earnings=a.earnings||{};
                 const hasEarnings=Object.keys(earnings).length>0;
                 // For pgatour archives, include event slug in ID to avoid collisions
-                const archiveId = a.major === 'pgatour'
+                const archiveId = isTourMode(a.major)
                   ? `pgatour_${(a.eventName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-')}_${a.year}`
                   : a.major+'_'+a.year;
                 const isExpanded=expandedArchive===archiveId;
@@ -4549,7 +4577,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 return <>{years.map(y=>{
                   const yearArchives=publicArchives.filter(a=>archYear(a)===y);
                   const majorArchives=yearArchives.filter(a=>majorKeys.includes(a.major)).sort(byDate);
-                  const tourArchives=yearArchives.filter(a=>a.major==='pgatour'||a.major==='players').sort(byDate);
+                  const tourArchives=yearArchives.filter(a=>isTourMode(a.major)||a.major==='players').sort(byDate);
                   const isOpen=expandedYears[y]??(y===newestYear);
                   return <div key={y} style={{marginBottom:14}}>
                     <button onClick={()=>setExpandedYears(prev=>({...prev,[y]:!isOpen}))}
@@ -4635,32 +4663,37 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
             </div>
-            <div style={sec}><h3 style={stl}>🏌️ PGA Tour Mode</h3>
-              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Switch the pool to whatever PGA Tour event is happening this week. Toggle off to return to the major schedule. Picks reset when switching.</p>
-              <label style={{fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer'}}>
-                <input type="checkbox" defaultChecked={activeMajor==='pgatour'} onChange={async(e)=>{
-                  const enabled=e.target.checked;
-                  if(enabled){
-                    if(!confirm('Switch the pool to PGA Tour mode? This resets current entries and uses whatever event is active this week on the PGA Tour.'))return;
-                    const d=await adminAction('set-major',{major:'pgatour'});
-                    if(d?.ok){msg('Switched to PGA Tour mode');setActiveMajor('pgatour');activeMajorRef.current='pgatour';loadEntries();}
-                  } else {
-                    if(!confirm('Switch back to the major schedule? This resets current PGA Tour entries.'))return;
-                    // Switch back to next upcoming major
-                    const nextMajor='usopen'; // Default - rotation will determine actual next major
-                    const d=await adminAction('set-major',{major:nextMajor});
-                    if(d?.ok){msg('Switched back to major schedule');setActiveMajor(nextMajor);activeMajorRef.current=nextMajor;loadEntries();}
-                  }
-                }}/>
-                <span style={{fontWeight:600}}>Run this week's PGA Tour event</span>
-              </label>
-              {activeMajor==='pgatour'&&<div style={{marginTop:10,padding:'10px 12px',background:`${T.primary}0a`,borderRadius:8,fontSize:11,color:T.primary}}>
-                ✓ Currently in PGA Tour mode. The pool will track whichever event DataGolf has live this week.
+            {/* FINGERPRINT_V218_DPWORLD_MODE — three-way pool mode selector */}
+            <div style={sec}><h3 style={stl}>🏌️ Pool Mode</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Choose what this pool follows. Tour modes track whichever event that tour is playing this week; Majors follows the major schedule. <b>Switching resets current entries.</b></p>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {[
+                  {key:'majors',  label:'🏆 Majors',        desc:'Masters, PGA, U.S. Open, The Open'},
+                  {key:'pgatour', label:'🏌️ PGA Tour',      desc:"This week's PGA Tour event"},
+                  {key:'dpworld', label:'🌍 DP World Tour', desc:"This week's DP World Tour event"},
+                ].map(opt=>{
+                  const active = opt.key==='majors' ? !isTourMode(activeMajor) : activeMajor===opt.key;
+                  return <button key={opt.key} type="button" disabled={active} onClick={async()=>{
+                    const target = opt.key==='majors' ? 'usopen' : opt.key;
+                    const what = opt.key==='majors' ? 'the major schedule' : opt.label.replace(/^\S+\s/,'')+' mode';
+                    if(!confirm(`Switch this pool to ${what}?\n\nCurrent entries will be reset.`))return;
+                    const d=await adminAction('set-major',{major:target});
+                    if(d?.ok){msg(`Switched to ${what}`);setActiveMajor(target);activeMajorRef.current=target;loadEntries();}
+                    else msg(d?.error||'Switch failed');
+                  }} style={{textAlign:'left',padding:'10px 12px',borderRadius:9,cursor:active?'default':'pointer',
+                    border:`1.5px solid ${active?T.primary:'#ddd'}`,background:active?`${T.primary}0f`:'#fff',opacity:1}}>
+                    <div style={{fontSize:13,fontWeight:700,color:active?T.primary:'#3a4a2e'}}>{opt.label}{active&&' ✓'}</div>
+                    <div style={{fontSize:11,color:'#8a9580',marginTop:2}}>{opt.desc}</div>
+                  </button>;
+                })}
+              </div>
+              {isTourMode(activeMajor)&&<div style={{marginTop:10,padding:'10px 12px',background:`${T.primary}0a`,borderRadius:8,fontSize:11,color:T.primary}}>
+                ✓ Currently in {isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} mode. The pool tracks whichever event DataGolf has live this week.
               </div>}
-              {/* FINGERPRINT_V180_ROTATE_BTN — manual advance to the next PGA Tour event */}
-              {activeMajor==='pgatour'&&<div style={{marginTop:12,paddingTop:12,borderTop:'1px solid #eee'}}>
+              {/* FINGERPRINT_V180_ROTATE_BTN — manual advance to the next event on this tour */}
+              {isTourMode(activeMajor)&&<div style={{marginTop:12,paddingTop:12,borderTop:'1px solid #eee'}}>
                 <button type="button" style={{...dan,width:'100%'}} disabled={rotating} onClick={async()=>{
-                  if(!confirm('Rotate to the NEXT PGA Tour event?\n\nThis will:\n• Archive the current event to History (with final earnings)\n• DELETE all current entries and payments\n• Advance the pool to the next event (locked + unpaid)\n\nYour player roster is kept. This cannot be undone.'))return;
+                  if(!confirm(`Rotate to the NEXT ${isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} event?\n\nThis will:\n• Archive the current event to History (with final earnings)\n• DELETE all current entries and payments\n• Advance the pool to the next event (locked + unpaid)\n\nYour player roster is kept. This cannot be undone.`))return;
                   if(!confirm('Are you sure? All current entries will be permanently deleted.'))return;
                   setRotating(true);
                   const d=await adminAction('rotate-pgatour-now',{});
@@ -4672,7 +4705,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   } else {
                     msg(d?.error||'Rotation failed');
                   }
-                }}>{rotating?'Rotating…':'🔄 Rotate to Next PGA Tour Event'}</button>
+                }}>{rotating?'Rotating…':`🔄 Rotate to Next ${isDPWorld(activeMajor)?'DP World':'PGA Tour'} Event`}</button>
                 <p style={{fontSize:11,color:'#999',marginTop:6,lineHeight:1.4}}>Archives this event, wipes entries, and advances to the next event. Use after the current tournament finishes.</p>
               </div>}
             </div>
