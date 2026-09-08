@@ -1,9 +1,13 @@
 export const dynamic = 'force-dynamic';
-// build: dpworld-payouts-v164-20260831-1300
+// build: dpworld-mode-v165-20260831-1500
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-const VALID_MAJORS = ['players','masters','pga','usopen','open','pgatour'];
+const VALID_MAJORS = ['players','masters','pga','usopen','open','pgatour','dpworld'];
+// FINGERPRINT_V165_DPWORLD — tour modes share one code path; only the DataGolf tour differs.
+const SRV_TOUR_OF = { pgatour:'pga', dpworld:'euro' };
+const srvIsTourMode = (m) => m === 'pgatour' || m === 'dpworld';
+const srvTour = (m) => SRV_TOUR_OF[m] || 'pga';
 
 // ─── SERVER-SIDE EARNINGS ENGINE (v34) ───────────────────────────────────────
 // FINGERPRINT_V34_SERVER_EARNINGS
@@ -83,7 +87,7 @@ async function srvRequiredPicks(poolId) {
     const raw = await redis('GET', k(poolId, 'meta'));
     if (!raw) return 10;
     const meta = JSON.parse(raw);
-    const evName = meta.major === 'pgatour'
+    const evName = srvIsTourMode(meta.major)
       ? (meta.currentPgatourEvent || '')
       : (meta.major === 'tourchamp' ? 'tour championship' : '');
     return srvIsTourChampionship(evName) ? 6 : 10;
@@ -152,12 +156,15 @@ function srvParsePos(pos) {
   const n = parseInt(s, 10);
   return isNaN(n) ? null : n;
 }
-function srvComputeEarnings(players, purse, eventName) {
+function srvComputeEarnings(players, purse, eventName, major) {
   const useSig = srvIsSignature(eventName, purse);
   // FINGERPRINT_V145_SRV_NOCUT / FINGERPRINT_V148_SRV_TOURCHAMP
   // Tour Championship has its own 25% table; else no-cut (Sentry/Travelers/St.Jude/BMW) vs cut sig.
   let table;
-  if (useSig && srvIsTourChampionship(eventName)) {
+  if (major === 'dpworld') {
+    // FINGERPRINT_V165_DPWORLD — DP World uses one fixed 17%-winner ladder for every event.
+    table = SRV_PAYOUT_DPWORLD;
+  } else if (useSig && srvIsTourChampionship(eventName)) {
     table = SRV_PAYOUT_TOUR_CHAMP;
   } else if (useSig && srvIsBMW(eventName)) {
     // FINGERPRINT_V160_SRV_BMW — 50-player playoff field, distinct from generic no-cut signature.
@@ -345,11 +352,14 @@ async function autoManage(poolId) {
     }
 
     // ── PGA Tour Mode: weekly auto-rotation, mirrors major rotation logic ─────
-    if (meta?.pgaTourMode || (await redis('GET', `pool:${poolId}:major`)) === 'pgatour') {
+    const _curMajorKey = await redis('GET', `pool:${poolId}:major`);
+    if (meta?.pgaTourMode || srvIsTourMode(_curMajorKey)) {
+      // FINGERPRINT_V165_DPWORLD — which tour this pool is running (pgatour | dpworld)
+      const tourKey = srvIsTourMode(meta?.major) ? meta.major : (srvIsTourMode(_curMajorKey) ? _curMajorKey : 'pgatour');
       try {
         const year = new Date().getFullYear();
         const schedRes = await fetch(
-          `https://feeds.datagolf.com/get-schedule?tour=pga&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          `https://feeds.datagolf.com/get-schedule?tour=${srvTour(tourKey)}&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
           { cache:'no-store', signal: AbortSignal.timeout(5000) }
         );
         if (!schedRes.ok) return 'pgatour';
@@ -359,7 +369,7 @@ async function autoManage(poolId) {
         // Find what event was active when this pool was last paid
         // We track the active event name on meta.currentPgatourEvent
         const ptRes = await fetch(
-          `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          `https://feeds.datagolf.com/preds/pre-tournament?tour=${srvTour(tourKey)}&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
           { cache:'no-store', signal: AbortSignal.timeout(5000) }
         );
         if (!ptRes.ok) return 'pgatour';
@@ -392,7 +402,7 @@ async function autoManage(poolId) {
           let priorEventConcluded = false;
           let finalInPlayPlayers = null; // capture the final leaderboard for server-side earnings
           try {
-            const inPlayUrl = `https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`;
+            const inPlayUrl = `https://feeds.datagolf.com/preds/in-play?tour=${srvTour(tourKey)}&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`;
             const ipRes = await fetch(inPlayUrl, { cache:'no-store', signal: AbortSignal.timeout(5000) });
             if (ipRes.ok) {
               const ipData = await ipRes.json();
@@ -434,13 +444,13 @@ async function autoManage(poolId) {
             priorEventConcluded = false;
           }
 
-          if (!inTuesdayWindow && !priorEventConcluded) return 'pgatour';
+          if (!inTuesdayWindow && !priorEventConcluded) return tourKey;
 
           // Archive results for the prior event
           const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
           if (entries.length > 0) {
             const slug = poolEventName.replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
-            const archiveKey = k(poolId, `archive:pgatour-${slug}_${year}`);
+            const archiveKey = k(poolId, `archive:${tourKey}-${slug}_${year}`);
 
             // FINGERPRINT_V34_ROTATION_EARNINGS
             // Compute earnings SERVER-SIDE from the final in-play leaderboard, so the archive is
@@ -459,16 +469,17 @@ async function autoManage(poolId) {
                    return en.includes(poolEventName) || poolEventName.includes(en);
                  });
             const schedPurse = concludedEvent?.purse || concludedEvent?.total_purse || null;
-            const adminPurse = meta?.purses?.pgatour || null; // commissioner-set, if any
+            const adminPurse = meta?.purses?.[tourKey] || meta?.purses?.pgatour || null; // commissioner-set, if any
             // FINGERPRINT_V148_SRV_TOURCHAMP — Tour Championship defaults to $40M, other signature $20M
-            const sigDefault = srvIsTourChampionship(poolEventName) ? 40000000
+            const sigDefault = tourKey === 'dpworld' ? 3750000
+              : srvIsTourChampionship(poolEventName) ? 40000000
               : (srvIsSignature(poolEventName, schedPurse) ? 20000000 : 9000000);
             const resolvedPurse = adminPurse || schedPurse || sigDefault;
 
             // Compute server-side earnings (keyed by normalized name), then map to each pick.
             let earningsByPick = existingEarnings;
             if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
-              const earnMap = srvComputeEarnings(finalInPlayPlayers, resolvedPurse, poolEventName);
+              const earnMap = srvComputeEarnings(finalInPlayPlayers, resolvedPurse, poolEventName, tourKey);
               earningsByPick = srvEarningsByPick(entries, earnMap);
               console.log(`[pgatour rotation] computed server-side earnings for ${Object.keys(earningsByPick).length} picks, purse=${resolvedPurse}`);
             }
@@ -765,8 +776,8 @@ export async function GET(request) {
       const meta = await getPoolMeta(poolId);
       const year = new Date().getFullYear();
       const [ptRes, ipRes] = await Promise.all([
-        fetch(`https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`, { cache:'no-store' }),
-        fetch(`https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`, { cache:'no-store' }),
+        fetch(`https://feeds.datagolf.com/preds/pre-tournament?tour=${srvTour(meta?.major)}&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`, { cache:'no-store' }),
+        fetch(`https://feeds.datagolf.com/preds/in-play?tour=${srvTour(meta?.major)}&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`, { cache:'no-store' }),
       ]);
       const ptData = ptRes.ok ? await ptRes.json() : null;
       const ipData = ipRes.ok ? await ipRes.json() : null;
@@ -819,7 +830,7 @@ export async function GET(request) {
 
     // Load dynamic tournament purses
     const PURSE_DEFAULTS = {
-      players: 25000000, masters: 22500000, pga: 20500000, usopen: 22500000, open: 17750000, pgatour: 9000000,
+      players: 25000000, masters: 22500000, pga: 20500000, usopen: 22500000, open: 17750000, pgatour: 9000000, dpworld: 3750000,
     };
     const purses = {};
     for (const m of Object.keys(PURSE_DEFAULTS)) {
@@ -1209,7 +1220,7 @@ export async function POST(request) {
         }
         // pgatour slug-keyed archives via SCAN
         let cursor = '0';
-        const pat = `pool:${poolId}:archive:pgatour-*`;
+        const pat = `pool:${poolId}:archive:*-*`; // FINGERPRINT_V165_DPWORLD — pgatour-* and dpworld-*
         do {
           const res = await redis('SCAN', cursor, 'MATCH', pat, 'COUNT', '100');
           if (Array.isArray(res) && res.length === 2) {
@@ -1343,7 +1354,7 @@ export async function POST(request) {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const meta = await getPoolMeta(poolId);
       if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
-      if ((meta.major || '') !== 'pgatour') {
+      if (!srvIsTourMode(meta.major || '')) {
         return Response.json({ error:'Pool is not in PGA Tour mode. Switch to pgatour first.' }, { status:400 });
       }
       const year = new Date().getFullYear();
@@ -1354,14 +1365,14 @@ export async function POST(request) {
       let nextEventName = null, schedule = [];
       try {
         const ptRes = await fetch(
-          `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          `https://feeds.datagolf.com/preds/pre-tournament?tour=${srvTour(meta.major)}&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
           { cache:'no-store', signal: AbortSignal.timeout(5000) }
         );
         if (ptRes.ok) { const ptData = await ptRes.json(); nextEventName = ptData.event_name || null; }
       } catch (e) { /* fall through */ }
       try {
         const schedRes = await fetch(
-          `https://feeds.datagolf.com/get-schedule?tour=pga&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          `https://feeds.datagolf.com/get-schedule?tour=${srvTour(meta.major)}&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
           { cache:'no-store', signal: AbortSignal.timeout(5000) }
         );
         if (schedRes.ok) { const sd = await schedRes.json(); schedule = (sd.schedule || sd.events || []).filter(e => e.start_date); }
@@ -1371,7 +1382,7 @@ export async function POST(request) {
       let finalInPlayPlayers = null;
       try {
         const ipRes = await fetch(
-          `https://feeds.datagolf.com/preds/in-play?tour=pga&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          `https://feeds.datagolf.com/preds/in-play?tour=${srvTour(meta.major)}&dead_heat=no&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
           { cache:'no-store', signal: AbortSignal.timeout(5000) }
         );
         if (ipRes.ok) { const ipData = await ipRes.json(); finalInPlayPlayers = ipData.data || ipData.players || []; }
@@ -1382,7 +1393,7 @@ export async function POST(request) {
       const [entries, payments] = await Promise.all([getEntries(poolId), getPayments(poolId)]);
       if (poolEventName && entries.length > 0) {
         const slug = poolEventName.replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
-        const archiveKey = k(poolId, `archive:pgatour-${slug}_${year}`);
+        const archiveKey = k(poolId, `archive:${meta.major}-${slug}_${year}`);
         let existing = null;
         try { const ex = await redis('GET', archiveKey); if (ex) existing = JSON.parse(ex); } catch {}
         const existingEarnings = existing?.earnings || {};
@@ -1391,14 +1402,15 @@ export async function POST(request) {
         const concludedEvent = schedule.find(e => (e.event_name||'').toLowerCase() === poolEventName)
           || schedule.find(e => { const en=(e.event_name||'').toLowerCase(); return en.includes(poolEventName)||poolEventName.includes(en); });
         const schedPurse = concludedEvent?.purse || concludedEvent?.total_purse || null;
-        const adminPurse = meta?.purses?.pgatour || null;
-        const sigDefault = srvIsTourChampionship(poolEventName) ? 40000000
+        const adminPurse = meta?.purses?.[meta.major] || meta?.purses?.pgatour || null;
+        const sigDefault = meta.major === 'dpworld' ? 3750000
+          : srvIsTourChampionship(poolEventName) ? 40000000
           : (srvIsSignature(poolEventName, schedPurse) ? 20000000 : 9000000);
         const resolvedPurse = adminPurse || schedPurse || sigDefault;
 
         let earningsByPick = existingEarnings;
         if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
-          const earnMap = srvComputeEarnings(finalInPlayPlayers, resolvedPurse, poolEventName);
+          const earnMap = srvComputeEarnings(finalInPlayPlayers, resolvedPurse, poolEventName, meta.major);
           earningsByPick = srvEarningsByPick(entries, earnMap);
         }
 
@@ -1464,8 +1476,8 @@ export async function POST(request) {
         return Response.json({ error:'need major, year, and non-empty entries' }, { status:400 });
       }
       const slug = (eventName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
-      const archiveKey = (major === 'pgatour' && slug)
-        ? k(poolId, `archive:pgatour-${slug}_${year}`)
+      const archiveKey = (srvIsTourMode(major) && slug)
+        ? k(poolId, `archive:${major}-${slug}_${year}`)
         : k(poolId, `archive:${major}_${year}`);
       const archiveData = {
         major, year,
@@ -1534,8 +1546,8 @@ export async function POST(request) {
       }
       // FINGERPRINT_V32_IMPORT_SLUG — pgatour archives keyed by event slug to match History read + rotation
       const slug = (eventName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
-      const archiveKey = (major === 'pgatour' && slug)
-        ? k(poolId, `archive:pgatour-${slug}_${year}`)
+      const archiveKey = (srvIsTourMode(major) && slug)
+        ? k(poolId, `archive:${major}-${slug}_${year}`)
         : k(poolId, `archive:${major}_${year}`);
       const archiveData = {
         major, year,
@@ -1752,12 +1764,12 @@ export async function POST(request) {
       const meta = await getPoolMeta(poolId);
       if (meta) {
         meta.major = body.major;
-        meta.pgaTourMode = body.major === 'pgatour';
+        meta.pgaTourMode = srvIsTourMode(body.major);
         // When entering PGA Tour mode, capture the current DataGolf event so auto-rotation knows what we're on
-        if (body.major === 'pgatour') {
+        if (srvIsTourMode(body.major)) {
           try {
             const ptRes = await fetch(
-              `https://feeds.datagolf.com/preds/pre-tournament?tour=pga&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+              `https://feeds.datagolf.com/preds/pre-tournament?tour=${srvTour(body.major)}&odds_format=percent&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
               { cache:'no-store', signal: AbortSignal.timeout(5000) }
             );
             if (ptRes.ok) {
@@ -1825,8 +1837,8 @@ export async function POST(request) {
       const meta = await getPoolMeta(poolId);
       const evName = eventName || meta?.currentPgatourEvent || '';
       const slug = (evName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
-      const archiveKey = (major === 'pgatour' && slug)
-        ? k(poolId, `archive:pgatour-${slug}_${year}`)
+      const archiveKey = (srvIsTourMode(major) && slug)
+        ? k(poolId, `archive:${major}-${slug}_${year}`)
         : k(poolId, `archive:${major}_${year}`);
       // FINGERPRINT_V155_COLLISION_GUARD — if an archive already exists at this key for a DIFFERENT
       // event, don't clobber it. Guards against a blank/rotated evName resolving to the wrong slug
@@ -1889,8 +1901,8 @@ export async function POST(request) {
       const meta = await getPoolMeta(poolId);
       const evName = eventName || meta?.currentPgatourEvent || '';
       const slug = (evName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40);
-      const archiveKey = (major === 'pgatour' && slug)
-        ? k(poolId, `archive:pgatour-${slug}_${year}`)
+      const archiveKey = (srvIsTourMode(major) && slug)
+        ? k(poolId, `archive:${major}-${slug}_${year}`)
         : k(poolId, `archive:${major}_${year}`);
       try {
         const r = await redis('GET', archiveKey);
@@ -1919,11 +1931,11 @@ export async function POST(request) {
           } catch {}
         }
       }
-      // PGA Tour archives: archive:pgatour-{event-slug}_{year} — discover via SCAN
+      // Tour archives: archive:{pgatour|dpworld}-{event-slug}_{year} — discover via SCAN
       try {
         let cursor = '0';
         do {
-          const res = await redis('SCAN', cursor, 'MATCH', k(poolId, 'archive:pgatour-*'), 'COUNT', 100);
+          const res = await redis('SCAN', cursor, 'MATCH', k(poolId, 'archive:*-*'), 'COUNT', 100);
           if (Array.isArray(res) && res.length === 2) {
             cursor = res[0];
             for (const archiveKey of res[1] || []) {
@@ -1940,12 +1952,12 @@ export async function POST(request) {
       archives.sort((a,b) => {
         if (a.year !== b.year) return b.year - a.year;
         // pgatour archives use archivedAt for ordering within a year
-        if (a.major === 'pgatour' && b.major === 'pgatour') {
+        if (srvIsTourMode(a.major) && srvIsTourMode(b.major)) {
           return new Date(b.archivedAt||0) - new Date(a.archivedAt||0);
         }
         // pgatour events go after majors within the same year
-        if (a.major === 'pgatour') return 1;
-        if (b.major === 'pgatour') return -1;
+        if (srvIsTourMode(a.major)) return 1;
+        if (srvIsTourMode(b.major)) return -1;
         return (MAJOR_ORDER[b.major] || 0) - (MAJOR_ORDER[a.major] || 0);
       });
       return Response.json({ ok:true, archives });
@@ -1957,7 +1969,10 @@ export async function POST(request) {
     // 6 hours so we don't hit DataGolf on every tab open. The API key stays server-side.
     if (body.action==='get-schedule-public') {
       const year = new Date().getFullYear();
-      const cacheKey = k(poolId, `schedule-cache_${year}`);
+      // FINGERPRINT_V165_DPWORLD — the Schedule tab shows the tour this pool actually follows.
+      const _schedMeta = await getPoolMeta(poolId);
+      const _schedTour = srvTour(_schedMeta?.major);
+      const cacheKey = k(poolId, `schedule-cache_${_schedTour}_${year}`);
       // Try cache first (schedule barely changes; 6h freshness is plenty)
       try {
         const cached = await redis('GET', cacheKey);
@@ -1972,7 +1987,7 @@ export async function POST(request) {
       let events = [];
       try {
         const res = await fetch(
-          `https://feeds.datagolf.com/get-schedule?tour=pga&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+          `https://feeds.datagolf.com/get-schedule?tour=${_schedTour}&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
           { cache:'no-store', signal: AbortSignal.timeout(6000) }
         );
         if (res.ok) {
