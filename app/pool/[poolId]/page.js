@@ -1,5 +1,5 @@
 'use client';
-// build: dpworld-mode-v218-20260831-1500
+// build: dpworld-tourkey-fix-v220-20260831-1700
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -1323,6 +1323,10 @@ export default function App(){
   };
 
   const fetchSchedule=async()=>{
+    // FINGERPRINT_V220_TOUR_KEY — resolve the running tour ONCE at the top; the schedule fetch
+    // below needs it too, and a later `const` would be a temporal-dead-zone ReferenceError.
+    // Use activeMajorRef (always current) not activeMajor (stale in the mount-time closure).
+    const curMajor = activeMajorRef.current || activeMajor;
     let events = [];
     try{
       const year = new Date().getFullYear();
@@ -1371,13 +1375,12 @@ export default function App(){
     // FINGERPRINT_V117_USE_REF — use activeMajorRef (always current) not activeMajor (stale in
     // the mount-time closure / interval callbacks). This is why pgatour schedule never loaded
     // without tapping "Try Again": the closure's activeMajor was 'pga' from first mount.
-    const curMajor = activeMajorRef.current || activeMajor;
     if(isTourMode(curMajor)){
         try {
           const ptRes = await fetch(`/api/scores?endpoint=pre-tournament${tourQS(curMajor)}`);
           if(ptRes.ok){
             const ptData = await ptRes.json();
-            const eventName = ptData.event_name || ptData.name || 'PGA Tour Event';
+            const eventName = ptData.event_name || ptData.name || THEMES[curMajor]?.eventName || 'Tour Event';
             // Find this event in the schedule to get course/location/start_date/event_id.
             // Use lenient matching: exact, then "contains" either direction, to handle
             // sponsor-name variations ("the Memorial Tournament pres. by Workday" vs "the Memorial Tournament").
@@ -1395,7 +1398,7 @@ export default function App(){
                  });
             const courseName = currentEvent
               ? `${currentEvent.course || ''}${currentEvent.location ? ' · ' + currentEvent.location : ''}`
-              : 'PGA Tour';
+              : (isDPWorld(curMajor) ? 'DP World Tour' : 'PGA Tour');
             const teeDate = currentEvent?.start_date ? new Date(currentEvent.start_date + 'T11:00:00Z') : null;
             // FINGERPRINT_V107_TEE_FALLBACK
             // If the event isn't found in the schedule (name mismatch) or has no start_date,
@@ -1412,8 +1415,10 @@ export default function App(){
             })();
             const teeTime = (teeDate || nextThursday).toISOString();
             // Build official PGA Tour logo URL from event_id (Cloudinary CDN, CORS-enabled)
+            // FINGERPRINT_V220_TOUR_KEY — the Cloudinary logo CDN only hosts PGA Tour event logos,
+            // so skip it for DP World events rather than requesting URLs that 404.
             const eventId = currentEvent?.event_id;
-            const logoUrl = eventId
+            const logoUrl = (eventId && !isDPWorld(curMajor))
               ? `https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:R000.png/tournaments/logos/R${String(eventId).padStart(3,'0')}.png`
               : null;
             // Venue coordinates for tee time timezone conversion
@@ -1422,7 +1427,7 @@ export default function App(){
             // FINGERPRINT_V119_PURSE_RESOLVE
             // Purse: prefer DataGolf schedule value, else the matched event theme's purse
             // (signature events like Memorial set purse:20000000 in their theme as a fallback).
-            const evThemeKey = (() => {
+            const evThemeKey = isDPWorld(curMajor) ? null : (() => {
               const raw = eventName.toLowerCase().trim();
               const noYear = raw.replace(/\s+\d{4}$/,'').trim();
               const keys = Object.keys(PGATOUR_EVENT_THEMES);
@@ -1446,9 +1451,12 @@ export default function App(){
             } else if (logoUrl) {
               pgatourLogoRef.current = { logoUrl, logoNoBg: false, logoHeight: 80 };
             }
+            // FINGERPRINT_V220_TOUR_KEY — store under the RUNNING tour's key. This was hardcoded
+            // to 'pgatour', so in DP World mode scheduleData.dpworld was never written, T.teeTime
+            // stayed null and the page sat on "Loading tournament info..." forever.
             setScheduleData(prev => ({
               ...prev,
-              pgatour: {
+              [curMajor]: {
                 eventName,
                 courseName,
                 ...(teeTime && { teeTime }),
@@ -4425,7 +4433,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <option value="schedule">📅 Schedule</option>
               </select>
             </div>
-            <div style={{fontSize:12,color:'#8a9580'}}>{historyView==='results'?'Final standings from previous events':`${schedule&&schedule.length?new Date().getFullYear():''} PGA Tour season schedule`}</div>
+            <div style={{fontSize:12,color:'#8a9580'}}>{historyView==='results'?'Final standings from previous events':`${schedule&&schedule.length?new Date().getFullYear():''} ${isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} season schedule`}</div>
           </div>
           {historyView==='schedule'?(
             !scheduleLoaded
@@ -4593,7 +4601,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         {majorArchives.map(renderArchiveCard)}
                       </div>}
                       {tourArchives.length>0&&<div>
-                        {sectionHdr('🏌️ PGA Tour Events')}
+                        {sectionHdr(tourArchives.some(a=>a.major==='dpworld')&&!tourArchives.some(a=>a.major==='pgatour')?'🌍 DP World Tour Events':(tourArchives.some(a=>a.major==='dpworld')?'🏌️ Tour Events':'🏌️ PGA Tour Events'))}
                         {tourArchives.map(renderArchiveCard)}
                       </div>}
                     </>}
