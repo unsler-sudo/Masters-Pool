@@ -1,10 +1,9 @@
-
 'use client';
 import { useState, useEffect } from 'react';
 
 const MAJOR_NAMES = {
   players:'The Players', masters:'Masters', pga:'PGA Championship',
-  usopen:'U.S. Open', open:'The Open', pgatour:'PGA Tour Event',
+  usopen:'U.S. Open', open:'The Open', pgatour:'PGA Tour Event', dpworld:'DP World Tour Event',
 };
 
 function EditableCell({ value, placeholder, onSave }) {
@@ -144,9 +143,10 @@ export default function AdminDashboard() {
               {key:'players', label:'⛳ Players',   year:'2027', defaultPurse:data.purses?.players  ?? 25000000},
               {key:'masters', label:'🌸 Masters',   year:'2026', defaultPurse:data.purses?.masters  ?? 22500000},
               {key:'pga',     label:'🏆 PGA',       year:'2026', defaultPurse:data.purses?.pga      ?? 20500000},
-              {key:'usopen',  label:'🇺🇸 US Open',   year:'2026', defaultPurse:data.purses?.usopen   ?? 21500000},
-              {key:'open',    label:'🏴 The Open',  year:'2026', defaultPurse:data.purses?.open     ?? 17000000},
+              {key:'usopen',  label:'🇺🇸 US Open',   year:'2026', defaultPurse:data.purses?.usopen   ?? 22500000},
+              {key:'open',    label:'🏴 The Open',  year:'2026', defaultPurse:data.purses?.open     ?? 17750000},
               {key:'pgatour', label:'🏌️ PGA Tour',  year:'Current Event', defaultPurse:data.purses?.pgatour ?? 9000000},
+              {key:'dpworld', label:'🌍 DP World',  year:'Current Event', defaultPurse:data.purses?.dpworld ?? 3750000},
             ].map(major=>(
               <div key={major.key} style={{padding:'10px 12px',background:'#f9fafb',borderRadius:8,border:'1px solid #e5e7eb'}}>
                 <div style={{fontSize:12,fontWeight:700,color:'#374151',marginBottom:4}}>{major.label}</div>
