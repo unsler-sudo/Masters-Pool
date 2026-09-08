@@ -38,13 +38,17 @@ function getMajors() {
     return { ...m, date, year, sortKey };
   }).sort((a, b) => a.sortKey - b.sortKey);
 
-  // PGA Tour Mode — always available, follows the current week's PGA Tour event
+  // Tour modes — always available, follow the current week's event on that tour
   const pgatour = {
     key:'pgatour', label:'PGA Tour Mode', emoji:'🏌️',
     date:'Any weekly event', year:currentYear, sortKey:0,
   };
+  const dpworld = {
+    key:'dpworld', label:'DP World Tour Mode', emoji:'🌍',
+    date:'Any weekly event', year:currentYear, sortKey:0,
+  };
 
-  return [...majors, pgatour];
+  return [...majors, pgatour, dpworld];
 }
 
 const MAJORS = getMajors();
@@ -148,7 +152,7 @@ export default function LandingPage() {
                   border:`2px solid ${form.major===m.key?'#1a2a5c':'#e5e7eb'}`,
                   background:form.major===m.key?'#eef0f8':'#fff',
                 }}>
-                  {m.key==='pgatour'&&<div style={{position:'absolute',top:6,right:6,fontSize:8,fontWeight:800,background:'#508cff',color:'#fff',padding:'2px 6px',borderRadius:4,letterSpacing:.5}}>NEW</div>}
+                  {m.key==='dpworld'&&<div style={{position:'absolute',top:6,right:6,fontSize:8,fontWeight:800,background:'#508cff',color:'#fff',padding:'2px 6px',borderRadius:4,letterSpacing:.5}}>NEW</div>}
                   <div style={{fontSize:18,marginBottom:2}}>{m.emoji}</div>
                   <div style={{fontSize:12,fontWeight:600,color:'#1a2a5c'}}>{m.label}</div>
                   <div style={{fontSize:10,color:'#9ca3af'}}>{m.date}</div>
@@ -182,13 +186,13 @@ export default function LandingPage() {
           Tuna Golf Pool
         </h1>
         <p style={{fontSize:18,opacity:.75,maxWidth:480,margin:'0 auto 20px',lineHeight:1.6}}>
-          Create a private golf pool for your friends, office, or group. Pick 10 golfers across 3 tiers and track live earnings during the majors — and now <b style={{color:'#fff'}}>every PGA Tour event</b>.
+          Create a private golf pool for your friends, office, or group. Pick 10 golfers across 3 tiers and track live earnings during the majors — and now <b style={{color:'#fff'}}>every PGA Tour and DP World Tour event</b>.
         </p>
         <div style={{maxWidth:440,margin:'0 auto 16px',padding:'12px 18px',background:'linear-gradient(135deg,rgba(80,140,255,.22),rgba(80,140,255,.10))',borderRadius:12,border:'1px solid rgba(120,160,255,.4)'}}>
-          <div style={{fontSize:11,fontWeight:700,color:'#7aa8ff',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🏌️ New Feature</div>
-          <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:4}}>PGA Tour Mode</div>
+          <div style={{fontSize:11,fontWeight:700,color:'#7aa8ff',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🌍 New Feature</div>
+          <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:4}}>DP World Tour Mode</div>
           <div style={{fontSize:12,opacity:.75,lineHeight:1.5}}>
-            Run your pool on any PGA Tour event — not just the majors. Live scoring, payouts, and dynamic event branding all rotate weekly.
+            Now run your pool on the DP World Tour too — alongside the majors and every PGA Tour event. Live scoring, exact payouts, and event branding rotate weekly on all three.
           </div>
         </div>
         <button type="button" onClick={()=>setStep('create')} style={{
@@ -204,7 +208,7 @@ export default function LandingPage() {
         {[
           { emoji:'🏆', title:'Live Standings', desc:'Real-time earnings from DataGolf updated every 60 seconds' },
           { emoji:'🎯', title:'3-Tier Picks', desc:'2 Favorites + 4 Contenders + 4 Longshots = 10 total picks' },
-          { emoji:'🏌️', title:'Majors + PGA Tour', desc:'All 5 majors plus any weekly PGA Tour event — themed automatically' },
+          { emoji:'🌍', title:'Majors + PGA & DP World Tours', desc:'All 5 majors plus any weekly PGA Tour or DP World Tour event — themed automatically' },
           { emoji:'🔒', title:'Private Pool', desc:'Your own link, your own password, invite only who you want' },
           { emoji:'⚡', title:'Fully Automated', desc:'Auto-locks at tee time, auto-rotates Tuesday after each major' },
           { emoji:'📚', title:'Past Results', desc:'Final standings archived after every tournament' },
