@@ -1,5 +1,5 @@
 'use client';
-// build: dpworld-logo-v221-20260831-1800
+// build: dpworld-logo-svg-v223-20260831-1845
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -77,9 +77,12 @@ const THEMES = {
   // Pool admins use this to run their pool on whichever PGA Tour event is happening this week.
   dpworld: {
     emoji:'🌍', tagline:'DP World Tour Event',
+    // FINGERPRINT_V222_DPWORLD_LOGO — self-hosted copy (don't hotlink third-party CDNs).
+    // logoNoBg:false renders it on a white rounded card: the DP World mark is dark navy and the
+    // header gradient is navy, so a transparent overlay would be invisible against it.
     logoUrl:'/logos/dp-world-tour.svg',
-    logoNoBg:true,
-    logoHeight:90,
+    logoNoBg:false,
+    logoHeight:64,
     eventName:'DP World Tour Event', courseName:'Current DP World Tour event',
     teeTime:null, purse:3750000,
     primary:'#0b3b5c', dark:'#0f4a72', mid:'#1a6091', accent:'#d4a017', accentLight:'#fdf6e3',
