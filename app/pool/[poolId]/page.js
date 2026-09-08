@@ -1,5 +1,5 @@
 'use client';
-// build: dpworld-tourkey-fix-v220-20260831-1700
+// build: dpworld-logo-v221-20260831-1800
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 
@@ -77,7 +77,7 @@ const THEMES = {
   // Pool admins use this to run their pool on whichever PGA Tour event is happening this week.
   dpworld: {
     emoji:'🌍', tagline:'DP World Tour Event',
-    logoUrl:null,
+    logoUrl:'/logos/dp-world-tour.svg',
     logoNoBg:true,
     logoHeight:90,
     eventName:'DP World Tour Event', courseName:'Current DP World Tour event',
@@ -3743,7 +3743,9 @@ export default function App(){
             if(!logoSrc) return null;
             // If logoSrc is a Cloudinary PGA Tour event logo, fall back to the local PGA Tour shield on error
             const onLogoError = (ev) => {
-              const fallback = '/logos/pga-tour.svg';
+              // FINGERPRINT_V221_TOUR_LOGO — fall back to the logo of the tour we're actually on;
+              // a DP World pool must never fall back to the PGA Tour mark.
+              const fallback = isDPWorld(activeMajor) ? '/logos/dp-world-tour.svg' : '/logos/pga-tour.svg';
               if (ev.target.src.indexOf(fallback) === -1 && logoSrc.indexOf('res.cloudinary.com') !== -1) {
                 ev.target.src = fallback;
               } else {
