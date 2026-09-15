@@ -1,5 +1,5 @@
 'use client';
-// build: picker-headshots-v227-20260901-1000
+// build: flag-on-photo-v229-20260901-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -4040,23 +4040,21 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             <input style={{...inp,marginBottom:8}} placeholder={`Search ${TIERS.find(t=>t.id===activeTier)?.name||''}...`} value={search} onChange={e=>setSearch(e.target.value)}/>
             <div style={{maxHeight:320,overflowY:'auto',borderRadius:9,border:`1px solid ${T.inputBorder}`,background:'#fff'}}>
-              {filteredTier.map(p=>{const sel=picks[activeTier].includes(p.name),full=!sel&&picks[activeTier].length>=TIERS.find(t=>t.id===activeTier)?.picks,ow=owners(p.name);return(
+              {filteredTier.map(p=>{const sel=picks[activeTier].includes(p.name),full=!sel&&picks[activeTier].length>=TIERS.find(t=>t.id===activeTier)?.picks,ow=owners(p.name),shotUrl=headshotFor(p);return(
                 <button key={p.name} type="button" onClick={()=>!full&&togglePick(p.name,activeTier)}
                   style={{display:'flex',alignItems:'center',padding:'8px 12px',border:'none',borderBottom:'1px solid #f0ebe0',width:'100%',background:sel?`${T.primary}0e`:'#fff',textAlign:'left',opacity:full?.3:1,cursor:full?'not-allowed':'pointer'}}>
-                  {/* FINGERPRINT_V227_PICKER_HEADSHOTS — same photo+flag treatment as the scorecard,
-                      at row scale. loading="lazy" so only visible rows fetch; a 404 hides the photo
-                      and leaves the flag, and unmapped players skip the <img> entirely. */}
-                  {(()=>{
-                    const shot = headshotFor(p);
-                    if(!shot) return null;
-                    return <div style={{position:'relative',width:34,height:34,flexShrink:0,marginRight:9,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                      <img src={shot} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';}}
-                        style={{width:34,height:34,borderRadius:'50%',objectFit:'cover',objectPosition:'top center',
-                          border:`1.5px solid ${T.primary}22`,background:'#f2f4f0'}}/>
-                    </div>;
-                  })()}
+                  {/* FINGERPRINT_V227_PICKER_HEADSHOTS / FINGERPRINT_V229_FLAG_ON_PHOTO
+                      34px avatar with the flag badged on the corner; the inline flag is dropped for
+                      players who have a photo, so the name gets that horizontal space back. */}
+                  {shotUrl&&<div style={{position:'relative',width:34,height:34,flexShrink:0,marginRight:9}}>
+                    <img src={shotUrl} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';}}
+                      style={{width:34,height:34,borderRadius:'50%',objectFit:'cover',objectPosition:'top center',
+                        border:`1.5px solid ${T.primary}22`,background:'#f2f4f0',display:'block'}}/>
+                    <span style={{position:'absolute',bottom:-3,right:-4,fontSize:13,lineHeight:1,
+                      textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}}><Flag c={p.country}/></span>
+                  </div>}
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontWeight:600,fontSize:13}}><Flag c={p.country}/> {flip(p.name)}
+                    <div style={{fontWeight:600,fontSize:13}}>{!shotUrl&&<><Flag c={p.country}/> </>}{flip(p.name)}
                       {p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8}}>✓</span>}
                       {p.onTrack&&!p.confirmed&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 5px',borderRadius:8}}>– On Track</span>}
                     </div>
@@ -4188,7 +4186,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <div>Loading field...</div>
                   <style>{`@keyframes spin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }`}</style>
                 </div>
-              : fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);
+              : fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);const shotUrl=headshotFor(p);
             const thruNum = parseInt(p.thru, 10);
             const isActivelyPlaying = thruNum > 0 && thruNum < 18;
             // FINGERPRINT_V96_DISPLAY_ROUND
@@ -4242,10 +4240,21 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               </div>}
               <div onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',borderTop:(fieldSort!=='pairings' && (isNewPairingGroup||isCutTransition))?`2px solid ${T.primary}`:(isCutTransition?`2px solid ${T.primary}`:'none'),background:isCut&&isLive?'#fafafa':favorites.has(p.name)?'#fff8d6':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&isLive?.6:1,borderLeft:favorites.has(p.name)?`3px solid #d4a017`:'3px solid transparent'}}>
                 <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&isLive?'#999':T.primary,fontSize:12}}>{(isLive && !isPreTournament)?(isCut?(/WD/i.test(p.pos)?'🚑':/DQ/i.test(p.pos)?'🚫':'✂️'):p.pos):(i+1)}</span>
+                {/* FINGERPRINT_V228_FIELD_HEADSHOTS / FINGERPRINT_V229_FLAG_ON_PHOTO
+                    26px avatar with the flag badged on its corner, which frees the horizontal space
+                    the inline flag used to take. Players with no photo keep the inline flag below,
+                    so every row still shows a nationality either way. */}
+                {shotUrl&&<div style={{position:'relative',width:26,height:26,marginRight:7,flexShrink:0,opacity:isCut&&isLive?.5:1}}>
+                  <img src={shotUrl} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';}}
+                    style={{width:26,height:26,borderRadius:'50%',objectFit:'cover',objectPosition:'top center',
+                      border:`1px solid ${T.primary}22`,background:'#f2f4f0',display:'block'}}/>
+                  <span style={{position:'absolute',bottom:-3,right:-4,fontSize:11,lineHeight:1,
+                    textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}}><Flag c={p.country}/></span>
+                </div>}
                 <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
                   <div style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
                     <span onClick={(e)=>{e.stopPropagation();toggleFavorite(p.name);}} style={{marginRight:5,cursor:'pointer',fontSize:13,verticalAlign:'middle',userSelect:'none'}}>{favorites.has(p.name)?'⭐':'☆'}</span>
-                    <span style={{marginRight:3}}><Flag c={p.country}/></span>
+                    {!shotUrl&&<span style={{marginRight:3}}><Flag c={p.country}/></span>}
                     <span style={{fontWeight:600,fontSize:12,textDecoration:isCut&&isLive?'line-through':'none',color:isCut&&isLive?'#999':'inherit'}}>{flip(p.name)}</span>
                     {p.confirmed&&!isLive&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8,border:'1px solid #2d7a1e40'}}>✓</span>}
                     {p.onTrack&&!p.confirmed&&<span style={{marginLeft:4,fontSize:9,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 5px',borderRadius:8,border:'1px solid #c8840040'}}>–</span>}
