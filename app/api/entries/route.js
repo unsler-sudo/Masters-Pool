@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dpworld-rotation-fix-v168-20260831-1900
+// build: tour-archive-logo-v169-20260901-1300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -498,9 +498,17 @@ async function autoManage(poolId) {
             let logoUrl = existing?.logoUrl || null;
             let logoNoBg = existing?.logoNoBg ?? null;
             let logoHeight = existing?.logoHeight || null;
-            if (!logoUrl && concludedEvent?.event_id) {
+            // FINGERPRINT_V169_TOUR_LOGO
+            // The Cloudinary CDN only hosts PGA TOUR event logos, and DataGolf reuses event ids
+            // across tours — so building this URL for a DP World event stamped an unrelated PGA
+            // Tour logo onto the archive (the Irish Open came out branded as a PGA event). Only
+            // build it for the PGA Tour; DP World archives use the generic tour mark instead.
+            if (!logoUrl && concludedEvent?.event_id && tourKey === 'pgatour') {
               logoUrl = `https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:R000.png/tournaments/logos/R${String(concludedEvent.event_id).padStart(3,'0')}.png`;
               logoNoBg = false; logoHeight = 80;
+            } else if (!logoUrl && tourKey === 'dpworld') {
+              logoUrl = '/logos/dp-world-tour.svg';
+              logoNoBg = false; logoHeight = 64;
             }
 
             await redis('SET', archiveKey, JSON.stringify({
@@ -1425,9 +1433,13 @@ export async function POST(request) {
         }
 
         let logoUrl = existing?.logoUrl || null, logoNoBg = existing?.logoNoBg ?? null, logoHeight = existing?.logoHeight || null;
-        if (!logoUrl && concludedEvent?.event_id) {
+        // FINGERPRINT_V169_TOUR_LOGO — PGA-only CDN; see note in the auto-rotation path above.
+        if (!logoUrl && concludedEvent?.event_id && meta.major === 'pgatour') {
           logoUrl = `https://res.cloudinary.com/pgatour-prod/d_tournaments:logos:R000.png/tournaments/logos/R${String(concludedEvent.event_id).padStart(3,'0')}.png`;
           logoNoBg = false; logoHeight = 80;
+        } else if (!logoUrl && meta.major === 'dpworld') {
+          logoUrl = '/logos/dp-world-tour.svg';
+          logoNoBg = false; logoHeight = 64;
         }
 
         await redis('SET', archiveKey, JSON.stringify({
