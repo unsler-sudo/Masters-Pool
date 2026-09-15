@@ -1,5 +1,5 @@
 'use client';
-// build: avatar-row-color-fix-v231-20260901-1200
+// build: dpworld-flags-v232-20260901-1230
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -853,8 +853,32 @@ const FLAG_MAP = {
   SUI:'🇨🇭',ISL:'🇮🇸',JAM:'🇯🇲',BAH:'🇧🇸',IRN:'🇮🇷',
   ISR:'🇮🇱',RUS:'🇷🇺',UKR:'🇺🇦',TUR:'🇹🇷',VIE:'🇻🇳',
   INA:'🇮🇩',HKG:'🇭🇰',
+  // FINGERPRINT_V232_DPWORLD_FLAGS
+  // The DP World Tour plays across the Middle East, Africa and Asia, so the original PGA-centric
+  // list left plenty of gaps (UAE was missing outright). Codes below are IOC-style, matching the
+  // entries above; ISO alpha-3 aliases follow so a flag resolves whichever convention a feed uses.
+  UAE:'🇦🇪',QAT:'🇶🇦',KSA:'🇸🇦',BRN:'🇧🇭',OMA:'🇴🇲',KUW:'🇰🇼',JOR:'🇯🇴',LBN:'🇱🇧',
+  MAR:'🇲🇦',EGY:'🇪🇬',KEN:'🇰🇪',MRI:'🇲🇺',ZAM:'🇿🇲',BOT:'🇧🇼',NGR:'🇳🇬',GHA:'🇬🇭',
+  GRE:'🇬🇷',CRO:'🇭🇷',SLO:'🇸🇮',SRB:'🇷🇸',HUN:'🇭🇺',ROU:'🇷🇴',BUL:'🇧🇬',CYP:'🇨🇾',
+  MLT:'🇲🇹',LUX:'🇱🇺',EST:'🇪🇪',LAT:'🇱🇻',LTU:'🇱🇹',BLR:'🇧🇾',MDA:'🇲🇩',AND:'🇦🇩',
+  PAK:'🇵🇰',BAN:'🇧🇩',SRI:'🇱🇰',NEP:'🇳🇵',KAZ:'🇰🇿',UZB:'🇺🇿',MYA:'🇲🇲',CAM:'🇰🇭',
+  GUA:'🇬🇹',CRC:'🇨🇷',PAN:'🇵🇦',DOM:'🇩🇴',TTO:'🇹🇹',BAR:'🇧🇧',BER:'🇧🇲',CAY:'🇰🇾',
+  // ISO alpha-3 aliases for codes that differ from the IOC form used above
+  ARE:'🇦🇪',SAU:'🇸🇦',BHR:'🇧🇭',OMN:'🇴🇲',KWT:'🇰🇼',
+  DEU:'🇩🇪',CHE:'🇨🇭',NLD:'🇳🇱',DNK:'🇩🇰',ZAF:'🇿🇦',PRT:'🇵🇹',GRC:'🇬🇷',CHL:'🇨🇱',
+  IDN:'🇮🇩',MYS:'🇲🇾',PHL:'🇵🇭',SGP:'🇸🇬',VNM:'🇻🇳',TWN:'🇹🇼',
+  HRV:'🇭🇷',SVN:'🇸🇮',BGR:'🇧🇬',LVA:'🇱🇻',PRY:'🇵🇾',URY:'🇺🇾',ZWE:'🇿🇼',ZMB:'🇿🇲',
+  BWA:'🇧🇼',MUS:'🇲🇺',NGA:'🇳🇬',LKA:'🇱🇰',BGD:'🇧🇩',NPL:'🇳🇵',KHM:'🇰🇭',MMR:'🇲🇲',
+  GTM:'🇬🇹',CRI:'🇨🇷',PRI:'🇵🇷',
 };
-const Flag = ({c}) => FLAG_MAP[c] ? <span>{FLAG_MAP[c]}</span> : null;
+const _missingFlags = new Set();
+const Flag = ({c}) => {
+  if (FLAG_MAP[c]) return <span>{FLAG_MAP[c]}</span>;
+  // FINGERPRINT_V232_DPWORLD_FLAGS — log an unmapped country once so gaps surface instead of
+  // silently rendering nothing (which is how UAE went unnoticed).
+  if (c && !_missingFlags.has(c)) { _missingFlags.add(c); console.warn('[flag] no emoji mapped for country code:', c); }
+  return null;
+};
 
 // Schedule retry button — shows after 5 seconds of loading so user isn't stuck
 function ScheduleRetry({onRetry, primary}) {
