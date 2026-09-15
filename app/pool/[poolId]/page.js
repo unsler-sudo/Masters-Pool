@@ -1,5 +1,5 @@
 'use client';
-// build: headshots-module-v226-20260831-2100
+// build: picker-headshots-v227-20260901-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -4043,7 +4043,19 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               {filteredTier.map(p=>{const sel=picks[activeTier].includes(p.name),full=!sel&&picks[activeTier].length>=TIERS.find(t=>t.id===activeTier)?.picks,ow=owners(p.name);return(
                 <button key={p.name} type="button" onClick={()=>!full&&togglePick(p.name,activeTier)}
                   style={{display:'flex',alignItems:'center',padding:'8px 12px',border:'none',borderBottom:'1px solid #f0ebe0',width:'100%',background:sel?`${T.primary}0e`:'#fff',textAlign:'left',opacity:full?.3:1,cursor:full?'not-allowed':'pointer'}}>
-                  <div style={{flex:1}}>
+                  {/* FINGERPRINT_V227_PICKER_HEADSHOTS — same photo+flag treatment as the scorecard,
+                      at row scale. loading="lazy" so only visible rows fetch; a 404 hides the photo
+                      and leaves the flag, and unmapped players skip the <img> entirely. */}
+                  {(()=>{
+                    const shot = headshotFor(p);
+                    if(!shot) return null;
+                    return <div style={{position:'relative',width:34,height:34,flexShrink:0,marginRight:9,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <img src={shot} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';}}
+                        style={{width:34,height:34,borderRadius:'50%',objectFit:'cover',objectPosition:'top center',
+                          border:`1.5px solid ${T.primary}22`,background:'#f2f4f0'}}/>
+                    </div>;
+                  })()}
+                  <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:600,fontSize:13}}><Flag c={p.country}/> {flip(p.name)}
                       {p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8}}>✓</span>}
                       {p.onTrack&&!p.confirmed&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 5px',borderRadius:8}}>– On Track</span>}
