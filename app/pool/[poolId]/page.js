@@ -1,6 +1,7 @@
 'use client';
-// build: dpworld-logo-svg-v223-20260831-1845
+// build: headshots-module-v226-20260831-2100
 import React, { useState, useEffect, useRef } from 'react';
+import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
 
 // ─── MAJOR THEMES — visual/branding only, schedule data fetched from DataGolf ─
@@ -394,6 +395,25 @@ const PGATOUR_EVENT_THEMES = {
 };
 
 const DG_EVENT_IDS = { 11:'players', 14:'masters', 33:'pga', 26:'usopen', 100:'open' };
+
+// FINGERPRINT_V224_HEADSHOTS / FINGERPRINT_V225_DG_CDN
+// Player headshots for the scorecard popup, keyed by DataGolf dg_id (which every player in the
+// field already carries). The headshot id is NOT derivable from the API — DataGolf uses a separate
+// internal id in the filename (McIlroy: dg_id 10091, player_num 34024, headshot 28237) — so this
+// map has to be curated. Values may be either:
+//   a number  -> served from DataGolf's CDN: /static/players/headshot_{id}.png
+//   a string  -> used verbatim, so you can self-host any player you like ('/players/x.png')
+// To find an id: open datagolf.com/player-profiles?dg_id=NNNN and read the og:image meta tag.
+// Anyone not in the map shows the flag alone — the popup is designed to look right either way.
+const DG_HEADSHOT_CDN = (id) => `https://datagolf.com/static/players/headshot_${id}.png`;
+// The map itself lives in its own module (it's data, not logic) so it can be regenerated and
+// swapped wholesale without touching this file. Missing module or missing player → flag only.
+const PLAYER_HEADSHOTS = HEADSHOT_MAP;
+const headshotFor = (p) => {
+  const v = p && p.dgId != null ? PLAYER_HEADSHOTS[p.dgId] : null;
+  if (v == null) return null;
+  return typeof v === 'number' ? DG_HEADSHOT_CDN(v) : v;
+};
 
 // FINGERPRINT_V218_DPWORLD_MODE
 // "Tour mode" = a rolling weekly pool that follows whatever event a tour is playing, as opposed to
@@ -3562,7 +3582,23 @@ export default function App(){
               <div style={{padding:'20px 20px 0'}}>
                 <div style={{width:40,height:4,background:'#ddd',borderRadius:2,margin:'0 auto 16px'}}/>
                 <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
-                  <div style={{fontSize:38,lineHeight:1}}><Flag c={p.country}/></div>
+                  {/* FINGERPRINT_V224_HEADSHOTS — photo when we have one, with the flag as a badge;
+                      otherwise the flag alone exactly as before. */}
+                  {(()=>{
+                    const shot = headshotFor(p);
+                    if(!shot) return <div style={{fontSize:38,lineHeight:1}}><Flag c={p.country}/></div>;
+                    // The flag sits underneath as the base layer: if the photo 404s we just hide it
+                    // and the flag shows through centred, so a missing image degrades to today's look.
+                    return <div style={{position:'relative',width:58,height:58,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      <div style={{fontSize:38,lineHeight:1}}><Flag c={p.country}/></div>
+                      <img src={shot} alt={flip(p.name)} loading="lazy"
+                        onError={e=>{e.currentTarget.style.display='none';e.currentTarget.nextSibling.style.display='none';}}
+                        style={{position:'absolute',inset:0,width:58,height:58,borderRadius:'50%',objectFit:'cover',
+                          objectPosition:'top center',border:`2px solid ${T.primary}33`,background:'#f2f4f0'}}/>
+                      <div style={{position:'absolute',bottom:-2,right:-2,fontSize:18,lineHeight:1,
+                        background:'#fff',borderRadius:'50%',boxShadow:'0 1px 4px rgba(0,0,0,.25)',padding:1}}><Flag c={p.country}/></div>
+                    </div>;
+                  })()}
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800}}>{flip(p.name)}</div>
                     <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
