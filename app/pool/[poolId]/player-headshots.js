@@ -11,16 +11,18 @@
 //
 // Players not listed here show their country flag alone — same as the pre-headshot behaviour.
 //
-// REGENERATE: run the harvest snippet on a DataGolf page listing players (e.g. dg-points, the
-// rankings tables, or a tournament field). It walks the rendered table, reads each profile's
-// og:image tag, and caches results in localStorage so runs accumulate across pages.
-// Current coverage: 408 players.
+// REGENERATE: run the harvest snippet on any DataGolf page that lists players (dg-points, the
+// rankings tables, this week's fields). It reads each profile's og:image tag and caches results in
+// localStorage, so runs across different pages accumulate rather than starting over.
+// Current coverage: 413 players.
 
 export const HEADSHOT_MAP = {
   1435: 24138,
   4052: 20396,
+  4163: 23983,
   5665: 20229,
   5689: 21209,
+  5716: 20766,
   5768: 12716,
   6093: 22405,
   6169: 23108,
@@ -249,6 +251,7 @@ export const HEADSHOT_MAP = {
   19960: 48153,
   20084: 48293,
   20085: 48237,
+  20190: 48372,
   20448: 48632,
   20522: 48640,
   20706: 48887,
@@ -263,6 +266,7 @@ export const HEADSHOT_MAP = {
   21074: 49228,
   21362: 49813,
   21407: 49855,
+  21412: 49590,
   21554: 49771,
   21646: 50223,
   21677: 50236,
@@ -311,6 +315,7 @@ export const HEADSHOT_MAP = {
   24093: 53196,
   24127: 64594,
   24172: 53914,
+  24185: 54190,
   24200: 54185,
   24223: 54218,
   24304: 54304,
