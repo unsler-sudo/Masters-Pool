@@ -1,5 +1,5 @@
 'use client';
-// build: dpworld-flags-v232-20260901-1230
+// build: tour-logo-ref-v233-20260901-1300
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1493,10 +1493,19 @@ export default function App(){
             const evThemeLogo = evThemeKey ? PGATOUR_EVENT_THEMES[evThemeKey]?.logoUrl : null;
             const evThemeLogoNoBg = evThemeKey ? PGATOUR_EVENT_THEMES[evThemeKey]?.logoNoBg : undefined;
             const evThemeLogoH = evThemeKey ? PGATOUR_EVENT_THEMES[evThemeKey]?.logoHeight : undefined;
-            if (evThemeLogo) {
+            // FINGERPRINT_V233_TOUR_LOGO_REF
+            // Always ASSIGN this ref, never fall through. On DP World both branches above are
+            // empty (no PGA event theme, no Cloudinary URL), so leaving it untouched kept whatever
+            // the ref held from the previous tour — which is how a stale PGA Tour logo ended up
+            // stamped on the Irish Open archive after switching modes.
+            if (isDPWorld(curMajor)) {
+              pgatourLogoRef.current = { logoUrl: '/logos/dp-world-tour.svg', logoNoBg: false, logoHeight: 64 };
+            } else if (evThemeLogo) {
               pgatourLogoRef.current = { logoUrl: evThemeLogo, logoNoBg: evThemeLogoNoBg ?? true, logoHeight: evThemeLogoH || 80 };
             } else if (logoUrl) {
               pgatourLogoRef.current = { logoUrl, logoNoBg: false, logoHeight: 80 };
+            } else {
+              pgatourLogoRef.current = null;
             }
             // FINGERPRINT_V220_TOUR_KEY — store under the RUNNING tour's key. This was hardcoded
             // to 'pgatour', so in DP World mode scheduleData.dpworld was never written, T.teeTime
