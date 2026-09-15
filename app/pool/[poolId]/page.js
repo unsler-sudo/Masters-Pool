@@ -1,5 +1,5 @@
 'use client';
-// build: hide-dup-index-v235-20260901-1400
+// build: photo-zoom-v236-20260901-1430
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1196,6 +1196,7 @@ export default function App(){
   const [submitting,setSubmitting]=useState(false);
   const [now,setNow]=useState(Date.now());
   const [selectedPlayer,setSelectedPlayer]=useState(null);
+  const [zoomShot,setZoomShot]=useState(null); // FINGERPRINT_V236_PHOTO_ZOOM — {url,name} when a headshot is tapped
   const [holeData,setHoleData]=useState({round:null,holes:[],loading:false,error:null});
   const [archives,setArchives]=useState([]);
   const [expandedArchive,setExpandedArchive]=useState(null);
@@ -2591,7 +2592,7 @@ export default function App(){
     }catch(e){setHoleData({round:roundNum,holes:[],loading:false,error:e.message});}
   };
 
-  const closeScorecard=()=>{setSelectedPlayer(null);setHoleData({round:null,holes:[],loading:false,error:null});};
+  const closeScorecard=()=>{setSelectedPlayer(null);setZoomShot(null);setHoleData({round:null,holes:[],loading:false,error:null});};
 
   // Fetch DataGolf live tournament stats (SG breakdown) — cached for the session
   const fetchLiveStats=async()=>{
@@ -3618,6 +3619,18 @@ export default function App(){
         },{eagles:0,birdies:0,pars:0,bogeys:0,doubles:0});
         return(
           <div onClick={closeScorecard} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:150,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+            {/* FINGERPRINT_V236_PHOTO_ZOOM — enlarged headshot, above the scorecard. Tap anywhere
+                to dismiss; stops propagation so it doesn't also close the scorecard underneath. */}
+            {zoomShot&&<div onClick={(e)=>{e.stopPropagation();setZoomShot(null);}}
+              style={{position:'fixed',inset:0,background:'rgba(0,0,0,.82)',zIndex:200,display:'flex',
+                flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,cursor:'zoom-out'}}>
+              <img src={zoomShot.url} alt={zoomShot.name}
+                style={{width:'min(78vw,300px)',height:'min(78vw,300px)',borderRadius:'50%',objectFit:'cover',
+                  objectPosition:'top center',border:'3px solid rgba(255,255,255,.85)',background:'#f2f4f0',
+                  boxShadow:'0 8px 40px rgba(0,0,0,.6)'}}/>
+              <div style={{marginTop:16,color:'#fff',fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:700,textAlign:'center'}}>{zoomShot.name}</div>
+              <div style={{marginTop:6,color:'rgba(255,255,255,.55)',fontSize:11}}>Tap anywhere to close</div>
+            </div>}
             <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:'18px 18px 0 0',width:'100%',maxWidth:500,animation:'su .25s ease',boxShadow:'0 -8px 40px rgba(0,0,0,.25)',maxHeight:'92vh',overflowY:'auto'}}>
               <div style={{padding:'20px 20px 0'}}>
                 <div style={{width:40,height:4,background:'#ddd',borderRadius:2,margin:'0 auto 16px'}}/>
@@ -3631,10 +3644,12 @@ export default function App(){
                     // and the flag shows through centred, so a missing image degrades to today's look.
                     return <div style={{position:'relative',width:58,height:58,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
                       <div style={{fontSize:38,lineHeight:1}}><Flag c={p.country}/></div>
-                      <img src={shot} alt={flip(p.name)} loading="lazy"
+                      {/* FINGERPRINT_V236_PHOTO_ZOOM — tap to view the headshot large */}
+                      <img src={shot} alt={flip(p.name)} loading="lazy" title="Tap to enlarge"
+                        onClick={(e)=>{e.stopPropagation();setZoomShot({url:shot,name:flip(p.name)});}}
                         onError={e=>{e.currentTarget.style.display='none';e.currentTarget.nextSibling.style.display='none';}}
                         style={{position:'absolute',inset:0,width:58,height:58,borderRadius:'50%',objectFit:'cover',
-                          objectPosition:'top center',border:`2px solid ${T.primary}33`,background:'#f2f4f0'}}/>
+                          objectPosition:'top center',border:`2px solid ${T.primary}33`,background:'#f2f4f0',cursor:'zoom-in'}}/>
                       <div style={{position:'absolute',bottom:-2,right:-2,fontSize:18,lineHeight:1,
                         background:'#fff',borderRadius:'50%',boxShadow:'0 1px 4px rgba(0,0,0,.25)',padding:1}}><Flag c={p.country}/></div>
                     </div>;
