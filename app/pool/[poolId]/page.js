@@ -1,5 +1,5 @@
 'use client';
-// build: tour-logo-ref-v233-20260901-1300
+// build: hide-dup-index-v235-20260901-1400
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -3197,6 +3197,13 @@ export default function App(){
   // Pre-tournament has TWO sub-states: with-tee-times (Wed-Thu morning) and no-tee-times (Mon-Tue)
   // When tee times are available, show them. When not, show DG odds rank.
   const hasTeeTimes = isPreTournament && field.some(p => p.teeTime);
+  // FINGERPRINT_V235_HIDE_DUP_INDEX
+  // Pre-tournament, the "#" column is just the row index and the list is already sorted by DG
+  // rank — so it mirrors the DG Rank column exactly (McIlroy showing "1" twice). Hide it in that
+  // default state. It returns the moment the ordering differs from ascending rank (any other
+  // column sort, or rank descending), where the row index is genuinely informative again. Live
+  // play is unaffected: there "#" is the leaderboard position, not an index.
+  const dupIndexCol = isPreTournament && (!colSort || (colSort.key === 'rank' && colSort.dir === 1));
   // FINGERPRINT_V137_COLSORT_MODE_RESET
   // The header columns change meaning when the display mode flips (pre-tournament 'tee'/'rank'
   // vs live 'thru'/'score'/'earnings'). Without this reset, a sort picked Wednesday (e.g. R1 Tee)
@@ -4082,13 +4089,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <div style={{position:'relative',width:34,height:34,flexShrink:0,marginRight:9,
                     display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',
                     background:'#f2f4f0',border:`1.5px solid ${T.primary}22`}}>
-                    <span style={{fontSize:18,lineHeight:1}}><Flag c={p.country}/></span>
-                    {shotUrl&&<><img src={shotUrl} alt="" loading="lazy"
-                        onError={e=>{e.currentTarget.style.display='none';e.currentTarget.nextSibling.style.display='none';}}
+                    {/* FINGERPRINT_V234_SINGLE_FLAG — see note in the Field row. */}
+                    {shotUrl&&<img src={shotUrl} alt="" loading="lazy"
+                        onError={e=>{e.currentTarget.style.display='none';const b=e.currentTarget.nextSibling;
+                          if(b){b.style.position='static';b.style.fontSize='18px';b.style.textShadow='none';}}}
                         style={{position:'absolute',inset:0,width:34,height:34,borderRadius:'50%',objectFit:'cover',
-                          objectPosition:'top center',background:'#f2f4f0'}}/>
-                      <span style={{position:'absolute',bottom:-3,right:-4,fontSize:13,lineHeight:1,
-                        textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}}><Flag c={p.country}/></span></>}
+                          objectPosition:'top center',background:'#f2f4f0'}}/>}
+                    <span style={shotUrl
+                      ? {position:'absolute',bottom:-3,right:-4,fontSize:13,lineHeight:1,textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}
+                      : {fontSize:18,lineHeight:1}}><Flag c={p.country}/></span>
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:600,fontSize:13}}>{flip(p.name)}
@@ -4196,7 +4205,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 }
                 if (hasTeeTimes) {
                   return <>
-                    <span onClick={()=>cycle('rank')} style={{...hc,width:40,textAlign:'center'}}>#{arrow('rank')}</span>
+                    {!dupIndexCol&&<span onClick={()=>cycle('rank')} style={{...hc,width:40,textAlign:'center'}}>#{arrow('rank')}</span>}
                     <span onClick={()=>cycle('name')} style={{...hc,flex:1}}>Player{arrow('name')}</span>
                     <span onClick={()=>cycle('tier')} style={{...hc,width:30,textAlign:'center'}}>Tier{arrow('tier')}</span>
                     <span onClick={()=>cycle('tee')} style={{...hc,width:62,textAlign:'center'}}>R1 Tee{arrow('tee')}</span>
@@ -4204,7 +4213,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   </>;
                 }
                 return <>
-                  <span onClick={()=>cycle('rank')} style={{...hc,width:40,textAlign:'center'}}>#{arrow('rank')}</span>
+                  {!dupIndexCol&&<span onClick={()=>cycle('rank')} style={{...hc,width:40,textAlign:'center'}}>#{arrow('rank')}</span>}
                   <span onClick={()=>cycle('name')} style={{...hc,flex:1}}>Player{arrow('name')}</span>
                   <span onClick={()=>cycle('tier')} style={{...hc,width:30,textAlign:'center'}}>Tier{arrow('tier')}</span>
                   <span onClick={()=>cycle('rank')} style={{...hc,width:50,textAlign:'center'}}>DG Rank{arrow('rank')}</span>
@@ -4276,7 +4285,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <span>⏰ {myPairTime}{myStartHole !== 1 ? ` · Hole ${myStartHole}` : ''}</span>
               </div>}
               <div onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',borderTop:(fieldSort!=='pairings' && (isNewPairingGroup||isCutTransition))?`2px solid ${T.primary}`:(isCutTransition?`2px solid ${T.primary}`:'none'),background:isCut&&isLive?'#fafafa':favorites.has(p.name)?'#fff8d6':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&isLive?.6:1,borderLeft:favorites.has(p.name)?`3px solid #d4a017`:'3px solid transparent'}}>
-                <span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&isLive?'#999':T.primary,fontSize:12}}>{(isLive && !isPreTournament)?(isCut?(/WD/i.test(p.pos)?'🚑':/DQ/i.test(p.pos)?'🚫':'✂️'):p.pos):(i+1)}</span>
+                {!dupIndexCol&&<span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&isLive?'#999':T.primary,fontSize:12}}>{(isLive && !isPreTournament)?(isCut?(/WD/i.test(p.pos)?'🚑':/DQ/i.test(p.pos)?'🚫':'✂️'):p.pos):(i+1)}</span>}
                 {/* FINGERPRINT_V228_FIELD_HEADSHOTS / FINGERPRINT_V230_UNIFORM_AVATAR
                     Every row gets the SAME 26px avatar slot, so names line up whether or not a
                     player is in the headshot map: with a photo the flag is badged on the corner,
@@ -4286,13 +4295,17 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <div style={{position:'relative',width:26,height:26,marginRight:7,flexShrink:0,opacity:isCut&&isLive?.5:1,
                   display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',
                   background:'#f2f4f0',border:`1px solid ${T.primary}22`}}>
-                  <span style={{fontSize:14,lineHeight:1}}><Flag c={p.country}/></span>
-                  {shotUrl&&<><img src={shotUrl} alt="" loading="lazy"
-                      onError={e=>{e.currentTarget.style.display='none';e.currentTarget.nextSibling.style.display='none';}}
+                  {/* FINGERPRINT_V234_SINGLE_FLAG — exactly ONE flag per row. It's a corner badge
+                      when a photo loads; if the photo 404s the same span is recentred and enlarged,
+                      so we never render a hidden duplicate (which showed up twice in copied text). */}
+                  {shotUrl&&<img src={shotUrl} alt="" loading="lazy"
+                      onError={e=>{e.currentTarget.style.display='none';const b=e.currentTarget.nextSibling;
+                        if(b){b.style.position='static';b.style.fontSize='14px';b.style.textShadow='none';}}}
                       style={{position:'absolute',inset:0,width:26,height:26,borderRadius:'50%',objectFit:'cover',
-                        objectPosition:'top center',background:'#f2f4f0'}}/>
-                    <span style={{position:'absolute',bottom:-3,right:-4,fontSize:11,lineHeight:1,
-                      textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}}><Flag c={p.country}/></span></>}
+                        objectPosition:'top center',background:'#f2f4f0'}}/>}
+                  <span style={shotUrl
+                    ? {position:'absolute',bottom:-3,right:-4,fontSize:11,lineHeight:1,textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}
+                    : {fontSize:14,lineHeight:1}}><Flag c={p.country}/></span>
                 </div>
                 <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
                   <div style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
