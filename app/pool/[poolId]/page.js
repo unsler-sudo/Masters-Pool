@@ -1,5 +1,5 @@
 'use client';
-// build: flag-circle-fallback-v230-20260901-1130
+// build: avatar-row-color-fix-v231-20260901-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -4048,14 +4048,14 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       plain circle when not, so every row's name starts at the same x. */}
                   <div style={{position:'relative',width:34,height:34,flexShrink:0,marginRight:9,
                     display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',
-                    background:shotUrl?'transparent':'#f2f4f0',border:shotUrl?'none':`1.5px solid ${T.primary}22`}}>
-                    {shotUrl
-                      ? <><img src={shotUrl} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';e.currentTarget.parentElement.parentElement.style.background='#f2f4f0';}}
-                          style={{width:34,height:34,borderRadius:'50%',objectFit:'cover',objectPosition:'top center',
-                            border:`1.5px solid ${T.primary}22`,background:'#f2f4f0',display:'block'}}/>
-                        <span style={{position:'absolute',bottom:-3,right:-4,fontSize:13,lineHeight:1,
-                          textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}}><Flag c={p.country}/></span></>
-                      : <span style={{fontSize:18,lineHeight:1}}><Flag c={p.country}/></span>}
+                    background:'#f2f4f0',border:`1.5px solid ${T.primary}22`}}>
+                    <span style={{fontSize:18,lineHeight:1}}><Flag c={p.country}/></span>
+                    {shotUrl&&<><img src={shotUrl} alt="" loading="lazy"
+                        onError={e=>{e.currentTarget.style.display='none';e.currentTarget.nextSibling.style.display='none';}}
+                        style={{position:'absolute',inset:0,width:34,height:34,borderRadius:'50%',objectFit:'cover',
+                          objectPosition:'top center',background:'#f2f4f0'}}/>
+                      <span style={{position:'absolute',bottom:-3,right:-4,fontSize:13,lineHeight:1,
+                        textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}}><Flag c={p.country}/></span></>}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontWeight:600,fontSize:13}}>{flip(p.name)}
@@ -4252,14 +4252,14 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     Schmidt.) An image that 404s falls back to the same plain circle. */}
                 <div style={{position:'relative',width:26,height:26,marginRight:7,flexShrink:0,opacity:isCut&&isLive?.5:1,
                   display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',
-                  background:shotUrl?'transparent':'#f2f4f0',border:shotUrl?'none':`1px solid ${T.primary}22`}}>
-                  {shotUrl
-                    ? <><img src={shotUrl} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';e.currentTarget.parentElement.parentElement.style.background='#f2f4f0';}}
-                        style={{width:26,height:26,borderRadius:'50%',objectFit:'cover',objectPosition:'top center',
-                          border:`1px solid ${T.primary}22`,background:'#f2f4f0',display:'block'}}/>
-                      <span style={{position:'absolute',bottom:-3,right:-4,fontSize:11,lineHeight:1,
-                        textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}}><Flag c={p.country}/></span></>
-                    : <span style={{fontSize:14,lineHeight:1}}><Flag c={p.country}/></span>}
+                  background:'#f2f4f0',border:`1px solid ${T.primary}22`}}>
+                  <span style={{fontSize:14,lineHeight:1}}><Flag c={p.country}/></span>
+                  {shotUrl&&<><img src={shotUrl} alt="" loading="lazy"
+                      onError={e=>{e.currentTarget.style.display='none';e.currentTarget.nextSibling.style.display='none';}}
+                      style={{position:'absolute',inset:0,width:26,height:26,borderRadius:'50%',objectFit:'cover',
+                        objectPosition:'top center',background:'#f2f4f0'}}/>
+                    <span style={{position:'absolute',bottom:-3,right:-4,fontSize:11,lineHeight:1,
+                      textShadow:'0 0 2px #fff, 0 0 2px #fff, 0 0 2px #fff'}}><Flag c={p.country}/></span></>}
                 </div>
                 <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
                   <div style={{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>
