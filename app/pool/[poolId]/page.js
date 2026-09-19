@@ -1,5 +1,5 @@
 'use client';
-// build: photo-zoom-v236-20260901-1430
+// build: dpworld-wentworth-v237-20260910-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -683,14 +683,19 @@ const PAYOUT_SIGNATURE = {
 // (T3 through T63) reproduce exactly by averaging this ladder — including T7 $582,800, T12
 // $369,571, T19 $243,200, T24 $162,500 and T34 $103,700. The listed positions sum to $19,959,000;
 // the $41,000 remainder is WD money outside the finishing ladder and doesn't affect scoring.
-// FINGERPRINT_V217_DPWORLD
-// DP World Tour standard payout distribution — 17% to the winner, paying 69 positions. Verified
-// against the 2026 Omega European Masters ($3,750,000 purse): all 69 positions round-trip to the
-// official dollar. The percentages are clean round numbers, which means the DP World Tour uses a
-// FIXED percentage ladder — so this one table scales to any DP World purse (regular ~$3M events
-// through $9M Rolex Series) just by setting the purse in admin. Money is displayed in USD.
+// FINGERPRINT_V217_DPWORLD / FINGERPRINT_V237_WENTWORTH
+// DP World Tour payout distribution — 17% to the winner, paying 72 positions. The DP World Tour
+// uses a FIXED percentage ladder, so this one table scales to any purse (a ~$3M regular event
+// through a $9M Rolex Series) just by setting the purse in admin. Money is displayed in USD.
+// Verified against two published breakdowns: the 2026 Omega European Masters ($3.75M) and the
+// BMW PGA Championship at Wentworth ($9M). Every position agrees across both EXCEPT 3rd —
+// Wentworth pays 6.30% ($567,000) where the Omega list implies 6.26% ($234,750 of $3.75M, which
+// would be $563,400 here). This table follows Wentworth, the fuller and more recent source; the
+// gap is ~$3,600 at a $9M purse and only affects an outright 3rd place.
+// NOTE: positions 71-72 break the tail's smooth progression ($17,100 at 70 then $13,500) and the
+// published list sums to $9,026,996 — about $27k over the stated purse. Encoded as published.
 const PAYOUT_DPWORLD = {
-  1:0.17000000,2:0.11000000,3:0.06260000,4:0.05000000,5:0.04240000,
+  1:0.17000000,2:0.11000000,3:0.06300000,4:0.05000000,5:0.04240000,
   6:0.03500000,7:0.03000000,8:0.02500000,9:0.02240000,10:0.02000000,
   11:0.01840000,12:0.01720000,13:0.01610000,14:0.01530000,15:0.01470000,
   16:0.01410000,17:0.01350000,18:0.01290000,19:0.01240000,20:0.01200000,
@@ -703,7 +708,8 @@ const PAYOUT_DPWORLD = {
   51:0.00410000,52:0.00390000,53:0.00370000,54:0.00350000,55:0.00340000,
   56:0.00330000,57:0.00320000,58:0.00310000,59:0.00300000,60:0.00290000,
   61:0.00280000,62:0.00270000,63:0.00260000,64:0.00250000,65:0.00240000,
-  66:0.00230000,67:0.00220000,68:0.00210000,69:0.00200000,
+  66:0.00230000,67:0.00220000,68:0.00210000,69:0.00200000,70:0.00190000,
+  71:0.00150000,72:0.00149961,
 };
 
 const PAYOUT_ST_JUDE = {
