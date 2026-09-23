@@ -1,5 +1,5 @@
 'use client';
-// build: team-balanced-tiers-v243-20260923-1430
+// build: team-no-odds-v244-20260923-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -3273,7 +3273,8 @@ export default function App(){
     if (isNaN(v) || v === 0) return null;
     return v < 0 ? (Math.abs(v) / (Math.abs(v) + 100)) : (100 / (v + 100));
   };
-  const mrChalk = (() => {
+  // FINGERPRINT_V244_TEAM_NO_ODDS — team events have no odds market, so no Mr. Chalk either
+  const mrChalk = isTeamPool ? null : (() => {
     if (picksHidden || entries.length < 2) return null;
     let best = null, bestSum = -1, sawRealOdds = false;
     entries.forEach(e => {
@@ -3825,7 +3826,7 @@ export default function App(){
                   })()}
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800}}>{flip(p.name)}</div>
-                    <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}{p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
+                    <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span>{!isTeamPool&&<> · {p.odds}</>}{p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
                     {(()=>{
                       // FINGERPRINT_V102_POPUP_TEE
                       // Show the tee time for the player's active round (next to play), not always R1.
@@ -4305,7 +4306,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       {p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 5px',borderRadius:8}}>✓</span>}
                       {p.onTrack&&!p.confirmed&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 5px',borderRadius:8}}>– On Track</span>}
                     </div>
-                    <div style={{fontSize:11,color:'#8a9580'}}>{p.country} · {p.odds}</div>
+                    <div style={{fontSize:11,color:'#8a9580'}}>{p.country}{!isTeamPool&&<> · {p.odds}</>}</div>
                     {!picksHidden&&ow.length>0&&<div style={{fontSize:10,color:'#8b6914',marginTop:1}}>Picked by: {ow.join(', ')}</div>}
                   </div>
                   <div style={sel?{width:20,height:20,borderRadius:'50%',background:T.primary,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}:{width:20,height:20,borderRadius:'50%',border:`2px solid ${T.inputBorder}`}}>{sel?'✓':''}</div>
