@@ -1,5 +1,5 @@
 'use client';
-// build: team-sessions-v242-20260923-1330
+// build: team-balanced-tiers-v243-20260923-1430
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1316,6 +1316,9 @@ export default function App(){
   // FINGERPRINT_V241_TEAM_EVENTS — Presidents/Ryder Cup pools score match points, pick 6
   const isTeamPool = isTourMode(activeMajor) && isTeamEvent(tcEventName);
   const fmtE = (v) => isTeamPool ? fmtPts(v) : fmt(v);   // player/entry score formatter
+  // FINGERPRINT_V243_TEAM_TIERS — sides for team events (Europe for the Ryder Cup)
+  const teamOf = (pl) => (pl?.country === 'USA') ? 'USA' : 'INT';
+  const teamLabel = (t) => t === 'USA' ? '🇺🇸 USA' : (/ryder/i.test(tcEventName) ? '🇪🇺 Europe' : '🌏 International');
   // FINGERPRINT_V216_TIER_COLOR_CLASH
   // Group B normally borrows the theme's primary so it feels event-branded. But a gold-primary
   // theme (Tour Championship = #cba135) sits right on top of Group A's gold (#b8960c), making the
@@ -1825,6 +1828,22 @@ export default function App(){
             : Math.min(68, Math.round(fieldSize * 0.52)); // full field: A=12, B→~68, C→rest
         }
         // Build enriched player list
+        // FINGERPRINT_V243_TEAM_TIERS
+        // Team events: tier each SIDE separately, so every group holds an equal slice of both
+        // teams — with 12 a side, Group A = top 4 USA + top 4 International, and so on. Entries
+        // then take 1 from each side per group. Order within a side is the field order above
+        // (DG rank in roster-build mode). Keyed by object so it survives name collisions.
+        const teamTierMap = (() => {
+          if (!isTeamEvent(ptData.event_name || fuEventName)) return null;
+          const m = new Map();
+          const place = (list) => {
+            const n = list.length, a = Math.ceil(n / 3), b = Math.ceil(2 * n / 3);
+            list.forEach((pl, k) => m.set(pl, k < a ? 1 : k < b ? 2 : 3));
+          };
+          place(fieldSorted.filter(pl => (pl.country || '') === 'USA'));
+          place(fieldSorted.filter(pl => (pl.country || '') !== 'USA'));
+          return m;
+        })();
         const enriched = fieldSorted.map((p, i) => {
           const name = p.player_name || p.name || '';
           // Convert "Last, First" → "First Last"
@@ -1847,7 +1866,7 @@ export default function App(){
                 : `+${Math.min(Math.round((1/effWin)*100-100), 99999)}`) // underdog → positive, capped
             : 'n/a';
           // Tier cuts scale to field size (see above)
-          const tier = i < tierAMax ? 1 : i < tierBMax ? 2 : 3;
+          const tier = (teamTierMap && teamTierMap.get(p)) || (i < tierAMax ? 1 : i < tierBMax ? 2 : 3);
           // Look up tee time
           const nameKey = (p.player_name || '').toLowerCase().trim();
           const displayKey = displayName.toLowerCase().trim();
@@ -2820,7 +2839,15 @@ export default function App(){
   const togglePick=(name,tier)=>{
     const tp=picks[tier];const mx=TIERS.find(t=>t.id===tier)?.picks||3;
     if(tp.includes(name))setPicks({...picks,[tier]:tp.filter(p=>p!==name)});
-    else if(tp.length<mx)setPicks({...picks,[tier]:[...tp,name]});
+    else if(tp.length<mx){
+      // FINGERPRINT_V243_TEAM_TIERS — one player per side in each group
+      if(isTeamPool){
+        const side=teamOf(field.find(f=>f.name===name));
+        const clash=tp.find(n=>teamOf(field.find(f=>f.name===n))===side);
+        if(clash) return msg(`One ${teamLabel(side)} player per group — remove ${flip(clash)} first`);
+      }
+      setPicks({...picks,[tier]:[...tp,name]});
+    }
   };
   const removePick=name=>{const np={};for(const t of[1,2,3])np[t]=picks[t].filter(p=>p!==name);setPicks(np);};
 
@@ -2831,6 +2858,10 @@ export default function App(){
       if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entryEmail.trim()))return msg('Invalid email format');
     }
     for(const t of TIERS)if(picks[t.id].length!==t.picks)return msg(`Pick ${t.picks} from ${t.name}`);
+    if(isTeamPool)for(const t of TIERS){
+      const sides=picks[t.id].map(n=>teamOf(field.find(f=>f.name===n)));
+      if(!(sides.includes('USA')&&sides.includes('INT')))return msg(`${t.name}: pick 1 ${teamLabel('USA')} and 1 ${teamLabel('INT')}`);
+    }
     setSubmitting(true);
     try{
       const body=editMode
@@ -3463,6 +3494,7 @@ export default function App(){
   // Order the pick list by odds, best (biggest favorite) to worst — using rank (odds-based, lower
   // = better). Falls back to dgRank, then name, so players without a rank still sort sensibly.
   const tierField=field.filter(p=>p.tier===activeTier).sort((a,b)=>{
+    if(isTeamPool){ const d=(teamOf(a)==='USA'?0:1)-(teamOf(b)==='USA'?0:1); if(d) return d; }   // FINGERPRINT_V243
     const ar = (typeof a.rank==='number' && a.rank<9000) ? a.rank : (typeof a.dgRank==='number' ? a.dgRank : 9999);
     const br = (typeof b.rank==='number' && b.rank<9000) ? b.rank : (typeof b.dgRank==='number' ? b.dgRank : 9999);
     if (ar !== br) return ar - br;
@@ -4244,7 +4276,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             <input style={{...inp,marginBottom:8}} placeholder={`Search ${TIERS.find(t=>t.id===activeTier)?.name||''}...`} value={search} onChange={e=>setSearch(e.target.value)}/>
             <div style={{maxHeight:320,overflowY:'auto',borderRadius:9,border:`1px solid ${T.inputBorder}`,background:'#fff'}}>
-              {filteredTier.map(p=>{const sel=picks[activeTier].includes(p.name),full=!sel&&picks[activeTier].length>=TIERS.find(t=>t.id===activeTier)?.picks,ow=owners(p.name),shotUrl=headshotFor(p);return(
+              {filteredTier.map((p,ix)=>{const sel=picks[activeTier].includes(p.name),
+                sideTaken=isTeamPool&&!sel&&picks[activeTier].some(n=>teamOf(field.find(f=>f.name===n))===teamOf(p)),
+                full=!sel&&(picks[activeTier].length>=TIERS.find(t=>t.id===activeTier)?.picks||sideTaken),ow=owners(p.name),shotUrl=headshotFor(p),
+                newSide=isTeamPool&&(ix===0||teamOf(filteredTier[ix-1])!==teamOf(p));return(<React.Fragment key={p.name}>
+                {newSide&&<div style={{padding:'8px 12px 5px',fontSize:11,fontWeight:800,letterSpacing:.5,color:T.primary,background:`${T.primary}0a`,borderBottom:'1px solid #f0ebe0'}}>
+                  {teamLabel(teamOf(p))}{picks[activeTier].some(n=>teamOf(field.find(f=>f.name===n))===teamOf(p))?' — ✓ picked':' — pick 1'}</div>}
                 <button key={p.name} type="button" onClick={()=>!full&&togglePick(p.name,activeTier)}
                   style={{display:'flex',alignItems:'center',padding:'8px 12px',border:'none',borderBottom:'1px solid #f0ebe0',width:'100%',background:sel?`${T.primary}0e`:'#fff',textAlign:'left',opacity:full?.3:1,cursor:full?'not-allowed':'pointer'}}>
                   {/* FINGERPRINT_V227_PICKER_HEADSHOTS / FINGERPRINT_V230_UNIFORM_AVATAR
@@ -4272,7 +4309,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     {!picksHidden&&ow.length>0&&<div style={{fontSize:10,color:'#8b6914',marginTop:1}}>Picked by: {ow.join(', ')}</div>}
                   </div>
                   <div style={sel?{width:20,height:20,borderRadius:'50%',background:T.primary,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:700}:{width:20,height:20,borderRadius:'50%',border:`2px solid ${T.inputBorder}`}}>{sel?'✓':''}</div>
-                </button>);})}
+                </button></React.Fragment>);})}
             </div>
             <button type="button" disabled={submitting||totalPicked!==TOTAL_PICKS_REQ} style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:10,borderRadius:9,opacity:(submitting||totalPicked!==TOTAL_PICKS_REQ)?.4:1}} onClick={submit}>
               {submitting?(editMode?'Updating...':'Submitting...'):(editMode?'Update Picks ('+totalPicked+'/'+TOTAL_PICKS_REQ+')':'Submit Entry ('+totalPicked+'/'+TOTAL_PICKS_REQ+')')}
