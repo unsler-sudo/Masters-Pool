@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: join-own-code-v174-20260923-1900
+// build: picks-open-email-v175-20260923-2100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1614,7 +1614,64 @@ export async function POST(request) {
       const all = await srvGetTeamMatches(ev);
       if (clean.length) all[sk] = { lockAt: new Date(lockMs).toISOString(), matches: clean }; else delete all[sk];
       await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
-      return Response.json({ ok:true, teamMatches: all });
+
+      // FINGERPRINT_V175_PICKS_OPEN_EMAIL
+      // First time a session's pairings are saved (and it hasn't locked yet), email every entry in
+      // THIS pool that picks are open. Once per session per pool: later edits and result entry don't
+      // re-send. Each person gets their own message with their own code, so no addresses are shared.
+      let emailed = 0;
+      const sessNow = all[sk];
+      if (sessNow && Date.now() < new Date(sessNow.lockAt).getTime() && process.env.RESEND_API_KEY) {
+        const notifKey = k(poolId, 'teamnotified');
+        let notified = {};
+        try { const r = await redis('GET', notifKey); if (r) notified = JSON.parse(r); } catch {}
+        const tag = `${ev}_${year}_${sk}`.toLowerCase();
+        if (!notified[tag]) {
+          const esc = (x) => String(x || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+          const LABEL = { thu:'Thursday', fri:'Friday', friam:'Friday morning', fripm:'Friday afternoon',
+                          satam:'Saturday morning', satpm:'Saturday afternoon', sun:'Sunday singles' };
+          const label = LABEL[sk] || sk;
+          const other = /ryder/i.test(ev) ? 'Europe' : 'International';
+          const lockTxt = new Date(sessNow.lockAt).toLocaleString('en-US',
+            { timeZone:'America/New_York', weekday:'long', hour:'numeric', minute:'2-digit' }) + ' ET';
+          const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
+          const rows = sessNow.matches.map((m, i) =>
+            `<tr><td style="padding:6px 8px;color:#888;font-size:12px">${i+1}</td>` +
+            `<td style="padding:6px 8px">🇺🇸 ${esc(m.usa.join(' & '))}</td>` +
+            `<td style="padding:6px 4px;color:#aaa">v</td>` +
+            `<td style="padding:6px 8px">${esc(m.intl.join(' & '))}</td></tr>`).join('');
+          const entries = await getEntries(poolId);
+          const targets = entries.filter(e => e.email);
+          const sendOne = (e) => fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+              to: e.email,
+              subject: `${ev}: ${label} pairings are out — make your picks ⛳`,
+              html: `
+                <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2a3a1e">
+                  <h2 style="margin:0 0 6px">${esc(label)} pairings are out</h2>
+                  <p style="margin:0 0 14px">Hi ${esc(e.name)} — pick the winner of each match before picks
+                    lock at <b>${esc(lockTxt)}</b>.</p>
+                  <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:16px">
+                    <tr style="background:#f4f4ef"><td></td><td style="padding:6px 8px;font-weight:700">USA</td>
+                      <td></td><td style="padding:6px 8px;font-weight:700">${other}</td></tr>
+                    ${rows}
+                  </table>
+                  <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
+                  <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> · your code:
+                    <b style="letter-spacing:2px">${esc(e.editCode)}</b></p>
+                  <p style="font-size:12px;color:#999">1 pt per correct pick · a halved match gives ½ to everyone who picked it.</p>
+                </div>`,
+            }),
+          }).then(r => { if (r.ok) emailed++; }).catch(() => {});
+          for (let i = 0; i < targets.length; i += 6) await Promise.all(targets.slice(i, i + 6).map(sendOne));
+          notified[tag] = new Date().toISOString();
+          await redis('SET', notifKey, JSON.stringify(notified));
+        }
+      }
+      return Response.json({ ok:true, teamMatches: all, emailed });
     }
 
     // An entry saves its picks for one session. Rejected once that session has locked.
