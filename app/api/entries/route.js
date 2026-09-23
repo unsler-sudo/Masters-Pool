@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: dpworld-wentworth-v170-20260910-1000
+// build: team-event-points-v171-20260923-1200
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -83,6 +83,22 @@ function srvIsBMW(eventName){ return (eventName||'').toLowerCase().includes('bmw
 // FINGERPRINT_V163_TC_SIX_PICKS
 // Required entry size depends on the event: the TOUR Championship is a 30-player field, so it uses
 // 2/2/2 = 6 picks; everything else uses the standard 2/4/4 = 10. Mirrors the frontend's TIERS.
+// FINGERPRINT_V171_TEAM_EVENTS
+// Presidents Cup / Ryder Cup: team match play, no individual prize money. Pools score MATCH
+// POINTS (1 win / ½ halve / 0 loss, 0–5 per player), pick 6, and archive points rather than
+// running the money ladder. Points are stored once per event (global, not per pool) so every pool
+// on that event shares the same official results.
+const SRV_TEAM_EVENT_KEYS = ['presidents cup', 'ryder cup'];
+function srvIsTeamEvent(n) { const s = (n || '').toLowerCase(); return SRV_TEAM_EVENT_KEYS.some(k => s.includes(k)); }
+function srvTeamKey(eventName, year) {
+  const slug = (eventName || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  return `teampoints:${slug}_${year}`;
+}
+async function srvGetTeamPoints(eventName) {
+  try { const r = await redis('GET', srvTeamKey(eventName, new Date().getFullYear())); return r ? JSON.parse(r) : {}; }
+  catch { return {}; }
+}
+
 async function srvRequiredPicks(poolId) {
   try {
     const raw = await redis('GET', k(poolId, 'meta'));
@@ -91,7 +107,7 @@ async function srvRequiredPicks(poolId) {
     const evName = srvIsTourMode(meta.major)
       ? (meta.currentPgatourEvent || '')
       : (meta.major === 'tourchamp' ? 'tour championship' : '');
-    return srvIsTourChampionship(evName) ? 6 : 10;
+    return (srvIsTourChampionship(evName) || srvIsTeamEvent(evName)) ? 6 : 10;
   } catch { return 10; }
 }
 
@@ -479,7 +495,14 @@ async function autoManage(poolId) {
 
             // Compute server-side earnings (keyed by normalized name), then map to each pick.
             let earningsByPick = existingEarnings;
-            if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
+            const rotTeamEvent = srvIsTeamEvent(meta.currentPgatourEvent || poolEventName);
+            if (rotTeamEvent) {
+              // FINGERPRINT_V171_TEAM_EVENTS — score each pick from the stored match points
+              const pts = await srvGetTeamPoints(meta.currentPgatourEvent || poolEventName);
+              earningsByPick = {};
+              entries.forEach(e => (e.picks || []).forEach(pk => { earningsByPick[pk] = +(pts[pk] ?? 0) || 0; }));
+              console.log(`[pgatour rotation] team event — archived match points for ${Object.keys(earningsByPick).length} picks`);
+            } else if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
               const earnMap = srvComputeEarnings(finalInPlayPlayers, resolvedPurse, poolEventName, tourKey);
               earningsByPick = srvEarningsByPick(entries, earnMap);
               console.log(`[pgatour rotation] computed server-side earnings for ${Object.keys(earningsByPick).length} picks, purse=${resolvedPurse}`);
@@ -514,6 +537,7 @@ async function autoManage(poolId) {
 
             await redis('SET', archiveKey, JSON.stringify({
               major: tourKey, eventName: meta.currentPgatourEvent, year,
+              ...(rotTeamEvent ? { scoring: 'points' } : {}),
               archivedAt: new Date().toISOString(),
               entries, payments, earnings: earningsByPick,
               entryFee: fee,
@@ -850,7 +874,12 @@ export async function GET(request) {
       } catch { purses[m] = PURSE_DEFAULTS[m]; }
     }
 
-    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses });
+    // FINGERPRINT_V171_TEAM_EVENTS — ship the event's stored match points to team-event pools
+    let teamPoints;
+    if (srvIsTourMode(meta?.major) && srvIsTeamEvent(meta?.currentPgatourEvent)) {
+      teamPoints = await srvGetTeamPoints(meta.currentPgatourEvent);
+    }
+    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses, teamPoints });
   } catch (err) {
     return Response.json({ entries:[], locked:false, picksHidden:true, paymentsHidden:false, payments:{}, major:'pga', error:err.message });
   }
@@ -1419,7 +1448,13 @@ export async function POST(request) {
         const resolvedPurse = adminPurse || schedPurse || sigDefault;
 
         let earningsByPick = existingEarnings;
-        if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
+        const manTeamEvent = srvIsTeamEvent(meta.currentPgatourEvent || poolEventName);
+        if (manTeamEvent) {
+          // FINGERPRINT_V171_TEAM_EVENTS
+          const pts = await srvGetTeamPoints(meta.currentPgatourEvent || poolEventName);
+          earningsByPick = {};
+          entries.forEach(e => (e.picks || []).forEach(pk => { earningsByPick[pk] = +(pts[pk] ?? 0) || 0; }));
+        } else if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
           const earnMap = srvComputeEarnings(finalInPlayPlayers, resolvedPurse, poolEventName, meta.major);
           earningsByPick = srvEarningsByPick(entries, earnMap);
         }
@@ -1445,6 +1480,7 @@ export async function POST(request) {
 
         await redis('SET', archiveKey, JSON.stringify({
           major: meta.major, eventName: meta.currentPgatourEvent, year,
+          ...(manTeamEvent ? { scoring: 'points' } : {}),
           archivedAt: new Date().toISOString(),
           entries, payments, earnings: earningsByPick, entryFee: fee,
           prizes: prizes || null, logoUrl, logoNoBg, logoHeight,
@@ -1483,6 +1519,27 @@ export async function POST(request) {
     // was wiped/overwritten (e.g. The Open getting clobbered by a stray 3M Open save). The caller
     // provides the event name, major key, year, entries[] (each {name, picks[], earnings{}}) and the
     // prize split. We store it under the correct key and mark it manually rebuilt.
+    // ─── TEAM EVENT MATCH POINTS (pool commissioner) ────────────────────────
+    // FINGERPRINT_V171_TEAM_EVENTS
+    // Saves the official per-player match points for the pool's current team event. Stored once
+    // per event, so every pool on the Presidents/Ryder Cup reads the same numbers. Values are
+    // clamped to 0–5 in half-point steps (5 sessions max, ½ for a halved match).
+    if (body.action === 'set-team-points') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId);
+      const ev = meta?.currentPgatourEvent || '';
+      if (!srvIsTeamEvent(ev)) return Response.json({ error:'This pool is not on a team event' }, { status:400 });
+      const clean = {};
+      for (const [name, v] of Object.entries(body.points || {})) {
+        if (v === '' || v == null) continue;
+        const n = Math.round(Number(v) * 2) / 2;
+        if (!isFinite(n) || n < 0 || n > 5) return Response.json({ error:`Invalid points for ${name}: must be 0–5` }, { status:400 });
+        clean[String(name).slice(0, 80)] = n;
+      }
+      await redis('SET', srvTeamKey(ev, new Date().getFullYear()), JSON.stringify(clean));
+      return Response.json({ ok:true, points: clean, count: Object.keys(clean).length });
+    }
+
     if (body.action === 'rebuild-archive') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const { major, year, eventName, entries, earnings, prizes, entryFee, note, entryCount } = body;
