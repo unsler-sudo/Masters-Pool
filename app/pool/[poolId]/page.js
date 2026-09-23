@@ -1,5 +1,5 @@
 'use client';
-// build: roster-fallback-only-v240-20260922-1100
+// build: team-event-points-v241-20260923-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -426,6 +426,35 @@ const isTourMode = (m) => m === 'pgatour' || m === 'dpworld';
 const tourParam = (m) => TOUR_OF[m] || 'pga'; // majors ride the PGA feeds
 const tourQS = (m) => `&tour=${tourParam(m)}`;
 const isDPWorld = (m) => m === 'dpworld';
+
+// FINGERPRINT_V241_TEAM_EVENTS
+// Team match-play events (Presidents Cup, Ryder Cup) have no individual prize money, so the pool
+// scores them on MATCH POINTS instead: 1 per match won, ½ per halve, 0 per loss, summed across a
+// player's matches (0–5 each). Entries pick 6 (2 per tier) from the ~24-man field. Pot and prizes
+// are still dollars; only player/entry scores switch to points. Tied entries SPLIT the prize.
+const TEAM_EVENT_KEYS = ['presidents cup', 'ryder cup'];
+const isTeamEvent = (n) => TEAM_EVENT_KEYS.some(k => (n || '').toLowerCase().includes(k));
+const fmtPts = (v) => {
+  const n = Math.round((+v || 0) * 2) / 2;
+  return `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? 'pt' : 'pts'}`;
+};
+// Prize amounts are whole dollars normally; tie splits can produce cents.
+const fmtPrize = (v) => { const n = +v || 0; return Number.isInteger(n) ? String(n) : n.toFixed(2); };
+// totals: entry scores sorted desc. prizes: [1st,2nd,3rd]. Entries level on points share the
+// combined prize money of every position they jointly occupy (positions past 3rd add $0).
+const splitPrizesForTies = (totals, prizes) => {
+  const out = totals.map(() => 0);
+  for (let i = 0; i < totals.length; ) {
+    let j = i;
+    while (j + 1 < totals.length && Math.abs(totals[j + 1] - totals[i]) < 1e-9) j++;
+    let pool = 0;
+    for (let k = i; k <= j; k++) pool += (prizes[k] || 0);
+    const each = pool / (j - i + 1);
+    for (let k = i; k <= j; k++) out[k] = each;
+    i = j + 1;
+  }
+  return out;
+};
 
 const TIER_DEFS = [
   { id:1, name:'Favorites',  label:'Group A — Favorites',  color:'#b8960c', picks:2 },
@@ -1202,7 +1231,10 @@ export default function App(){
   const [submitting,setSubmitting]=useState(false);
   const [now,setNow]=useState(Date.now());
   const [selectedPlayer,setSelectedPlayer]=useState(null);
-  const [zoomShot,setZoomShot]=useState(null); // FINGERPRINT_V236_PHOTO_ZOOM — {url,name} when a headshot is tapped
+  const [zoomShot,setZoomShot]=useState(null);
+  const [teamPoints,setTeamPoints]=useState({});          // FINGERPRINT_V241 — manual {playerName: points}
+  const teamPointsRef=useRef({});
+  const teamAutoRef=useRef({});                           // auto-detected from DataGolf, if it ever publishes points // FINGERPRINT_V236_PHOTO_ZOOM — {url,name} when a headshot is tapped
   const [holeData,setHoleData]=useState({round:null,holes:[],loading:false,error:null});
   const [archives,setArchives]=useState([]);
   const [expandedArchive,setExpandedArchive]=useState(null);
@@ -1271,6 +1303,9 @@ export default function App(){
     ? (poolMeta?.currentPgatourEvent || T.eventName || '')
     : (T.eventName || '');
   const isTourChampPool = isTourChampionship(tcEventName);
+  // FINGERPRINT_V241_TEAM_EVENTS — Presidents/Ryder Cup pools score match points, pick 6
+  const isTeamPool = isTourMode(activeMajor) && isTeamEvent(tcEventName);
+  const fmtE = (v) => isTeamPool ? fmtPts(v) : fmt(v);   // player/entry score formatter
   // FINGERPRINT_V216_TIER_COLOR_CLASH
   // Group B normally borrows the theme's primary so it feels event-branded. But a gold-primary
   // theme (Tour Championship = #cba135) sits right on top of Group A's gold (#b8960c), making the
@@ -1292,10 +1327,27 @@ export default function App(){
     : TIER_DEFS[1].color;
   const TIERS = TIER_DEFS.map(t => {
     const base = t.id === 2 ? {...t, color: groupBColor} : {...t};
-    if (isTourChampPool) base.picks = 2;
+    if (isTourChampPool || isTeamPool) base.picks = 2;
     return base;
   });
   const TOTAL_PICKS_REQ = TIERS.reduce((s,t)=>s+t.picks, 0);
+  // FINGERPRINT_V241_TEAM_EVENTS — in a team event, each player's "earnings" IS his points total.
+  // Applied straight onto the field (manual entries win over auto-detected), so it works even if
+  // DataGolf's live feed never serves the event. Returns the same array when nothing changed, so
+  // it can't loop.
+  useEffect(()=>{
+    if(!isTeamPool) return;
+    const m = { ...(teamAutoRef.current||{}), ...(teamPoints||{}) };
+    setField(prev => {
+      let changed = false;
+      const next = prev.map(p => {
+        const v = +(m[p.name] ?? 0) || 0;
+        if (p.earnings !== v) { changed = true; return { ...p, earnings: v }; }
+        return p;
+      });
+      return changed ? next : prev;
+    });
+  },[isTeamPool, teamPoints, field]);
 
   // FINGERPRINT_V153_REAL_TEE / FINGERPRINT_V185_TRUST_REAL_TEE
   // pastTeeTime must reflect the ACTUAL earliest tee time, not the theme placeholder (schedule
@@ -1364,6 +1416,7 @@ export default function App(){
       if(d.payments)setPayments(d.payments);
       if(d.meta){setPoolMeta(d.meta);poolMetaRef.current=d.meta;}
       if(d.purses){setDynamicPurses(d.purses); dynamicPursesRef.current=d.purses;}
+      if(d.teamPoints){setTeamPoints(d.teamPoints); teamPointsRef.current=d.teamPoints;}
       if(d.major&&THEMES[d.major]){
         const prevMajor = activeMajorRef.current;
         const isFirstLoad = !field || field.length === 0;
@@ -2367,6 +2420,28 @@ export default function App(){
         }
       }
       const raw=data.data||data.players||data||[];
+      // FINGERPRINT_V241_TEAM_EVENTS — AUTO points, best effort. DataGolf's feeds are built for
+      // stroke play and nothing guarantees they publish match points for team events, so this
+      // only engages if a numeric points-like field actually exists. Logs the row shape once so we
+      // can see what's available. Manual entries (admin) always override whatever it finds.
+      if (isTeamEvent(data.info?.event_name || eventStartNameRef.current) && Array.isArray(raw) && raw[0]) {
+        if (!teamAutoRef.current.__logged) {
+          console.log('[team] live feed row keys:', Object.keys(raw[0]).join(', '));
+          teamAutoRef.current.__logged = true;
+        }
+        const key = ['points','total_points','pts','match_points','points_won','points_earned']
+          .find(k => typeof raw[0][k] === 'number');
+        if (key) {
+          const m = { __logged: true };
+          raw.forEach(r => {
+            const rn = r.player_name || '';
+            const nm = rn.includes(',') ? rn.split(',').reverse().map(x=>x.trim()).join(' ') : rn;
+            if (nm) m[nm] = +r[key] || 0;
+          });
+          teamAutoRef.current = m;
+          console.log(`[team] auto points from live feed field "${key}"`);
+        }
+      }
       if(!Array.isArray(raw)||raw.length===0)throw new Error('No live scores yet');
 
       rawScoresRef.current=raw; // Cache for re-merge when field updates
@@ -2546,6 +2621,14 @@ export default function App(){
       : ((livePurses && livePurses[liveMajor]) || liveTheme.purse);
     // Event name (used both for signature-payout detection and archive saving)
     const evName = isTourMode(liveMajor) ? (poolMetaRef.current?.currentPgatourEvent || THEMES[liveMajor]?.eventName || '') : undefined;
+    // FINGERPRINT_V241_TEAM_EVENTS — team events score match points, never the money ladder.
+    // Their archive is written server-side from the stored points at rotation, so skip the
+    // client-side earnings saves entirely (one source of truth, no money-shaped archive).
+    if (isTourMode(liveMajor) && isTeamEvent(evName)) {
+      const m = { ...(teamAutoRef.current||{}), ...(teamPointsRef.current||{}) };
+      updated.forEach(p=>{ p.earnings = +(m[p.name] ?? 0) || 0; });
+      return updated;
+    }
     const em=calcEarnings(updated, livePurse, liveMajor, isComplete, evName);
     updated.forEach(p=>{p.earnings=em[p.name]||0;});
     if(Object.keys(em).length>0){
@@ -3062,7 +3145,7 @@ export default function App(){
       // ── rows ──
       const rows=ranked.slice(0,8);
       const medals=['🥇','🥈','🥉'];
-      const fmt=v=>'$'+Math.round(v).toLocaleString();
+      const fmt=v=>isTeamPool?fmtPts(v):'$'+Math.round(v).toLocaleString();
       let y=headerH;
       rows.forEach((e,i)=>{
         const total=teamE(e);
@@ -3834,7 +3917,7 @@ export default function App(){
                       <div style={{fontSize:22,fontWeight:800,color:'#555'}}>{p.thru}</div>
                     </div>
                   </div>)}
-                {p.earnings>0&&<div style={{background:`${T.primary}10`,borderRadius:10,padding:'10px 14px',marginTop:14,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:13,color:T.primary,fontWeight:600}}>Projected Earnings</span><span style={{fontSize:20,fontWeight:800,color:T.primary}}>{fmt(p.earnings)}</span></div>}
+                {p.earnings>0&&<div style={{background:`${T.primary}10`,borderRadius:10,padding:'10px 14px',marginTop:14,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:13,color:T.primary,fontWeight:600}}>{isTeamPool?'Points Earned':'Projected Earnings'}</span><span style={{fontSize:20,fontWeight:800,color:T.primary}}>{fmtE(p.earnings)}</span></div>}
                 {!picksHidden&&<div style={{fontSize:12,color:'#8a9580',borderTop:'1px solid #f0ebe0',paddingTop:10,marginTop:12}}>{ow.length>0?(<><span style={{fontWeight:600}}>Picked by: </span>{ow.join(', ')}</>):'Not picked by anyone in the pool'}</div>}
                 <button type="button" onClick={closeScorecard} style={{...pri,width:'100%',margin:'16px 0',padding:12,fontSize:14,borderRadius:10}}>Done</button>
               </div>
@@ -3866,7 +3949,7 @@ export default function App(){
           <div style={{maxWidth:'36%'}}>
             {poolMeta?.poolName&&<div style={{fontFamily:"'Playfair Display',serif",fontSize:12,fontWeight:700,opacity:.95,letterSpacing:.5,marginBottom:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{poolMeta.poolName}</div>}
             <div style={{fontFamily:"'Playfair Display',serif",fontSize:9,fontWeight:isTourMode(activeMajor)?600:400,fontStyle:'italic',opacity:.85,letterSpacing:.6,marginBottom:3,lineHeight:1.2}}>{isTourMode(activeMajor)?(T.tagline&&T.tagline!==THEMES[activeMajor]?.tagline?T.tagline:T.eventName):T.tagline}</div>
-            <div style={{fontSize:10,opacity:.65}}>{fmt(TOURNAMENT.purse)} purse</div>
+            <div style={{fontSize:10,opacity:.65}}>{isTeamPool?'Match play · scored on points':`${fmt(TOURNAMENT.purse)} purse`}</div>
           </div>
           {(()=>{
             const customLogo = poolMeta?.customLogoUrl;
@@ -4049,7 +4132,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             const pot=ranked.length*fee;
             // Winner-take-all (toggle or ≤4 entries) → [pot,0,0]. Else 1st/2nd/3rd split.
             const prizes = computePrizes(ranked.length, pot, fee);
-            const prize=showPrizes&&i<3?prizes[i]:0;
+            const prize = !showPrizes ? 0
+              : isTeamPool ? splitPrizesForTies(ranked.map(teamE), prizes)[i]
+              : (i<3?prizes[i]:0);
             return(
               <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:`1px solid ${T.cardBorder}`,animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
                 <div style={{display:'flex',alignItems:'center',gap:10,cursor:picksHidden?'default':'pointer'}} onClick={()=>!picksHidden&&setOpenCard(op?null:e.name)}>
@@ -4060,7 +4145,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       <span style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700}}>{e.name}</span>
                       {/* FINGERPRINT_V166_MR_CHALK — chalkiest picks (highest combined win prob) */}
                       {mrChalk===e.name&&<span title="Picked all the favorites — chalkiest entry in the pool" style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#5a4a1a',background:'#f0e6c8',border:'1px solid #c9a84c80',padding:'1px 7px',borderRadius:9,whiteSpace:'nowrap',verticalAlign:'middle'}}>Mr. Chalk</span>}
-                      {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${prize}</span>}
+                      {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${fmtPrize(prize)}</span>}
                       {/* FINGERPRINT_V193_UNPAID_BLINK — nag unpaid entries once R1 is in the books */}
                       {!paymentsHidden&&(()=>{
                         const nag = !paid && roundOneComplete;
@@ -4077,7 +4162,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <button type="button" onClick={(ev)=>{ev.stopPropagation();setShowEditModal(e.name);}} style={{background:'transparent',border:`1px solid ${T.primary}30`,color:T.primary,padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>✏️ Edit</button>
                     :<button type="button" onClick={(ev)=>{ev.stopPropagation();setShowClaimModal(e.name);}} style={{background:'transparent',border:`1px solid #c9a84c80`,color:'#7a5500',padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>📧 Add email</button>
                   )}
-                  {!picksHidden&&<div style={{fontWeight:800,fontSize:17,color:T.primary}}>{fmt(tot)}</div>}
+                  {!picksHidden&&<div style={{fontWeight:800,fontSize:17,color:T.primary}}>{fmtE(tot)}</div>}
                 </div>
                 {!picksHidden&&op&&<div style={{marginTop:8,borderTop:'1px solid #eee8dc',paddingTop:8,animation:'sd .2s ease'}}>
                   {TIERS.map(t=>{const tp=e.picks.filter(pn=>field.find(f=>f.name===pn)?.tier===t.id);if(!tp.length)return null;return<div key={t.id} style={{marginBottom:6}}>
@@ -4085,12 +4170,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     {tp.map(pn=>{const p=field.find(f=>f.name===pn);return<div key={pn} onClick={(ev)=>{ev.stopPropagation();if(p)setSelectedPlayer(p);}} style={{display:'flex',padding:'4px 0',borderBottom:'1px solid #f5f0e8',alignItems:'center',gap:6,cursor:p?'pointer':'default'}}>
                       <span style={{fontSize:14}}><Flag c={p?.country}/></span>
                       <div style={{flex:1}}><span style={{fontWeight:600,fontSize:13,color:p?T.primary:'#333',textDecoration:p?'underline':'none',textDecorationStyle:'dotted',textUnderlineOffset:2}}>{flip(pn)}</span>{p&&<span style={{fontSize:11,color:'#8a9580',marginLeft:6}}>{p.pos} · {p.score}</span>}</div>
-                      <span style={{fontWeight:700,fontSize:13,color:T.primary}}>{fmt(p?.earnings)}</span>
+                      <span style={{fontWeight:700,fontSize:13,color:T.primary}}>{fmtE(p?.earnings)}</span>
                     </div>;})}
                   </div>;})}
                 </div>}
                 {!picksHidden&&!op&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>
-                  {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} onClick={(ev)=>{ev.stopPropagation();if(p)setSelectedPlayer(p);}} style={{fontSize:10,background:T.navActive,padding:'2px 7px',borderRadius:4,border:`1px solid ${T.cardBorder}`,borderLeft:`3px solid ${t?.color||'#ccc'}`,cursor:p?'pointer':'default'}}><Flag c={p?.country}/> {pn.split(', ')[0]} <b style={{color:T.primary}}>{fmt(p?.earnings)}</b></span>;})}
+                  {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} onClick={(ev)=>{ev.stopPropagation();if(p)setSelectedPlayer(p);}} style={{fontSize:10,background:T.navActive,padding:'2px 7px',borderRadius:4,border:`1px solid ${T.cardBorder}`,borderLeft:`3px solid ${t?.color||'#ccc'}`,cursor:p?'pointer':'default'}}><Flag c={p?.country}/> {pn.split(', ')[0]} <b style={{color:T.primary}}>{fmtE(p?.earnings)}</b></span>;})}
                 </div>}
               </div>);})}
           </>}
@@ -4258,7 +4343,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <span onClick={()=>cycle('tier')} style={{...hc,width:30,textAlign:'center'}}>Tier{arrow('tier')}</span>
                     <span onClick={()=>cycle('thru',-1)} style={{...hc,width:50,textAlign:'center'}}>Thru{arrow('thru')}</span>
                     <span onClick={()=>cycle('score')} style={{...hc,width:40,textAlign:'center'}}>Tot{arrow('score')}</span>
-                    <span onClick={()=>cycle('earnings',-1)} style={{...hc,width:72,textAlign:'right'}}>Earnings{arrow('earnings')}</span>
+                    <span onClick={()=>cycle('earnings',-1)} style={{...hc,width:72,textAlign:'right'}}>{isTeamPool?'Points':'Earnings'}{arrow('earnings')}</span>
                   </>;
                 }
                 if (hasTeeTimes) {
@@ -4407,7 +4492,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       })()}
                     </span>
                     <span style={{width:40,textAlign:'center',fontWeight:700,fontSize:12,color:isCut?'#999':sc}}>{p.score}</span>
-                    <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmt(p.earnings)}</span>
+                    <span style={{width:72,textAlign:'right',fontWeight:700,fontSize:12,color:isCut?'#999':'inherit'}}>{fmtE(p.earnings)}</span>
                   </>
                   : hasTeeTimes
                   ?<>
@@ -4723,17 +4808,19 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   {isExpanded&&<div style={{background:'#fff',animation:'sd .2s ease'}}>
                     {ranked.map((e,i)=>{
                       const picksWithEarnings=e.picks.map(pn=>({name:pn,earned:earnings[pn]||0})).sort((x,y)=>y.earned-x.earned);
-                      const prize=showPrizes&&i<3?prizes[i]:0;
+                      const prize = !showPrizes ? 0
+                        : a.scoring==='points' ? splitPrizesForTies(ranked.map(r=>r.total), prizes)[i]
+                        : (i<3?prizes[i]:0);
                       return<div key={e.name} style={{borderBottom:`1px solid ${THEME.cardBorder}`}}>
                         <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:i===0?`${THEME.primary}08`:'#fff'}}>
                           <span style={{fontSize:i<3?18:13,fontWeight:800,width:28,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</span>
                           <span style={{flex:1,fontWeight:600,fontSize:14}}>{e.name}</span>
-                          {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${prize}</span>}
-                          {hasEarnings&&<span style={{fontWeight:800,color:THEME.primary,fontSize:14}}>{fmt(e.total)}</span>}
+                          {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${fmtPrize(prize)}</span>}
+                          {hasEarnings&&<span style={{fontWeight:800,color:THEME.primary,fontSize:14}}>{(a.scoring==='points'?fmtPts:fmt)(e.total)}</span>}
                         </div>
                         {hasEarnings&&<div style={{padding:'4px 14px 10px 50px',display:'flex',flexWrap:'wrap',gap:6,fontSize:11}}>
                           {picksWithEarnings.map(pk=><span key={pk.name} style={{background:`${THEME.primary}10`,padding:'2px 6px',borderRadius:4,color:THEME.primary}}>
-                            {pk.name.split(', ')[0]} <b>{fmt(pk.earned)}</b>
+                            {pk.name.split(', ')[0]} <b>{(a.scoring==='points'?fmtPts:fmt)(pk.earned)}</b>
                           </span>)}
                         </div>}
                       </div>;
@@ -4846,6 +4933,42 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
             </div>
+            {/* FINGERPRINT_V241_TEAM_EVENTS — enter each player's running match points */}
+            {isTeamPool&&(()=>{
+              const isRyder = /ryder/i.test(tcEventName);
+              const byName = (a,b)=>flip(a.name).localeCompare(flip(b.name));
+              const groups = [
+                { label:'🇺🇸 USA', players: field.filter(p=>p.country==='USA').sort(byName) },
+                { label: isRyder ? '🇪🇺 Europe' : '🌏 International', players: field.filter(p=>p.country!=='USA').sort(byName) },
+              ];
+              const entered = field.filter(p=>teamPoints[p.name]!=null).length;
+              return <div style={{...sec,border:`2px solid ${T.primary}`}}>
+                <h3 style={stl}>🏆 Match Points — {tcEventName}</h3>
+                <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10,lineHeight:1.5}}>
+                  Enter each player's <b>running total</b> after every session: <b>1</b> per match won, <b>½</b> per halve, <b>0</b> per loss (max 5 across the week). Every pool on this event uses these numbers. {entered}/{field.length} players entered.
+                </p>
+                {groups.map(g=>g.players.length>0&&<div key={g.label} style={{marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:800,color:T.primary,margin:'4px 0 6px'}}>{g.label}</div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:6}}>
+                    {g.players.map(p=><label key={p.name} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6,
+                        padding:'6px 8px',border:`1px solid ${T.inputBorder}`,borderRadius:7,fontSize:12,background:'#fff'}}>
+                      <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{flip(p.name)}</span>
+                      <input type="number" inputMode="decimal" min="0" max="5" step="0.5"
+                        data-teampts={p.name}
+                        key={p.name+':'+(teamPoints[p.name]??'')}
+                        defaultValue={teamPoints[p.name]??''} placeholder="0"
+                        style={{width:52,padding:'4px 6px',borderRadius:5,border:`1px solid ${T.inputBorder}`,fontSize:13,textAlign:'center'}}/>
+                    </label>)}
+                  </div>
+                </div>)}
+                <button type="button" style={{...pri,width:'100%'}} onClick={async()=>{
+                  const points={};
+                  document.querySelectorAll('[data-teampts]').forEach(el=>{ if(el.value!=='') points[el.dataset.teampts]=el.value; });
+                  const d=await adminAction('set-team-points',{points});
+                  if(d?.ok){ setTeamPoints(d.points); teamPointsRef.current=d.points; msg(`Saved points for ${d.count} players`); }
+                }}>💾 Save Match Points</button>
+              </div>;
+            })()}
             {/* FINGERPRINT_V218_DPWORLD_MODE — three-way pool mode selector */}
             <div style={sec}><h3 style={stl}>🏌️ Pool Mode</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Choose what this pool follows. Tour modes track whichever event that tour is playing this week; Majors follows the major schedule. <b>Switching resets current entries.</b></p>
@@ -5121,12 +5244,14 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       </div>
                       {ranked.map((e,i)=>{
                         const paid=!!a.payments?.[e.name];
-                        const prize=showPrizes&&i<3?prizes[i]:0;
+                        const prize = !showPrizes ? 0
+                          : a.scoring==='points' ? splitPrizesForTies(ranked.map(r=>r.total), prizes)[i]
+                          : (i<3?prizes[i]:0);
                         return<div key={e.name} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${THEME.cardBorder}`,fontSize:13}}>
                           <span style={{fontSize:i<3?16:13,fontWeight:800,width:28,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</span>
                           <span style={{flex:1,fontWeight:600}}>{e.name}</span>
-                          {prize>0&&<span style={{fontSize:10,fontWeight:800,padding:'1px 6px',borderRadius:8,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${prize}</span>}
-                          {hasEarnings&&<span style={{fontWeight:700,color:THEME.primary,fontSize:13}}>{fmt(e.total)}</span>}
+                          {prize>0&&<span style={{fontSize:10,fontWeight:800,padding:'1px 6px',borderRadius:8,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${fmtPrize(prize)}</span>}
+                          {hasEarnings&&<span style={{fontWeight:700,color:THEME.primary,fontSize:13}}>{(a.scoring==='points'?fmtPts:fmt)(e.total)}</span>}
                           <span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:8,background:paid?'#e8f5e8':'#f5f5f5',color:paid?'#2d7a1e':'#aaa'}}>{paid?'✓':'Unpaid'}</span>
                         </div>;
                       })}
