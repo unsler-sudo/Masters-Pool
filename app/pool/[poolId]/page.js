@@ -1,5 +1,5 @@
 'use client';
-// build: dpworld-wentworth-v237-20260910-1000
+// build: fu-roster-filter-v238-20260922-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1701,12 +1701,46 @@ export default function App(){
           }
         } catch(e){ console.warn('pgatour tee times unavailable:', e.message); }
 
+        // FINGERPRINT_V238_FU_ROSTER_FILTER
+        // field-updates is the OFFICIAL entry list; pre-tournament is a model snapshot that can
+        // carry players who aren't entered. v134 only ever APPENDED field-updates players that
+        // pre-tournament missed — it never REMOVED pre-tournament players who aren't playing.
+        // Normally harmless (the lists nearly match), but Presidents Cup week exposed it:
+        // pre-tournament returned a generic 132-player list while field-updates had the real 24,
+        // so 108 non-participants showed as pickable. Restrict to the field-updates roster when it
+        // names the SAME event. Filtering happens BEFORE tiering, so tier cuts scale to the real
+        // field (24 → the v214 small-field even thirds).
+        // GUARDS: same-event name match (during the weekend flip field-updates names next week's
+        // event); >= 12 players, so a partial or empty roster can never gut a real field; and if
+        // the filter would leave fewer than 12 matched we keep the unfiltered list rather than
+        // risk a near-empty field from a name-matching miss.
+        let fieldSorted = sorted;
+        {
+          const fN = (s)=>(s||'').toLowerCase().replace(/\s+\d{4}$/,'').trim();
+          const pN = fN(ptData.event_name), uN = fN(fuEventName);
+          const rosterSameEvent = pN && uN && (pN===uN || pN.includes(uN) || uN.includes(pN));
+          if (rosterSameEvent && fuRawPlayers.length >= 12) {
+            const tok = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+              .replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim().split(' ').sort().join(' ');
+            const rosterIds = new Set(fuRawPlayers.map(p=>p.dg_id).filter(Boolean));
+            const rosterNames = new Set(fuRawPlayers.map(p=>tok(p.player_name)));
+            const kept = sorted.filter(p =>
+              (p.dg_id && rosterIds.has(p.dg_id)) || rosterNames.has(tok(p.player_name || p.name)));
+            if (kept.length >= 12) {
+              if (kept.length < sorted.length) {
+                console.log(`[field] restricted to field-updates roster: ${sorted.length} → ${kept.length} (${fuEventName})`);
+              }
+              fieldSorted = kept;
+            }
+          }
+        }
+
         // FINGERPRINT_V110_DYNAMIC_TIERS
         // Tier boundaries scale to field size. Signature events have ~72 players (most have a
         // top-50-and-ties cut, e.g. the Memorial); full-field events have ~132+ with a top-65 cut.
         // Fixed 12/56 left signature events with a tiny Tier C and full fields with an oversized one.
         // Scale: A=top 12, B≈next 45%, C=rest.
-        const fieldSize = sorted.length;
+        const fieldSize = fieldSorted.length;
         // FINGERPRINT_V214_SMALL_FIELD_TIERS
         // Tier A was hardcoded at 12 regardless of field size. In a 30-player Tour Championship
         // field that left A=12, B=5, C=13 — and since an entry must take 4 from Tier B, there were
@@ -1724,7 +1758,7 @@ export default function App(){
             : Math.min(68, Math.round(fieldSize * 0.52)); // full field: A=12, B→~68, C→rest
         }
         // Build enriched player list
-        const enriched = sorted.map((p, i) => {
+        const enriched = fieldSorted.map((p, i) => {
           const name = p.player_name || p.name || '';
           // Convert "Last, First" → "First Last"
           const displayName = name.includes(',') ? name.split(',').reverse().map(s=>s.trim()).join(' ') : name;
