@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: team-event-points-v171-20260923-1200
+// build: team-sessions-v172-20260923-1330
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -96,6 +96,16 @@ function srvTeamKey(eventName, year) {
 }
 async function srvGetTeamPoints(eventName) {
   try { const r = await redis('GET', srvTeamKey(eventName, new Date().getFullYear())); return r ? JSON.parse(r) : {}; }
+  catch { return {}; }
+}
+// FINGERPRINT_V172_TEAM_SESSIONS — per-session results, mirroring DataGolf's session tabs.
+// Shape: { thu: { 'Scottie Scheffler': 'W', ... }, fri: {...}, ... }  W=1 · H=½ · L=0.
+// Totals are always DERIVED from these server-side, so a mistyped running total is impossible.
+const SRV_TEAM_SESSION_KEYS = ['thu', 'fri', 'friam', 'fripm', 'satam', 'satpm', 'sun'];
+const SRV_TEAM_RESULT = { W: 1, H: 0.5, L: 0 };
+function srvTeamSessionsKey(eventName, year) { return srvTeamKey(eventName, year).replace(/^teampoints:/, 'teamsessions:'); }
+async function srvGetTeamSessions(eventName) {
+  try { const r = await redis('GET', srvTeamSessionsKey(eventName, new Date().getFullYear())); return r ? JSON.parse(r) : {}; }
   catch { return {}; }
 }
 
@@ -875,11 +885,12 @@ export async function GET(request) {
     }
 
     // FINGERPRINT_V171_TEAM_EVENTS — ship the event's stored match points to team-event pools
-    let teamPoints;
+    let teamPoints, teamSessions;
     if (srvIsTourMode(meta?.major) && srvIsTeamEvent(meta?.currentPgatourEvent)) {
-      teamPoints = await srvGetTeamPoints(meta.currentPgatourEvent);
+      [teamPoints, teamSessions] = await Promise.all([
+        srvGetTeamPoints(meta.currentPgatourEvent), srvGetTeamSessions(meta.currentPgatourEvent)]);
     }
-    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses, teamPoints });
+    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses, teamPoints, teamSessions });
   } catch (err) {
     return Response.json({ entries:[], locked:false, picksHidden:true, paymentsHidden:false, payments:{}, major:'pga', error:err.message });
   }
@@ -1529,6 +1540,26 @@ export async function POST(request) {
       const meta = await getPoolMeta(poolId);
       const ev = meta?.currentPgatourEvent || '';
       if (!srvIsTeamEvent(ev)) return Response.json({ error:'This pool is not on a team event' }, { status:400 });
+      const year = new Date().getFullYear();
+      // FINGERPRINT_V172_TEAM_SESSIONS — session results in, derived totals out
+      if (body.sessions && typeof body.sessions === 'object') {
+        const cleanS = {}, pts = {};
+        for (const [sk, results] of Object.entries(body.sessions)) {
+          if (!SRV_TEAM_SESSION_KEYS.includes(sk)) return Response.json({ error:`Unknown session "${sk}"` }, { status:400 });
+          cleanS[sk] = {};
+          for (const [name, r] of Object.entries(results || {})) {
+            if (!(r in SRV_TEAM_RESULT)) return Response.json({ error:`Invalid result for ${name}: use W, H or L` }, { status:400 });
+            const nm = String(name).slice(0, 80);
+            cleanS[sk][nm] = r;
+            pts[nm] = (pts[nm] || 0) + SRV_TEAM_RESULT[r];
+          }
+        }
+        await Promise.all([
+          redis('SET', srvTeamSessionsKey(ev, year), JSON.stringify(cleanS)),
+          redis('SET', srvTeamKey(ev, year), JSON.stringify(pts)),
+        ]);
+        return Response.json({ ok:true, sessions: cleanS, points: pts, count: Object.keys(pts).length });
+      }
       const clean = {};
       for (const [name, v] of Object.entries(body.points || {})) {
         if (v === '' || v == null) continue;
