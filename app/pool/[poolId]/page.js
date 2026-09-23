@@ -1,5 +1,5 @@
 'use client';
-// build: match-pickem-v245-20260923-1700
+// build: picks-name-on-save-v246-20260923-1800
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -4357,14 +4357,26 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           const dirty = !!pickDraft[active];
           const intlFlag = teamLabel('INT').split(' ')[0];
           const setPick=(mid,v)=>setPickDraft(prev=>({...prev,[active]:{...(prev[active]||myTeamPicks[active]||{}),[mid]:v}}));
+          // FINGERPRINT_V246_PICK_IDENTITY — anyone can make picks first; the entry name + code
+          // sit right above Save. A successful save remembers them (same browser identity as chat),
+          // and "Switch" forgets it so a shared device or the commissioner can save as someone else.
           const savePicks=async()=>{
+            if(!chatName.trim()||!chatCode.trim()) return msg('Enter your entry name and the code from your email');
             try{
               const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({poolId,action:'team-picks',name:chatName,code:chatCode,sessionKey:active,picks:mine})});
+                body:JSON.stringify({poolId,action:'team-picks',name:chatName.trim(),code:chatCode.trim(),sessionKey:active,picks:mine})});
               const d=await r.json(); if(d.error) return msg(d.error);
+              if(!chatVerified&&d.name){
+                try{ localStorage.setItem(`chat_${poolId}_name`,d.name); localStorage.setItem(`chat_${poolId}_code`,chatCode.trim().toUpperCase()); }catch{}
+                setChatName(d.name); setChatCode(chatCode.trim().toUpperCase()); setChatVerified(true);
+              }
               setMyTeamPicks(d.myPicks||{}); setPickDraft(prev=>{const n={...prev};delete n[active];return n;});
-              msg('Picks saved ✓');
+              msg(`Picks saved for ${d.name||chatName} ✓`);
             }catch{ msg('Error saving — check connection'); }
+          };
+          const switchEntry=()=>{
+            try{ localStorage.removeItem(`chat_${poolId}_name`); localStorage.removeItem(`chat_${poolId}_code`); }catch{}
+            setChatVerified(false); setChatName(''); setChatCode(''); setMyTeamPicks({}); setPickDraft({});
           };
           const picked = sv ? sv.matches.filter(m=>mine[m.id]).length : 0;
           return <>
@@ -4381,18 +4393,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <button type="button" style={{...pri,padding:11}} disabled={submitting} onClick={submit}>{submitting?'Joining…':'Join'}</button>
               </div>
             </div>}
-            {!chatVerified&&<div style={sec}>
-              <h3 style={stl}>Already joined? Sign in to pick</h3>
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                <input style={inp} placeholder="Entry name" value={chatName} onChange={e=>setChatName(e.target.value)}/>
-                <input style={inp} placeholder="Code from your email" value={chatCode} onChange={e=>setChatCode(e.target.value.toUpperCase())}/>
-                <button type="button" style={{...pri,padding:11}} disabled={chatVerifying} onClick={verifyChat}>{chatVerifying?'Checking…':'Sign in'}</button>
-              </div>
-            </div>}
-            {chatVerified&&<div style={sec}>
-              <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
-                <h3 style={{...stl,marginBottom:0,flex:1}}>Your picks — {chatName}</h3>
-              </div>
+            <div style={sec}>
+              <h3 style={stl}>Make your picks</h3>
               <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
                 {sessions.map(([sk,lb])=>{
                   const x=teamMatches[sk], on=sk===active;
@@ -4403,7 +4405,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 })}
               </div>
               {!sv
-                ? <p style={{fontSize:13,color:'#8a9580',textAlign:'center',padding:'14px 0'}}>{label} pairings haven't been posted yet — check back once they're announced.</p>
+                ? <p style={{fontSize:13,color:'#8a9580',textAlign:'center',padding:'14px 0'}}>{label} pairings haven't been posted yet — check back once they're announced. You'll pick each match here, then save with your <b>entry name</b> and the <b>code from your email</b>.</p>
                 : <>
                   <div style={{fontSize:12,fontWeight:700,marginBottom:8,color:sLocked?'#a33':T.primary}}>
                     {sLocked?'🔒 Locked — picks are final':`Locks ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})} · ${picked} of ${sv.matches.length} picked`}
@@ -4430,10 +4432,22 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       </div>
                     </div>;
                   })}
-                  {!sLocked&&<button type="button" disabled={!dirty} onClick={savePicks}
-                    style={{...pri,width:'100%',padding:12,fontSize:15,opacity:dirty?1:.45}}>{dirty?`💾 Save ${label} picks`:'✓ Saved'}</button>}
+                  {!sLocked&&<div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:4}}>
+                    {chatVerified
+                      ? <div style={{display:'flex',alignItems:'center',fontSize:12,marginBottom:8,color:'#3a4a2e'}}>
+                          <span style={{flex:1}}>Saving as <b>{chatName}</b></span>
+                          <button type="button" onClick={switchEntry} style={{background:'none',border:'none',color:T.primary,fontWeight:700,fontSize:12,cursor:'pointer',textDecoration:'underline'}}>Not you? Switch</button>
+                        </div>
+                      : <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:8}}>
+                          <div style={{fontSize:12,fontWeight:700,color:'#3a4a2e'}}>Your entry — to save these picks</div>
+                          <input style={inp} placeholder="Entry name" value={chatName} onChange={e=>setChatName(e.target.value)}/>
+                          <input style={inp} placeholder="Code from your email" value={chatCode} onChange={e=>setChatCode(e.target.value.toUpperCase())}/>
+                        </div>}
+                    <button type="button" disabled={!dirty} onClick={savePicks}
+                      style={{...pri,width:'100%',padding:12,fontSize:15,opacity:dirty?1:.45}}>{dirty?`💾 Save ${label} picks`:'✓ Saved'}</button>
+                  </div>}
                 </>}
-            </div>}
+            </div>
           </>;
         })()}
         {tab==='Enter Pool'&&!isTeamPool&&(locked
