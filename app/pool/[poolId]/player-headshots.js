@@ -1,20 +1,7 @@
-// Player headshot map — DataGolf dg_id → DataGolf headshot image id.
-//
-// Used by the scorecard popup (FINGERPRINT_V224_HEADSHOTS in the pool page). The headshot id is
-// NOT derivable from the API: DataGolf uses a separate internal id in the image filename
-// (McIlroy is dg_id 10091 / player_num 34024, but his headshot is 28237), so this map is harvested
-// rather than computed.
-//
-// A value may be:
-//   a number  -> served from DataGolf's CDN as /static/players/headshot_{id}.png
-//   a string  -> used verbatim, so you can self-host any individual player ('/players/x.png')
-//
-// Players not listed here show their country flag alone — same as the pre-headshot behaviour.
-//
-// REGENERATE: run the harvest snippet on any DataGolf page that lists players (dg-points, the
-// rankings tables, this week's fields). It reads each profile's og:image tag and caches results in
-// localStorage, so runs across different pages accumulate rather than starting over.
-// Current coverage: 413 players.
+// Player headshot map — DataGolf dg_id → headshot image id.
+// Harvested from the DG Points top 250. Regenerate with the harvest snippet and replace wholesale.
+// Values: number → DataGolf CDN /static/players/headshot_{id}.png · string → used verbatim.
+// Players not listed show their country flag alone.
 
 export const HEADSHOT_MAP = {
   1435: 24138,
@@ -29,6 +16,7 @@ export const HEADSHOT_MAP = {
   6430: 24502,
   6516: 45836,
   6892: 21961,
+  6931: 24925,
   6950: 23481,
   6986: 24024,
   7049: 24459,
@@ -42,8 +30,10 @@ export const HEADSHOT_MAP = {
   7655: 25198,
   7672: 26329,
   7677: 26328,
+  7960: 27129,
   8117: 27408,
   8480: 27214,
+  8571: 28679,
   8820: 27649,
   8825: 27644,
   9133: 29670,
@@ -58,16 +48,20 @@ export const HEADSHOT_MAP = {
   10201: 28340,
   10418: 25799,
   10419: 27349,
+  10423: 28420,
   10873: 27139,
   11019: 29518,
+  11049: 29221,
   11061: 29256,
   11276: 29420,
+  11328: 29478,
   11357: 29484,
   11396: 29531,
   11397: 31138,
   11451: 29535,
   11460: 33199,
   11641: 29718,
+  11657: 30163,
   11676: 29725,
   11763: 33870,
   11826: 29926,
@@ -81,6 +75,7 @@ export const HEADSHOT_MAP = {
   12413: 31109,
   12422: 30925,
   12423: 30926,
+  12425: 30927,
   12426: 31113,
   12522: 31242,
   12577: 31323,
@@ -90,10 +85,12 @@ export const HEADSHOT_MAP = {
   12808: 31646,
   12909: 32070,
   12920: 32139,
+  12946: 32150,
   12965: 32102,
   12988: 39201,
   13126: 25493,
   13344: 32622,
+  13367: 32640,
   13374: 32659,
   13412: 33968,
   13470: 32757,
@@ -105,11 +102,14 @@ export const HEADSHOT_MAP = {
   13872: 33141,
   13900: 33204,
   13944: 33293,
+  13965: 33399,
   13997: 40115,
+  14007: 33413,
   14013: 33419,
   14016: 32367,
   14018: 33459,
   14139: 33448,
+  14140: 33597,
   14181: 33653,
   14196: 33674,
   14373: 33921,
@@ -207,6 +207,7 @@ export const HEADSHOT_MAP = {
   18103: 45522,
   18105: 45523,
   18174: 45847,
+  18187: 45609,
   18238: 45526,
   18241: 46033,
   18417: 46046,
@@ -242,6 +243,7 @@ export const HEADSHOT_MAP = {
   19844: 48018,
   19846: 48001,
   19864: 47987,
+  19865: 47988,
   19866: 47989,
   19870: 47993,
   19872: 47995,
@@ -279,7 +281,9 @@ export const HEADSHOT_MAP = {
   21944: 49947,
   21995: 50484,
   22002: 50497,
+  22051: 49964,
   22085: 50525,
+  22087: 50582,
   22089: 50584,
   22231: 50743,
   22259: 50762,
@@ -300,6 +304,7 @@ export const HEADSHOT_MAP = {
   23504: 51696,
   23505: 51950,
   23540: 52370,
+  23542: 52372,
   23549: 52444,
   23602: 52453,
   23604: 51766,
@@ -351,10 +356,12 @@ export const HEADSHOT_MAP = {
   26190: 39262,
   26193: 63196,
   26213: 56987,
+  26502: 46046,
   26649: 57364,
   26651: 57366,
   26653: 57362,
   26657: 57123,
+  26660: 56762,
   26745: 57492,
   26850: 57586,
   26947: 57688,
@@ -363,6 +370,7 @@ export const HEADSHOT_MAP = {
   27147: 57940,
   27149: 65956,
   27164: 57900,
+  27183: 56781,
   27194: 57975,
   27364: 58168,
   27420: 51690,
@@ -374,6 +382,7 @@ export const HEADSHOT_MAP = {
   27819: 59440,
   27820: 59160,
   27900: 63343,
+  28075: 46046,
   28157: 59827,
   28159: 59143,
   28239: 59798,
@@ -384,6 +393,7 @@ export const HEADSHOT_MAP = {
   28471: 58601,
   28473: 60165,
   28542: 58547,
+  28570: 58881,
   28615: 60369,
   28635: 59141,
   28686: 60736,
@@ -411,7 +421,9 @@ export const HEADSHOT_MAP = {
   30767: 64576,
   30814: 64442,
   30856: 58999,
+  30937: 60511,
   31165: 59198,
+  31188: 65110,
   31192: 63455,
   31235: 65229,
   31257: 60531,
@@ -430,4 +442,8 @@ export const HEADSHOT_MAP = {
   32593: 64624,
   33755: 68384,
   34024: 67145,
+  34445: 46046,
+  34966: 46046,
+  30030060: 46046,
+  30037685: 46046,
 };
