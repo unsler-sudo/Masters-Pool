@@ -1,5 +1,5 @@
 'use client';
-// build: picks-name-on-save-v246-20260923-1800
+// build: join-then-pick-v247-20260923-1900
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -4374,6 +4374,38 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               msg(`Picks saved for ${d.name||chatName} ✓`);
             }catch{ msg('Error saving — check connection'); }
           };
+          // FINGERPRINT_V247_JOIN_THEN_PICK — joining signs you straight in (the server returns your own
+          // code) and saves any picks already tapped for this session. The code is emailed as well.
+          const joinTeam=async()=>{
+            const nm=entryName.trim(), em=entryEmail.trim();
+            if(!nm) return msg('Enter your name!');
+            if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return msg('Enter a valid email — your code is sent there');
+            setSubmitting(true);
+            try{
+              const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({poolId,action:'submit',name:nm,email:em,picks:[]})});
+              const d=await r.json();
+              if(d.error){ setSubmitting(false); return msg(d.error); }
+              if(d.entries) setEntries(d.entries);
+              setEntryName(''); setEntryEmail('');
+              if(!d.editCode){ setChatName(nm); setSubmitting(false); return msg("You're in! Check your email for your code to save picks 📧"); }
+              const cd=String(d.editCode).toUpperCase();
+              try{ localStorage.setItem(`chat_${poolId}_name`,nm); localStorage.setItem(`chat_${poolId}_code`,cd); }catch{}
+              setChatName(nm); setChatCode(cd); setChatVerified(true);
+              const draft=pickDraft[active];
+              if(sv && !sLocked && draft && Object.keys(draft).length){
+                const r2=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({poolId,action:'team-picks',name:nm,code:cd,sessionKey:active,picks:draft})});
+                const d2=await r2.json();
+                if(d2.ok){ setMyTeamPicks(d2.myPicks||{}); setPickDraft(prev=>{const n={...prev};delete n[active];return n;});
+                  msg(`You're in — ${label} picks saved ✓ (your code ${cd} is also emailed)`); }
+                else msg(d2.error||'Joined, but picks didn\'t save — tap Save');
+              } else {
+                msg(`You're in! Now tap your picks and save (your code ${cd} is also emailed)`);
+              }
+            }catch{ msg('Error joining — check connection'); }
+            setSubmitting(false);
+          };
           const switchEntry=()=>{
             try{ localStorage.removeItem(`chat_${poolId}_name`); localStorage.removeItem(`chat_${poolId}_code`); }catch{}
             setChatVerified(false); setChatName(''); setChatCode(''); setMyTeamPicks({}); setPickDraft({});
@@ -4390,7 +4422,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 <input style={inp} placeholder="Your name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
                 <input style={inp} placeholder="Email (your code is sent here)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>
-                <button type="button" style={{...pri,padding:11}} disabled={submitting} onClick={submit}>{submitting?'Joining…':'Join'}</button>
+                <button type="button" style={{...pri,padding:11}} disabled={submitting} onClick={joinTeam}>{submitting?'Joining…':'Join'}</button>
               </div>
             </div>}
             <div style={sec}>
