@@ -1,5 +1,5 @@
 'use client';
-// build: fu-roster-filter-v238-20260922-1000
+// build: roster-fallback-only-v240-20260922-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1701,36 +1701,39 @@ export default function App(){
           }
         } catch(e){ console.warn('pgatour tee times unavailable:', e.message); }
 
-        // FINGERPRINT_V238_FU_ROSTER_FILTER
-        // field-updates is the OFFICIAL entry list; pre-tournament is a model snapshot that can
-        // carry players who aren't entered. v134 only ever APPENDED field-updates players that
-        // pre-tournament missed — it never REMOVED pre-tournament players who aren't playing.
-        // Normally harmless (the lists nearly match), but Presidents Cup week exposed it:
-        // pre-tournament returned a generic 132-player list while field-updates had the real 24,
-        // so 108 non-participants showed as pickable. Restrict to the field-updates roster when it
-        // names the SAME event. Filtering happens BEFORE tiering, so tier cuts scale to the real
-        // field (24 → the v214 small-field even thirds).
-        // GUARDS: same-event name match (during the weekend flip field-updates names next week's
-        // event); >= 12 players, so a partial or empty roster can never gut a real field; and if
-        // the filter would leave fewer than 12 matched we keep the unfiltered list rather than
-        // risk a near-empty field from a name-matching miss.
+        // FINGERPRINT_V240_ROSTER_FALLBACK
+        // NORMAL WEEKS ARE UNTOUCHED: fieldSorted === sorted, exactly the pre-v238 behaviour
+        // (late substitutes are still appended further down by v134; nobody is ever removed).
+        // This only activates when the pre-tournament list is clearly the WRONG field — fewer
+        // than half of the officially entered (field-updates) players appear in it at all.
+        // Presidents Cup week: pre-tournament returned 132 names under the event label but only
+        // 7 of the 24 entered players; normal weeks sit at ~100% coverage, nowhere near 50%.
+        // In that case the field is built from the official roster, borrowing pre-tournament
+        // odds where a player appears in both, ordered by DG rank so tiers still make sense.
+        // GUARDS: same-event name match (during the weekend flip field-updates already names
+        // next week's event) and a roster of at least 12 players.
         let fieldSorted = sorted;
         {
           const fN = (s)=>(s||'').toLowerCase().replace(/\s+\d{4}$/,'').trim();
           const pN = fN(ptData.event_name), uN = fN(fuEventName);
           const rosterSameEvent = pN && uN && (pN===uN || pN.includes(uN) || uN.includes(pN));
-          if (rosterSameEvent && fuRawPlayers.length >= 12) {
+          const roster = fuRawPlayers.filter(r => r && r.player_name);
+          if (rosterSameEvent && roster.length >= 12) {
             const tok = (s)=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
               .replace(/[^a-z ]/g,'').replace(/\s+/g,' ').trim().split(' ').sort().join(' ');
-            const rosterIds = new Set(fuRawPlayers.map(p=>p.dg_id).filter(Boolean));
-            const rosterNames = new Set(fuRawPlayers.map(p=>tok(p.player_name)));
-            const kept = sorted.filter(p =>
-              (p.dg_id && rosterIds.has(p.dg_id)) || rosterNames.has(tok(p.player_name || p.name)));
-            if (kept.length >= 12) {
-              if (kept.length < sorted.length) {
-                console.log(`[field] restricted to field-updates roster: ${sorted.length} → ${kept.length} (${fuEventName})`);
-              }
-              fieldSorted = kept;
+            const preIds  = new Set(sorted.map(p=>p.dg_id).filter(Boolean));
+            const preToks = new Set(sorted.map(p=>tok(p.player_name || p.name)));
+            const covered = roster.filter(r => (r.dg_id && preIds.has(r.dg_id)) || preToks.has(tok(r.player_name))).length;
+            if (covered / roster.length < 0.5) {
+              const preById  = new Map(sorted.filter(p=>p.dg_id).map(p=>[p.dg_id, p]));
+              const preByTok = new Map(sorted.map(p=>[tok(p.player_name || p.name), p]));
+              const rankOf = (p) => (+p.dg_rank > 0) ? +p.dg_rank
+                                  : (+p.owgr_rank > 0) ? 1000 + (+p.owgr_rank) : 99999;
+              fieldSorted = roster.map(r => {
+                const m = (r.dg_id && preById.get(r.dg_id)) || preByTok.get(tok(r.player_name));
+                return m ? { ...m, ...r, win: m.win, top_5: m.top_5, make_cut: m.make_cut } : { ...r };
+              }).sort((a,b) => (rankOf(a) - rankOf(b)) || ((b.win||0) - (a.win||0)));
+              console.log(`[field] pre-tournament list doesn't match the entered field (${covered}/${roster.length} covered) — built from the official roster: ${fieldSorted.length} players (${fuEventName})`);
             }
           }
         }
