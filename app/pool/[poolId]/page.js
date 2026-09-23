@@ -1,5 +1,5 @@
 'use client';
-// build: team-no-odds-v244-20260923-1500
+// build: match-pickem-v245-20260923-1700
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -441,6 +441,66 @@ const teamSessionsFor = (n) => /ryder/i.test(n || '')
   ? [['friam','Fri AM'],['fripm','Fri PM'],['satam','Sat AM'],['satpm','Sat PM'],['sun','Sun Singles']]
   : [['thu','Thu'],['fri','Fri'],['satam','Sat AM'],['satpm','Sat PM'],['sun','Sun Singles']];
 const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
+
+// FINGERPRINT_V245_MATCH_PICKEM
+// Team events are a match pick'em: entries pick USA or the other side in every match, session by
+// session. Correct = 1; a halved match = ½ to anyone who picked it. Each session locks at its first
+// tee (the server enforces it). Unlocked picks never leave the server, so nobody can copy.
+const isSessLocked = (s) => !!(s && s.lockAt && Date.now() >= new Date(s.lockAt).getTime());
+const scoreTeamPicks = (ep, matches) => {
+  let t = 0;
+  for (const [sk, sess] of Object.entries(matches || {}))
+    for (const m of (sess.matches || [])) {
+      const pk = ep?.[sk]?.[m.id];
+      if (!pk || !m.result) continue;
+      t += m.result === 'H' ? 0.5 : (pk === m.result ? 1 : 0);
+    }
+  return t;
+};
+// ISO time ↔ the value a <input type="datetime-local"> expects, in the viewer's own timezone.
+const toLocalInput = (iso) => {
+  const d = new Date(iso); if (isNaN(d)) return '';
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+// Turn a session pasted from DataGolf's live model into matches. Their text runs names together
+// ("SCHEFFLER BURNS LEEIM THRU…"), so strip to letters and segment against the field's surnames,
+// fewest pieces first; duplicate surnames (the two Kims) go to whichever isn't used yet. Sides come
+// from nationality. Anything that doesn't resolve cleanly is left for the commissioner to fix.
+const parseMatchPaste = (text, field) => {
+  const norm = (x) => String(x || '').toUpperCase().replace(/[^A-Z]/g, '');
+  const dict = new Map();
+  (field || []).forEach(p => {
+    const w = String(p.name || '').split(/\s+/).filter(Boolean);
+    new Set([norm(w[w.length - 1]), norm(w.slice(-2).join('')), norm(p.name)]).forEach(k => {
+      if (k.length >= 2) { if (!dict.has(k)) dict.set(k, []); dict.get(k).push(p); }
+    });
+  });
+  const used = new Set(), out = [];
+  for (const chunk of String(text || '').split(/MATCH\s*PREVIEW/i).slice(1)) {
+    const blob = norm(chunk.split(/THRU/i)[0]);
+    const best = Array(blob.length + 1).fill(null); best[0] = [];
+    for (let i = 0; i < blob.length; i++) {
+      if (!best[i]) continue;
+      for (const key of dict.keys()) if (blob.startsWith(key, i)) {
+        const c = [...best[i], key], j = i + key.length;
+        if (!best[j] || best[j].length > c.length) best[j] = c;
+      }
+    }
+    const players = [];
+    for (const key of (best[blob.length] || [])) {
+      const cand = dict.get(key);
+      const pick = cand.find(x => !used.has(x.name) && !players.includes(x)) || cand[0];
+      players.push(pick); used.add(pick.name);
+    }
+    const usa = players.filter(x => x.country === 'USA').map(x => x.name);
+    const intl = players.filter(x => x.country !== 'USA').map(x => x.name);
+    const n = Math.max(usa.length, intl.length, 1);
+    while (usa.length < n) usa.push('');
+    while (intl.length < n) intl.push('');
+    out.push({ usa, intl, result: null });
+  }
+  return out;
+};
 const fmtPts = (v) => {
   const n = Math.round((+v || 0) * 2) / 2;
   return `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? 'pt' : 'pts'}`;
@@ -1244,7 +1304,28 @@ export default function App(){
   const teamAutoRef=useRef({});
   const [teamSessions,setTeamSessions]=useState({});      // FINGERPRINT_V242 — {sessionKey:{name:'W'|'H'|'L'}}
   const [tsTab,setTsTab]=useState(null);                  // admin: active session tab
-  const [tsDraft,setTsDraft]=useState(null);              // admin: unsaved edits (null = clean)                           // auto-detected from DataGolf, if it ever publishes points // FINGERPRINT_V236_PHOTO_ZOOM — {url,name} when a headshot is tapped
+  const [tsDraft,setTsDraft]=useState(null);              // admin: unsaved edits (null = clean)
+  // FINGERPRINT_V245_MATCH_PICKEM
+  const [teamMatches,setTeamMatches]=useState({});        // {session:{lockAt, matches:[{id,usa,intl,result}]}}
+  const [teamPicksPublic,setTeamPicksPublic]=useState({}); // everyone's picks for LOCKED sessions only
+  const [myTeamPicks,setMyTeamPicks]=useState({});        // the signed-in entry's own picks, all sessions
+  const [pickDraft,setPickDraft]=useState({});            // unsaved picks, per session
+  const [pickTab,setPickTab]=useState(null);
+  const [admSess,setAdmSess]=useState({});                // admin: unsaved session edits
+  const [pasteText,setPasteText]=useState('');
+  // Results → each player's points and session record, which drive the Field tab and scorecard.
+  const applyTeamMatches=(tm)=>{
+    setTeamMatches(tm||{});
+    const pts={}, sess={};
+    for(const [sk,sv] of Object.entries(tm||{})) for(const m of (sv.matches||[])){
+      if(!m.result) continue;
+      const res=side=>m.result==='H'?'H':(m.result===side?'W':'L');
+      [['USA',m.usa],['INT',m.intl]].forEach(([side,names])=>(names||[]).forEach(n=>{
+        if(!n) return; const r=res(side); (sess[sk]=sess[sk]||{})[n]=r; pts[n]=(pts[n]||0)+TEAM_RESULT_PTS[r];
+      }));
+    }
+    setTeamPoints(pts); teamPointsRef.current=pts; setTeamSessions(sess);
+  };                           // auto-detected from DataGolf, if it ever publishes points // FINGERPRINT_V236_PHOTO_ZOOM — {url,name} when a headshot is tapped
   const [holeData,setHoleData]=useState({round:null,holes:[],loading:false,error:null});
   const [archives,setArchives]=useState([]);
   const [expandedArchive,setExpandedArchive]=useState(null);
@@ -1318,6 +1399,7 @@ export default function App(){
   const fmtE = (v) => isTeamPool ? fmtPts(v) : fmt(v);   // player/entry score formatter
   // FINGERPRINT_V243_TEAM_TIERS — sides for team events (Europe for the Ryder Cup)
   const teamOf = (pl) => (pl?.country === 'USA') ? 'USA' : 'INT';
+  const surnames = (arr) => (arr||[]).filter(Boolean).map(n=>flip(n).split(' ').slice(-1)[0]).join(' / ');   // FINGERPRINT_V245
   const teamLabel = (t) => t === 'USA' ? '🇺🇸 USA' : (/ryder/i.test(tcEventName) ? '🇪🇺 Europe' : '🌏 International');
   // FINGERPRINT_V216_TIER_COLOR_CLASH
   // Group B normally borrows the theme's primary so it feels event-branded. But a gold-primary
@@ -1361,6 +1443,15 @@ export default function App(){
       return changed ? next : prev;
     });
   },[isTeamPool, teamPoints, field]);
+  // FINGERPRINT_V245_MATCH_PICKEM — the signed-in entry's own picks (incl. unlocked sessions)
+  useEffect(()=>{
+    if(!isTeamPool||!chatVerified||!chatName||!chatCode) return;
+    (async()=>{ try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'team-picks-get',name:chatName,code:chatCode})});
+      const d=await r.json(); if(d.ok) setMyTeamPicks(d.myPicks||{});
+    }catch{} })();
+  },[isTeamPool,chatVerified,chatName,chatCode,poolId]);
 
   // FINGERPRINT_V153_REAL_TEE / FINGERPRINT_V185_TRUST_REAL_TEE
   // pastTeeTime must reflect the ACTUAL earliest tee time, not the theme placeholder (schedule
@@ -1431,6 +1522,7 @@ export default function App(){
       if(d.purses){setDynamicPurses(d.purses); dynamicPursesRef.current=d.purses;}
       if(d.teamPoints){setTeamPoints(d.teamPoints); teamPointsRef.current=d.teamPoints;}
       if(d.teamSessions){setTeamSessions(d.teamSessions);}
+      if(d.teamMatches){applyTeamMatches(d.teamMatches); setTeamPicksPublic(d.teamPicks||{});}
       if(d.major&&THEMES[d.major]){
         const prevMajor = activeMajorRef.current;
         const isFirstLoad = !field || field.length === 0;
@@ -2857,24 +2949,20 @@ export default function App(){
       if(!entryEmail.trim())return msg('Enter your email!');
       if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entryEmail.trim()))return msg('Invalid email format');
     }
-    for(const t of TIERS)if(picks[t.id].length!==t.picks)return msg(`Pick ${t.picks} from ${t.name}`);
-    if(isTeamPool)for(const t of TIERS){
-      const sides=picks[t.id].map(n=>teamOf(field.find(f=>f.name===n)));
-      if(!(sides.includes('USA')&&sides.includes('INT')))return msg(`${t.name}: pick 1 ${teamLabel('USA')} and 1 ${teamLabel('INT')}`);
-    }
+    if(!isTeamPool)for(const t of TIERS)if(picks[t.id].length!==t.picks)return msg(`Pick ${t.picks} from ${t.name}`);
     setSubmitting(true);
     try{
       const body=editMode
-        ?{poolId,action:'update-entry',name:entryName.trim(),code:editCode,picks:allPicks}
-        :{poolId,action:'submit',name:entryName.trim(),email:entryEmail.trim(),picks:allPicks};
+        ?{poolId,action:'update-entry',name:entryName.trim(),code:editCode,picks:isTeamPool?[]:allPicks}
+        :{poolId,action:'submit',name:entryName.trim(),email:entryEmail.trim(),picks:isTeamPool?[]:allPicks};
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json();
       if(d.error){msg(d.error);setSubmitting(false);return;}
       if(d.entries)setEntries(d.entries);
       setEntryName('');setEntryEmail('');setPicks({1:[],2:[],3:[]});setSearch('');
       setEditMode(false);setEditCode('');
-      msg(editMode?'Picks updated!':'Entry submitted! Check email for edit code 📧');
-      setTab('Standings');
+      if(isTeamPool){ setChatName(entryName.trim()); msg("You're in! Check your email for your code, then sign in below to pick 📧"); }
+      else { msg(editMode?'Picks updated!':'Entry submitted! Check email for edit code 📧'); setTab('Standings'); }
     }catch(e){msg('Error submitting — check connection');}
     setSubmitting(false);
   };
@@ -3076,7 +3164,7 @@ export default function App(){
 
   // Auto-redirect away from Enter Pool tab when tournament starts (tab gets hidden)
   useEffect(()=>{
-    if(pastTeeTime&&tab==='Enter Pool')setTab('Standings');
+    if(pastTeeTime&&tab==='Enter Pool'&&!isTeamPool)setTab('Standings');
   },[pastTeeTime,tab]);
 
   // Auto-load past results when History tab opened
@@ -3116,7 +3204,7 @@ export default function App(){
     }catch(e){msg('Error removing entry');}
   };
 
-  const teamE=e=>e.picks.reduce((s,n)=>s+(field.find(f=>f.name===n)?.earnings||0),0);
+  const teamE=e=>isTeamPool?scoreTeamPicks(teamPicksPublic[e.name],teamMatches):e.picks.reduce((s,n)=>s+(field.find(f=>f.name===n)?.earnings||0),0);
   // FINGERPRINT_V100_PAYOUTMODE
   // Winner-take-all applies if the commissioner toggled it OR the pool has ≤4 entries (auto).
   // Returns true/false given an entry count.
@@ -3256,10 +3344,10 @@ export default function App(){
   // Only re-rank entries once field has earnings data, otherwise keep stable order
   // This eliminates the loading flicker where rankings briefly shift as data streams in
   const fieldHasEarnings = field.some(f => f.earnings > 0);
-  const ranked = fieldHasEarnings
+  const ranked = (fieldHasEarnings || isTeamPool)
     ? [...entries].sort((a,b)=>teamE(b)-teamE(a))
     : entries;
-  const owners=n=>entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
+  const owners=n=>isTeamPool?[]:entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
   // FINGERPRINT_V166_MR_CHALK / FINGERPRINT_V168_ODDS_BASED
   // "Mr. Chalk" = the entry that drafted the chalk (the favorites), judged by the actual ODDS
   // shown on each player (the same `p.odds` value displayed in the scorecard, e.g. "-200"/"+5000").
@@ -4046,7 +4134,7 @@ export default function App(){
 
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
-        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
+        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{t==='Enter Pool'&&isTeamPool?'Match Picks':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
       </nav>
       {lastUp&&!picksHidden&&<div style={{padding:'4px 14px',background:T.navActive,borderBottom:`1px solid ${T.cardBorder}`,textAlign:'center'}}><span style={{fontSize:10,color:'#8a9580'}}>Scores update automatically · Last: {lastUp}</span></div>}
       {justActivated&&<div style={{background:'#d1fae5',padding:'10px 16px',fontSize:13,color:'#065f46',textAlign:'center',fontWeight:600}}>🎉 Your pool is live! Share this link with your friends to start entering picks.</div>}
@@ -4218,7 +4306,29 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   )}
                   {!picksHidden&&<div style={{fontWeight:800,fontSize:17,color:T.primary}}>{fmtE(tot)}</div>}
                 </div>
-                {!picksHidden&&op&&<div style={{marginTop:8,borderTop:'1px solid #eee8dc',paddingTop:8,animation:'sd .2s ease'}}>
+                {/* FINGERPRINT_V245_MATCH_PICKEM — an entry's picks, revealed session by session as each locks */}
+                {isTeamPool&&!picksHidden&&(()=>{
+                  const ep=teamPicksPublic[e.name]||{};
+                  const rows=teamSessionsFor(tcEventName).filter(([sk])=>isSessLocked(teamMatches[sk])&&ep[sk]);
+                  if(!rows.length) return <div style={{fontSize:11,color:'#8a9580',marginTop:8}}>Picks appear as each session locks.</div>;
+                  const iF=teamLabel('INT').split(' ')[0];
+                  if(!op) return <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>{rows.map(([sk,lb])=>{
+                    const x=teamMatches[sk], done=x.matches.filter(m=>m.result).length;
+                    return <span key={sk} style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:12,background:`${T.primary}10`,color:T.primary}}>
+                      {lb}: {fmtPts(scoreTeamPicks({[sk]:ep[sk]},{[sk]:x}))}{done<x.matches.length?` · ${done}/${x.matches.length} final`:''}</span>;})}</div>;
+                  return <div style={{marginTop:8,borderTop:'1px solid #eee8dc',paddingTop:8}}>{rows.map(([sk,lb])=>
+                    <div key={sk} style={{marginBottom:8}}>
+                      <div style={{fontSize:10,fontWeight:700,color:T.primary,letterSpacing:.5,marginBottom:3}}>{lb.toUpperCase()}</div>
+                      {teamMatches[sk].matches.map(m=>{const pk=ep[sk]?.[m.id];
+                        const mark=!m.result?'':m.result==='H'?(pk?'½':''):(pk===m.result?'✓':(pk?'✗':''));
+                        return <div key={m.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'2px 0'}}>
+                          <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{surnames(m.usa)} v {surnames(m.intl)}</span>
+                          <span>{pk?(pk==='USA'?'🇺🇸':iF):'—'}</span>
+                          <span style={{width:14,textAlign:'center',fontWeight:800,color:mark==='✓'?'#1a7a3a':mark==='✗'?'#a33':'#8a7a2a'}}>{mark}</span>
+                        </div>;})}
+                    </div>)}</div>;
+                })()}
+                {!isTeamPool&&!picksHidden&&op&&<div style={{marginTop:8,borderTop:'1px solid #eee8dc',paddingTop:8,animation:'sd .2s ease'}}>
                   {TIERS.map(t=>{const tp=e.picks.filter(pn=>field.find(f=>f.name===pn)?.tier===t.id);if(!tp.length)return null;return<div key={t.id} style={{marginBottom:6}}>
                     <div style={{fontSize:10,fontWeight:700,color:t.color,marginBottom:3,letterSpacing:.5}}>{t.label.toUpperCase()}</div>
                     {tp.map(pn=>{const p=field.find(f=>f.name===pn);return<div key={pn} onClick={(ev)=>{ev.stopPropagation();if(p)setSelectedPlayer(p);}} style={{display:'flex',padding:'4px 0',borderBottom:'1px solid #f5f0e8',alignItems:'center',gap:6,cursor:p?'pointer':'default'}}>
@@ -4228,14 +4338,105 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     </div>;})}
                   </div>;})}
                 </div>}
-                {!picksHidden&&!op&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>
+                {!isTeamPool&&!picksHidden&&!op&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>
                   {e.picks.map(pn=>{const p=field.find(f=>f.name===pn);const t=TIERS.find(t=>t.id===p?.tier);return<span key={pn} onClick={(ev)=>{ev.stopPropagation();if(p)setSelectedPlayer(p);}} style={{fontSize:10,background:T.navActive,padding:'2px 7px',borderRadius:4,border:`1px solid ${T.cardBorder}`,borderLeft:`3px solid ${t?.color||'#ccc'}`,cursor:p?'pointer':'default'}}><Flag c={p?.country}/> {pn.split(', ')[0]} <b style={{color:T.primary}}>{fmtE(p?.earnings)}</b></span>;})}
                 </div>}
               </div>);})}
           </>}
         </>)}
 
-        {tab==='Enter Pool'&&(locked
+        {/* FINGERPRINT_V245_MATCH_PICKEM — join, sign in, and pick each session's matches */}
+        {tab==='Enter Pool'&&isTeamPool&&(()=>{
+          const sessions = teamSessionsFor(tcEventName);
+          const firstOpen = sessions.find(([sk])=>teamMatches[sk]&&!isSessLocked(teamMatches[sk]));
+          const active = pickTab || (firstOpen||sessions[0])[0];
+          const label = (sessions.find(([sk])=>sk===active)||[])[1];
+          const sv = teamMatches[active];
+          const sLocked = isSessLocked(sv);
+          const mine = pickDraft[active] || myTeamPicks[active] || {};
+          const dirty = !!pickDraft[active];
+          const intlFlag = teamLabel('INT').split(' ')[0];
+          const setPick=(mid,v)=>setPickDraft(prev=>({...prev,[active]:{...(prev[active]||myTeamPicks[active]||{}),[mid]:v}}));
+          const savePicks=async()=>{
+            try{
+              const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({poolId,action:'team-picks',name:chatName,code:chatCode,sessionKey:active,picks:mine})});
+              const d=await r.json(); if(d.error) return msg(d.error);
+              setMyTeamPicks(d.myPicks||{}); setPickDraft(prev=>{const n={...prev};delete n[active];return n;});
+              msg('Picks saved ✓');
+            }catch{ msg('Error saving — check connection'); }
+          };
+          const picked = sv ? sv.matches.filter(m=>mine[m.id]).length : 0;
+          return <>
+            <div style={{...sec,background:`${T.primary}08`}}>
+              <div style={{fontSize:13,lineHeight:1.55,color:'#3a4a2e'}}>
+                <b>How it works:</b> pick the winner of every match, session by session. <b>1 pt</b> per correct pick; a halved match gives <b>½</b> to everyone who picked it. Each session locks at its first tee — come back each day once the pairings are out.
+              </div>
+            </div>
+            {!locked&&!chatVerified&&<div style={sec}>
+              <h3 style={stl}>Join the pool</h3>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <input style={inp} placeholder="Your name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
+                <input style={inp} placeholder="Email (your code is sent here)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>
+                <button type="button" style={{...pri,padding:11}} disabled={submitting} onClick={submit}>{submitting?'Joining…':'Join'}</button>
+              </div>
+            </div>}
+            {!chatVerified&&<div style={sec}>
+              <h3 style={stl}>Already joined? Sign in to pick</h3>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                <input style={inp} placeholder="Entry name" value={chatName} onChange={e=>setChatName(e.target.value)}/>
+                <input style={inp} placeholder="Code from your email" value={chatCode} onChange={e=>setChatCode(e.target.value.toUpperCase())}/>
+                <button type="button" style={{...pri,padding:11}} disabled={chatVerifying} onClick={verifyChat}>{chatVerifying?'Checking…':'Sign in'}</button>
+              </div>
+            </div>}
+            {chatVerified&&<div style={sec}>
+              <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
+                <h3 style={{...stl,marginBottom:0,flex:1}}>Your picks — {chatName}</h3>
+              </div>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
+                {sessions.map(([sk,lb])=>{
+                  const x=teamMatches[sk], on=sk===active;
+                  const st = !x ? 'TBA' : isSessLocked(x) ? '🔒' : `${x.matches.filter(m=>(myTeamPicks[sk]||{})[m.id]).length}/${x.matches.length}`;
+                  return <button key={sk} type="button" onClick={()=>setPickTab(sk)} style={{flex:'1 1 0',minWidth:58,padding:'7px 3px',borderRadius:7,cursor:'pointer',
+                    fontSize:11,fontWeight:700,border:`1.5px solid ${on?T.primary:'#ddd'}`,background:on?T.primary:'#fff',color:on?'#fff':'#3a4a2e'}}>
+                    {lb}<div style={{fontSize:9,fontWeight:600,opacity:.85}}>{st}</div></button>;
+                })}
+              </div>
+              {!sv
+                ? <p style={{fontSize:13,color:'#8a9580',textAlign:'center',padding:'14px 0'}}>{label} pairings haven't been posted yet — check back once they're announced.</p>
+                : <>
+                  <div style={{fontSize:12,fontWeight:700,marginBottom:8,color:sLocked?'#a33':T.primary}}>
+                    {sLocked?'🔒 Locked — picks are final':`Locks ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})} · ${picked} of ${sv.matches.length} picked`}
+                  </div>
+                  {sv.matches.map((m,mi)=>{
+                    const pk=mine[m.id];
+                    const side=(v,names,flagE)=>{
+                      const on=pk===v, won=m.result===v;
+                      return <button type="button" disabled={sLocked} onClick={()=>setPick(m.id,v)} style={{flex:1,padding:'10px 8px',borderRadius:8,
+                        cursor:sLocked?'default':'pointer',textAlign:'center',fontSize:13,fontWeight:700,lineHeight:1.3,
+                        border:`2px solid ${on?T.primary:(won?'#1a7a3a':'#e2e2dc')}`,background:on?T.primary:'#fff',color:on?'#fff':'#3a4a2e'}}>
+                        <div style={{fontSize:16}}>{flagE}</div>{surnames(names)}{won&&<div style={{fontSize:10,marginTop:2,color:on?'#fff':'#1a7a3a'}}>WON</div>}
+                      </button>;
+                    };
+                    const mark = !m.result||!pk ? '' : m.result==='H' ? '½ pt' : (pk===m.result ? '✓ 1 pt' : '✗');
+                    return <div key={m.id} style={{marginBottom:10}}>
+                      <div style={{display:'flex',fontSize:10,fontWeight:700,color:'#8a9580',marginBottom:4,letterSpacing:.4}}>
+                        <span style={{flex:1}}>MATCH {mi+1}{m.result==='H'?' · HALVED':''}</span><span>{mark}</span>
+                      </div>
+                      <div style={{display:'flex',gap:6,alignItems:'stretch'}}>
+                        {side('USA',m.usa,'🇺🇸')}
+                        <div style={{alignSelf:'center',fontSize:11,color:'#aaa',fontWeight:700}}>v</div>
+                        {side('INT',m.intl,intlFlag)}
+                      </div>
+                    </div>;
+                  })}
+                  {!sLocked&&<button type="button" disabled={!dirty} onClick={savePicks}
+                    style={{...pri,width:'100%',padding:12,fontSize:15,opacity:dirty?1:.45}}>{dirty?`💾 Save ${label} picks`:'✓ Saved'}</button>}
+                </>}
+            </div>}
+          </>;
+        })()}
+        {tab==='Enter Pool'&&!isTeamPool&&(locked
           ? poolMeta?.paid===false
             ?<div style={bx}>
               <div style={{fontSize:44,marginBottom:10}}>💳</div>
@@ -4829,9 +5030,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const displayDate = a.tournamentDate ? new Date(a.tournamentDate) : new Date(THEME.teeTime);
                 const ranked=[...a.entries].map(e=>({
                   ...e,
-                  total:e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
+                  total:a.entryTotals?(+a.entryTotals[e.name]||0):e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
                 }))
-                  .filter(e=>e.picks && e.picks.length > 0)
+                  .filter(e=>a.entryTotals || (e.picks && e.picks.length > 0))
                   .sort((x,y)=>y.total-x.total);
                 // Pool prize money — prefer saved prizes, fall back to computed from entryFee
                 // Use the FULL entry count from the archive (a.entries.length), not the filtered ranked.length
@@ -4868,18 +5069,18 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     {ranked.map((e,i)=>{
                       const picksWithEarnings=e.picks.map(pn=>({name:pn,earned:earnings[pn]||0})).sort((x,y)=>y.earned-x.earned);
                       const prize = !showPrizes ? 0
-                        : a.scoring==='points' ? splitPrizesForTies(ranked.map(r=>r.total), prizes)[i]
+                        : (a.scoring==='points'||a.scoring==='matchpicks') ? splitPrizesForTies(ranked.map(r=>r.total), prizes)[i]
                         : (i<3?prizes[i]:0);
                       return<div key={e.name} style={{borderBottom:`1px solid ${THEME.cardBorder}`}}>
                         <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:i===0?`${THEME.primary}08`:'#fff'}}>
                           <span style={{fontSize:i<3?18:13,fontWeight:800,width:28,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</span>
                           <span style={{flex:1,fontWeight:600,fontSize:14}}>{e.name}</span>
                           {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${fmtPrize(prize)}</span>}
-                          {hasEarnings&&<span style={{fontWeight:800,color:THEME.primary,fontSize:14}}>{(a.scoring==='points'?fmtPts:fmt)(e.total)}</span>}
+                          {hasEarnings&&<span style={{fontWeight:800,color:THEME.primary,fontSize:14}}>{((a.scoring==='points'||a.scoring==='matchpicks')?fmtPts:fmt)(e.total)}</span>}
                         </div>
                         {hasEarnings&&<div style={{padding:'4px 14px 10px 50px',display:'flex',flexWrap:'wrap',gap:6,fontSize:11}}>
                           {picksWithEarnings.map(pk=><span key={pk.name} style={{background:`${THEME.primary}10`,padding:'2px 6px',borderRadius:4,color:THEME.primary}}>
-                            {pk.name.split(', ')[0]} <b>{(a.scoring==='points'?fmtPts:fmt)(pk.earned)}</b>
+                            {pk.name.split(', ')[0]} <b>{((a.scoring==='points'||a.scoring==='matchpicks')?fmtPts:fmt)(pk.earned)}</b>
                           </span>)}
                         </div>}
                       </div>;
@@ -4992,61 +5193,77 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
             </div>
-            {/* FINGERPRINT_V242_TEAM_SESSIONS — session tabs, like DataGolf's live model */}
+            {/* FINGERPRINT_V245_MATCH_PICKEM — commissioner: post matches, set the lock, enter results */}
             {isTeamPool&&(()=>{
               const sessions = teamSessionsFor(tcEventName);
               const active = tsTab || sessions[0][0];
-              const draft = tsDraft || teamSessions || {};
-              const dirty = tsDraft !== null;
-              const setRes = (sk, name, val) => setTsDraft(prev => {
-                const base = prev || JSON.parse(JSON.stringify(teamSessions || {}));
-                const ses = { ...(base[sk] || {}) };
-                if (val && ses[name] !== val) ses[name] = val; else delete ses[name];   // tap again to clear
-                return { ...base, [sk]: ses };
-              });
-              const totalFor = (name) => sessions.reduce((t,[sk]) => t + (TEAM_RESULT_PTS[draft[sk]?.[name]] ?? 0), 0);
-              const isRyder = /ryder/i.test(tcEventName);
-              const byName = (a,b)=>flip(a.name).localeCompare(flip(b.name));
-              const groups = [
-                { label:'🇺🇸 USA', players: field.filter(p=>p.country==='USA').sort(byName) },
-                { label: isRyder ? '🇪🇺 Europe' : '🌏 International', players: field.filter(p=>p.country!=='USA').sort(byName) },
-              ];
-              const RB = { W:{t:'W',bg:'#1a7a3a'}, H:{t:'½',bg:'#8a7a2a'}, L:{t:'L',bg:'#a33'} };
+              const saved = teamMatches[active];
+              const draft = admSess[active] || { lockLocal: saved?.lockAt ? toLocalInput(saved.lockAt) : '', matches: JSON.parse(JSON.stringify(saved?.matches||[])) };
+              const dirty = !!admSess[active];
+              const upd = (fn) => setAdmSess(prev => ({ ...prev, [active]: fn(JSON.parse(JSON.stringify(prev[active] || draft))) }));
+              const byName=(a,b)=>flip(a.name).localeCompare(flip(b.name));
+              const usaR=field.filter(p=>p.country==='USA').sort(byName), intlR=field.filter(p=>p.country!=='USA').sort(byName);
+              const iLbl=teamLabel('INT');
+              const newId=()=>'m'+Date.now().toString(36).slice(-5);
+              const sel=(mi,sideKey,si,roster,ph)=><select value={draft.matches[mi][sideKey][si]||''}
+                onChange={ev=>upd(c=>{c.matches[mi][sideKey][si]=ev.target.value;return c;})}
+                style={{width:'100%',padding:'6px 4px',marginBottom:4,borderRadius:6,border:`1px solid ${T.inputBorder}`,fontSize:12,background:'#fff'}}>
+                <option value="">{ph}</option>{roster.map(p=><option key={p.name} value={p.name}>{flip(p.name)}</option>)}</select>;
               return <div style={{...sec,border:`2px solid ${T.primary}`}}>
-                <h3 style={stl}>🏆 Match Results — {tcEventName}</h3>
+                <h3 style={stl}>🏆 Match Pick'em — {tcEventName}</h3>
                 <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10,lineHeight:1.5}}>
-                  For each session, mark every player who played: <b>W</b> won, <b>½</b> halved, <b>L</b> lost. Partners in pairs matches get the same result. Leave non-players blank. Totals add up automatically — tap a result again to clear it.
+                  For each session: paste the pairings from DataGolf's live model (or build matches by hand), set the <b>first tee time</b> — picks lock then automatically — and save. Come back to tap each match's result as it finishes.
                 </p>
                 <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
-                  {sessions.map(([sk,label])=>{
-                    const n = Object.keys(draft[sk]||{}).length, on = sk===active;
-                    return <button key={sk} type="button" onClick={()=>setTsTab(sk)} style={{flex:'1 1 0',minWidth:62,padding:'7px 4px',borderRadius:7,cursor:'pointer',
+                  {sessions.map(([sk,lb])=>{const x=teamMatches[sk], on=sk===active;
+                    const st=!x?'—':`${x.matches.filter(m=>m.result).length}/${x.matches.length} final`;
+                    return <button key={sk} type="button" onClick={()=>setTsTab(sk)} style={{flex:'1 1 0',minWidth:58,padding:'7px 3px',borderRadius:7,cursor:'pointer',
                       fontSize:11,fontWeight:700,border:`1.5px solid ${on?T.primary:'#ddd'}`,background:on?T.primary:'#fff',color:on?'#fff':'#3a4a2e'}}>
-                      {label}<div style={{fontSize:9,fontWeight:600,opacity:.8}}>{n?`${n} entered`:'—'}</div>
-                    </button>;
-                  })}
+                      {lb}{admSess[sk]?' •':''}<div style={{fontSize:9,fontWeight:600,opacity:.85}}>{st}</div></button>;})}
                 </div>
-                {groups.map(g=>g.players.length>0&&<div key={g.label} style={{marginBottom:10}}>
-                  <div style={{fontSize:12,fontWeight:800,color:T.primary,margin:'4px 0 5px'}}>{g.label}</div>
-                  {g.players.map(p=>{
-                    const cur = draft[active]?.[p.name];
-                    return <div key={p.name} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 2px',borderBottom:'1px solid #f0f0ec'}}>
-                      <span style={{flex:1,minWidth:0,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{flip(p.name)}</span>
-                      <span style={{fontSize:11,color:'#8a9580',width:44,textAlign:'right'}}>{fmtPts(totalFor(p.name))}</span>
-                      {['W','H','L'].map(r=><button key={r} type="button" onClick={()=>setRes(active,p.name,r)}
-                        style={{width:34,height:30,borderRadius:6,cursor:'pointer',fontWeight:800,fontSize:13,
-                          border:`1.5px solid ${cur===r?RB[r].bg:'#ddd'}`,background:cur===r?RB[r].bg:'#fff',color:cur===r?'#fff':'#999'}}>{RB[r].t}</button>)}
-                    </div>;
-                  })}
+                <label style={{display:'block',fontSize:12,fontWeight:700,marginBottom:4}}>First tee time (picks lock) — your local time</label>
+                <input type="datetime-local" value={draft.lockLocal} onChange={ev=>upd(c=>{c.lockLocal=ev.target.value;return c;})}
+                  style={{...inp,width:'100%',boxSizing:'border-box',marginBottom:10}}/>
+                <textarea value={pasteText} onChange={ev=>setPasteText(ev.target.value)} placeholder="Paste this session from datagolf.com/presidents-cup/live-model…"
+                  style={{width:'100%',boxSizing:'border-box',minHeight:64,padding:8,borderRadius:7,border:`1px solid ${T.inputBorder}`,fontSize:12,marginBottom:6}}/>
+                <button type="button" style={{...pri,width:'100%',marginBottom:10,background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`}} onClick={()=>{
+                  const found=parseMatchPaste(pasteText, field);
+                  if(!found.length) return msg('No matches found — paste the whole session, including the "MATCH PREVIEW" lines');
+                  const gaps=found.filter(m=>[...m.usa,...m.intl].some(n=>!n)).length;
+                  upd(c=>{c.matches=found.map((m,i)=>({id:(c.matches[i]&&c.matches[i].id)||('m'+(i+1)),usa:m.usa,intl:m.intl,result:null}));return c;});
+                  setPasteText('');
+                  msg(gaps?`Found ${found.length} matches — ${gaps} need a player chosen`:`Found ${found.length} matches ✓ — check them, then save`);
+                }}>📋 Read pairings from paste</button>
+                {draft.matches.map((m,mi)=><div key={m.id||mi} style={{border:'1px solid #e5e5e0',borderRadius:8,padding:8,marginBottom:6}}>
+                  <div style={{display:'flex',gap:4,alignItems:'center',marginBottom:6}}>
+                    <b style={{fontSize:11,color:'#8a9580',flex:1}}>MATCH {mi+1}</b>
+                    {[['USA','🇺🇸 won'],['H','Halved'],['INT',iLbl.split(' ')[0]+' won']].map(([r,t])=><button key={r} type="button"
+                      onClick={()=>upd(c=>{c.matches[mi].result=c.matches[mi].result===r?null:r;return c;})}
+                      style={{padding:'4px 7px',borderRadius:6,fontSize:11,fontWeight:700,cursor:'pointer',
+                        border:`1.5px solid ${m.result===r?T.primary:'#ddd'}`,background:m.result===r?T.primary:'#fff',color:m.result===r?'#fff':'#666'}}>{t}</button>)}
+                    <button type="button" onClick={()=>upd(c=>{c.matches.splice(mi,1);return c;})}
+                      style={{padding:'4px 7px',borderRadius:6,fontSize:11,border:'1px solid #ddd',background:'#fff',color:'#a33',cursor:'pointer'}}>✕</button>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+                    <div>{m.usa.map((n,si)=><React.Fragment key={si}>{sel(mi,'usa',si,usaR,'— 🇺🇸 USA player —')}</React.Fragment>)}</div>
+                    <div>{m.intl.map((n,si)=><React.Fragment key={si}>{sel(mi,'intl',si,intlR,`— ${iLbl} player —`)}</React.Fragment>)}</div>
+                  </div>
                 </div>)}
+                <div style={{display:'flex',gap:6,marginBottom:10}}>
+                  <button type="button" onClick={()=>upd(c=>{c.matches.push({id:newId(),usa:['',''],intl:['',''],result:null});return c;})}
+                    style={{flex:1,padding:8,borderRadius:7,border:'1px dashed #bbb',background:'#fff',fontSize:12,cursor:'pointer'}}>+ Pairs match</button>
+                  <button type="button" onClick={()=>upd(c=>{c.matches.push({id:newId(),usa:[''],intl:[''],result:null});return c;})}
+                    style={{flex:1,padding:8,borderRadius:7,border:'1px dashed #bbb',background:'#fff',fontSize:12,cursor:'pointer'}}>+ Singles match</button>
+                </div>
                 <div style={{display:'flex',gap:8}}>
                   <button type="button" disabled={!dirty} style={{...pri,flex:1,opacity:dirty?1:.45}} onClick={async()=>{
-                    const d=await adminAction('set-team-points',{sessions:draft});
-                    if(d?.ok){ setTeamSessions(d.sessions); setTeamPoints(d.points); teamPointsRef.current=d.points; setTsDraft(null);
-                      msg(`Saved — ${d.count} players scored`); }
-                  }}>💾 {dirty?'Save Results':'Saved'}</button>
+                    if(!draft.lockLocal) return msg('Set the first tee time — picks lock then');
+                    if(draft.matches.some(m=>[...m.usa,...m.intl].some(n=>!n))) return msg('Every match needs all its players chosen');
+                    const d=await adminAction('set-team-session',{sessionKey:active,lockAt:new Date(draft.lockLocal).toISOString(),matches:draft.matches});
+                    if(d?.ok){ applyTeamMatches(d.teamMatches); setAdmSess(prev=>{const n={...prev};delete n[active];return n;}); msg('Session saved ✓'); }
+                  }}>💾 {dirty?'Save session':'Saved'}</button>
                   {dirty&&<button type="button" style={{padding:'8px 14px',borderRadius:7,border:'1px solid #ddd',background:'#fff',cursor:'pointer',fontSize:13}}
-                    onClick={()=>setTsDraft(null)}>Discard</button>}
+                    onClick={()=>setAdmSess(prev=>{const n={...prev};delete n[active];return n;})}>Discard</button>}
                 </div>
               </div>;
             })()}
@@ -5304,7 +5521,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     const hasEarnings=Object.keys(earnings).length>0;
                     const ranked=[...a.entries].map(e=>({
                       ...e,
-                      total:e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
+                      total:a.entryTotals?(+a.entryTotals[e.name]||0):e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
                     })).sort((x,y)=>y.total-x.total);
                     // Compute pool prize money based on archive's entryFee
                     const archiveFee = a.entryFee || 0;
@@ -5326,13 +5543,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       {ranked.map((e,i)=>{
                         const paid=!!a.payments?.[e.name];
                         const prize = !showPrizes ? 0
-                          : a.scoring==='points' ? splitPrizesForTies(ranked.map(r=>r.total), prizes)[i]
+                          : (a.scoring==='points'||a.scoring==='matchpicks') ? splitPrizesForTies(ranked.map(r=>r.total), prizes)[i]
                           : (i<3?prizes[i]:0);
                         return<div key={e.name} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 0',borderBottom:`1px solid ${THEME.cardBorder}`,fontSize:13}}>
                           <span style={{fontSize:i<3?16:13,fontWeight:800,width:28,textAlign:'center'}}>{i<3?['🥇','🥈','🥉'][i]:i+1}</span>
                           <span style={{flex:1,fontWeight:600}}>{e.name}</span>
                           {prize>0&&<span style={{fontSize:10,fontWeight:800,padding:'1px 6px',borderRadius:8,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${fmtPrize(prize)}</span>}
-                          {hasEarnings&&<span style={{fontWeight:700,color:THEME.primary,fontSize:13}}>{(a.scoring==='points'?fmtPts:fmt)(e.total)}</span>}
+                          {hasEarnings&&<span style={{fontWeight:700,color:THEME.primary,fontSize:13}}>{((a.scoring==='points'||a.scoring==='matchpicks')?fmtPts:fmt)(e.total)}</span>}
                           <span style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:8,background:paid?'#e8f5e8':'#f5f5f5',color:paid?'#2d7a1e':'#aaa'}}>{paid?'✓':'Unpaid'}</span>
                         </div>;
                       })}
