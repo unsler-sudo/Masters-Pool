@@ -1,5 +1,5 @@
 'use client';
-// build: join-then-pick-v247-20260923-1900
+// build: picks-open-email-v249-20260923-2100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1311,6 +1311,7 @@ export default function App(){
   const [myTeamPicks,setMyTeamPicks]=useState({});        // the signed-in entry's own picks, all sessions
   const [pickDraft,setPickDraft]=useState({});            // unsaved picks, per session
   const [pickTab,setPickTab]=useState(null);
+  const [pickMode,setPickMode]=useState('new');           // FINGERPRINT_V248 — 'new' entry or 'back' (already joined)
   const [admSess,setAdmSess]=useState({});                // admin: unsaved session edits
   const [pasteText,setPasteText]=useState('');
   // Results → each player's points and session record, which drive the Field tab and scorecard.
@@ -4406,6 +4407,18 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             }catch{ msg('Error joining — check connection'); }
             setSubmitting(false);
           };
+          const signIn=async()=>{
+            const nm=(chatName||'').trim(), cd=(chatCode||'').trim().toUpperCase();
+            if(!nm||!cd) return msg('Enter your entry name and the code from your email');
+            try{
+              const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({poolId,action:'team-picks-get',name:nm,code:cd})});
+              const d=await r.json(); if(d.error) return msg(d.error);
+              try{ localStorage.setItem(`chat_${poolId}_name`,d.name); localStorage.setItem(`chat_${poolId}_code`,cd); }catch{}
+              setChatName(d.name); setChatCode(cd); setChatVerified(true); setMyTeamPicks(d.myPicks||{});
+              msg(`Signed in as ${d.name} ✓`);
+            }catch{ msg('Error signing in — check connection'); }
+          };
           const switchEntry=()=>{
             try{ localStorage.removeItem(`chat_${poolId}_name`); localStorage.removeItem(`chat_${poolId}_code`); }catch{}
             setChatVerified(false); setChatName(''); setChatCode(''); setMyTeamPicks({}); setPickDraft({});
@@ -4417,14 +4430,6 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <b>How it works:</b> pick the winner of every match, session by session. <b>1 pt</b> per correct pick; a halved match gives <b>½</b> to everyone who picked it. Each session locks at its first tee — come back each day once the pairings are out.
               </div>
             </div>
-            {!locked&&!chatVerified&&<div style={sec}>
-              <h3 style={stl}>Join the pool</h3>
-              <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                <input style={inp} placeholder="Your name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
-                <input style={inp} placeholder="Email (your code is sent here)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>
-                <button type="button" style={{...pri,padding:11}} disabled={submitting} onClick={joinTeam}>{submitting?'Joining…':'Join'}</button>
-              </div>
-            </div>}
             <div style={sec}>
               <h3 style={stl}>Make your picks</h3>
               <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
@@ -4464,21 +4469,39 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       </div>
                     </div>;
                   })}
-                  {!sLocked&&<div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:4}}>
-                    {chatVerified
-                      ? <div style={{display:'flex',alignItems:'center',fontSize:12,marginBottom:8,color:'#3a4a2e'}}>
-                          <span style={{flex:1}}>Saving as <b>{chatName}</b></span>
-                          <button type="button" onClick={switchEntry} style={{background:'none',border:'none',color:T.primary,fontWeight:700,fontSize:12,cursor:'pointer',textDecoration:'underline'}}>Not you? Switch</button>
-                        </div>
-                      : <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:8}}>
-                          <div style={{fontSize:12,fontWeight:700,color:'#3a4a2e'}}>Your entry — to save these picks</div>
-                          <input style={inp} placeholder="Entry name" value={chatName} onChange={e=>setChatName(e.target.value)}/>
-                          <input style={inp} placeholder="Code from your email" value={chatCode} onChange={e=>setChatCode(e.target.value.toUpperCase())}/>
-                        </div>}
-                    <button type="button" disabled={!dirty} onClick={savePicks}
-                      style={{...pri,width:'100%',padding:12,fontSize:15,opacity:dirty?1:.45}}>{dirty?`💾 Save ${label} picks`:'✓ Saved'}</button>
-                  </div>}
                 </>}
+              {/* FINGERPRINT_V248_ONE_FOOTER — a single "who are you" box: new entry or already joined */}
+              {(()=>{
+                const canSave = sv && !sLocked;
+                const mode = locked ? 'back' : pickMode;
+                const tog=(k,t)=><button type="button" onClick={()=>setPickMode(k)} style={{flex:1,padding:'8px 6px',fontSize:12,fontWeight:700,cursor:'pointer',
+                  border:'none',borderRadius:6,background:mode===k?'#fff':'transparent',color:mode===k?T.primary:'#8a9580',boxShadow:mode===k?'0 1px 3px rgba(0,0,0,.12)':'none'}}>{t}</button>;
+                const bigBtn=(text,fn,on=true)=><button type="button" disabled={!on||submitting} onClick={fn}
+                  style={{...pri,width:'100%',padding:12,fontSize:15,opacity:on?1:.45}}>{text}</button>;
+                if(chatVerified) return <div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:6}}>
+                  <div style={{display:'flex',alignItems:'center',fontSize:12,marginBottom:8,color:'#3a4a2e'}}>
+                    <span style={{flex:1}}>Picking as <b>{chatName}</b></span>
+                    <button type="button" onClick={switchEntry} style={{background:'none',border:'none',color:T.primary,fontWeight:700,fontSize:12,cursor:'pointer'}}>Not you? Switch</button>
+                  </div>
+                  {canSave&&bigBtn(dirty?`💾 Save ${label} picks`:(picked?`✓ ${label} picks saved`:'Tap your picks above'),savePicks,dirty)}
+                </div>;
+                return <div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:6}}>
+                  {!locked&&<div style={{display:'flex',gap:4,padding:3,borderRadius:8,background:'#f0f0ea',marginBottom:10}}>
+                    {tog('new','New entry')}{tog('back','Already joined')}
+                  </div>}
+                  {mode==='new'
+                    ? <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        <input style={inp} placeholder="Your name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
+                        <input style={inp} placeholder="Email (your code is sent here too)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>
+                        {bigBtn(submitting?'Joining…':(canSave&&dirty?'Join & save picks':'Join'),joinTeam)}
+                      </div>
+                    : <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        <input style={inp} placeholder="Entry name" value={chatName} onChange={e=>setChatName(e.target.value)}/>
+                        <input style={inp} placeholder="Code from your email" value={chatCode} onChange={e=>setChatCode(e.target.value.toUpperCase())}/>
+                        {canSave&&dirty ? bigBtn(`💾 Save ${label} picks`,savePicks) : bigBtn('Sign in',signIn)}
+                      </div>}
+                </div>;
+              })()}
             </div>
           </>;
         })()}
@@ -5306,7 +5329,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     if(!draft.lockLocal) return msg('Set the first tee time — picks lock then');
                     if(draft.matches.some(m=>[...m.usa,...m.intl].some(n=>!n))) return msg('Every match needs all its players chosen');
                     const d=await adminAction('set-team-session',{sessionKey:active,lockAt:new Date(draft.lockLocal).toISOString(),matches:draft.matches});
-                    if(d?.ok){ applyTeamMatches(d.teamMatches); setAdmSess(prev=>{const n={...prev};delete n[active];return n;}); msg('Session saved ✓'); }
+                    if(d?.ok){ applyTeamMatches(d.teamMatches); setAdmSess(prev=>{const n={...prev};delete n[active];return n;}); msg(d.emailed?`Session saved ✓ — emailed ${d.emailed} ${d.emailed===1?'entry':'entries'} that picks are open`:'Session saved ✓'); }
                   }}>💾 {dirty?'Save session':'Saved'}</button>
                   {dirty&&<button type="button" style={{padding:'8px 14px',borderRadius:7,border:'1px solid #ddd',background:'#fff',cursor:'pointer',fontSize:13}}
                     onClick={()=>setAdmSess(prev=>{const n={...prev};delete n[active];return n;})}>Discard</button>}
