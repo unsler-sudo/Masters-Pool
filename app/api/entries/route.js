@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: match-pickem-v173-20260923-1700
+// build: join-own-code-v174-20260923-1900
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1022,7 +1022,10 @@ export async function POST(request) {
         } catch (e) { console.error('email send failed:', e.message); }
       }
 
-      return Response.json({ ok:true, entries, codeSent:true });
+      // FINGERPRINT_V174_JOIN_CODE — on a match pick'em (reqPicks 0) the new entrant gets THEIR OWN
+      // code back so they can save picks immediately instead of waiting on the email. Normal weeks
+      // are unchanged (no extra field).
+      return Response.json({ ok:true, entries, codeSent:true, ...(reqPicks === 0 ? { editCode } : {}) });
     }
 
     if (body.action === 'edit-entry') {
