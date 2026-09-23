@@ -1,5 +1,5 @@
 'use client';
-// build: team-event-points-v241-20260923-1200
+// build: team-sessions-v242-20260923-1330
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -434,6 +434,13 @@ const isDPWorld = (m) => m === 'dpworld';
 // are still dollars; only player/entry scores switch to points. Tied entries SPLIT the prize.
 const TEAM_EVENT_KEYS = ['presidents cup', 'ryder cup'];
 const isTeamEvent = (n) => TEAM_EVENT_KEYS.some(k => (n || '').toLowerCase().includes(k));
+// FINGERPRINT_V242_TEAM_SESSIONS — the five sessions, mirroring DataGolf's live-model tabs.
+// The Ryder Cup runs Fri–Sun, the Presidents Cup Thu–Sun. Format labels (four-ball vs foursomes)
+// are left off because the order can change between editions. Keys must match the backend list.
+const teamSessionsFor = (n) => /ryder/i.test(n || '')
+  ? [['friam','Fri AM'],['fripm','Fri PM'],['satam','Sat AM'],['satpm','Sat PM'],['sun','Sun Singles']]
+  : [['thu','Thu'],['fri','Fri'],['satam','Sat AM'],['satpm','Sat PM'],['sun','Sun Singles']];
+const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
 const fmtPts = (v) => {
   const n = Math.round((+v || 0) * 2) / 2;
   return `${Number.isInteger(n) ? n : n.toFixed(1)} ${n === 1 ? 'pt' : 'pts'}`;
@@ -1234,7 +1241,10 @@ export default function App(){
   const [zoomShot,setZoomShot]=useState(null);
   const [teamPoints,setTeamPoints]=useState({});          // FINGERPRINT_V241 — manual {playerName: points}
   const teamPointsRef=useRef({});
-  const teamAutoRef=useRef({});                           // auto-detected from DataGolf, if it ever publishes points // FINGERPRINT_V236_PHOTO_ZOOM — {url,name} when a headshot is tapped
+  const teamAutoRef=useRef({});
+  const [teamSessions,setTeamSessions]=useState({});      // FINGERPRINT_V242 — {sessionKey:{name:'W'|'H'|'L'}}
+  const [tsTab,setTsTab]=useState(null);                  // admin: active session tab
+  const [tsDraft,setTsDraft]=useState(null);              // admin: unsaved edits (null = clean)                           // auto-detected from DataGolf, if it ever publishes points // FINGERPRINT_V236_PHOTO_ZOOM — {url,name} when a headshot is tapped
   const [holeData,setHoleData]=useState({round:null,holes:[],loading:false,error:null});
   const [archives,setArchives]=useState([]);
   const [expandedArchive,setExpandedArchive]=useState(null);
@@ -1417,6 +1427,7 @@ export default function App(){
       if(d.meta){setPoolMeta(d.meta);poolMetaRef.current=d.meta;}
       if(d.purses){setDynamicPurses(d.purses); dynamicPursesRef.current=d.purses;}
       if(d.teamPoints){setTeamPoints(d.teamPoints); teamPointsRef.current=d.teamPoints;}
+      if(d.teamSessions){setTeamSessions(d.teamSessions);}
       if(d.major&&THEMES[d.major]){
         const prevMajor = activeMajorRef.current;
         const isFirstLoad = !field || field.length === 0;
@@ -3918,6 +3929,16 @@ export default function App(){
                     </div>
                   </div>)}
                 {p.earnings>0&&<div style={{background:`${T.primary}10`,borderRadius:10,padding:'10px 14px',marginTop:14,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:13,color:T.primary,fontWeight:600}}>{isTeamPool?'Points Earned':'Projected Earnings'}</span><span style={{fontSize:20,fontWeight:800,color:T.primary}}>{fmtE(p.earnings)}</span></div>}
+              {/* FINGERPRINT_V242_TEAM_SESSIONS — this player's record by session */}
+              {isTeamPool&&(()=>{
+                const ss = teamSessionsFor(tcEventName).filter(([sk])=>teamSessions?.[sk]?.[p.name]);
+                if(!ss.length) return null;
+                const C = { W:['#e7f5ec','#1a7a3a','Won'], H:['#f7f2dc','#7a6a1a','Halved'], L:['#fbe9e9','#a33','Lost'] };
+                return <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:10}}>
+                  {ss.map(([sk,label])=>{const r=teamSessions[sk][p.name];const [bg,fg,word]=C[r];
+                    return <span key={sk} style={{fontSize:11,fontWeight:700,padding:'4px 9px',borderRadius:12,background:bg,color:fg}}>{label}: {word}</span>;})}
+                </div>;
+              })()}
                 {!picksHidden&&<div style={{fontSize:12,color:'#8a9580',borderTop:'1px solid #f0ebe0',paddingTop:10,marginTop:12}}>{ow.length>0?(<><span style={{fontWeight:600}}>Picked by: </span>{ow.join(', ')}</>):'Not picked by anyone in the pool'}</div>}
                 <button type="button" onClick={closeScorecard} style={{...pri,width:'100%',margin:'16px 0',padding:12,fontSize:14,borderRadius:10}}>Done</button>
               </div>
@@ -4933,40 +4954,62 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
             </div>
-            {/* FINGERPRINT_V241_TEAM_EVENTS — enter each player's running match points */}
+            {/* FINGERPRINT_V242_TEAM_SESSIONS — session tabs, like DataGolf's live model */}
             {isTeamPool&&(()=>{
+              const sessions = teamSessionsFor(tcEventName);
+              const active = tsTab || sessions[0][0];
+              const draft = tsDraft || teamSessions || {};
+              const dirty = tsDraft !== null;
+              const setRes = (sk, name, val) => setTsDraft(prev => {
+                const base = prev || JSON.parse(JSON.stringify(teamSessions || {}));
+                const ses = { ...(base[sk] || {}) };
+                if (val && ses[name] !== val) ses[name] = val; else delete ses[name];   // tap again to clear
+                return { ...base, [sk]: ses };
+              });
+              const totalFor = (name) => sessions.reduce((t,[sk]) => t + (TEAM_RESULT_PTS[draft[sk]?.[name]] ?? 0), 0);
               const isRyder = /ryder/i.test(tcEventName);
               const byName = (a,b)=>flip(a.name).localeCompare(flip(b.name));
               const groups = [
                 { label:'🇺🇸 USA', players: field.filter(p=>p.country==='USA').sort(byName) },
                 { label: isRyder ? '🇪🇺 Europe' : '🌏 International', players: field.filter(p=>p.country!=='USA').sort(byName) },
               ];
-              const entered = field.filter(p=>teamPoints[p.name]!=null).length;
+              const RB = { W:{t:'W',bg:'#1a7a3a'}, H:{t:'½',bg:'#8a7a2a'}, L:{t:'L',bg:'#a33'} };
               return <div style={{...sec,border:`2px solid ${T.primary}`}}>
-                <h3 style={stl}>🏆 Match Points — {tcEventName}</h3>
+                <h3 style={stl}>🏆 Match Results — {tcEventName}</h3>
                 <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10,lineHeight:1.5}}>
-                  Enter each player's <b>running total</b> after every session: <b>1</b> per match won, <b>½</b> per halve, <b>0</b> per loss (max 5 across the week). Every pool on this event uses these numbers. {entered}/{field.length} players entered.
+                  For each session, mark every player who played: <b>W</b> won, <b>½</b> halved, <b>L</b> lost. Partners in pairs matches get the same result. Leave non-players blank. Totals add up automatically — tap a result again to clear it.
                 </p>
-                {groups.map(g=>g.players.length>0&&<div key={g.label} style={{marginBottom:12}}>
-                  <div style={{fontSize:12,fontWeight:800,color:T.primary,margin:'4px 0 6px'}}>{g.label}</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))',gap:6}}>
-                    {g.players.map(p=><label key={p.name} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:6,
-                        padding:'6px 8px',border:`1px solid ${T.inputBorder}`,borderRadius:7,fontSize:12,background:'#fff'}}>
-                      <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{flip(p.name)}</span>
-                      <input type="number" inputMode="decimal" min="0" max="5" step="0.5"
-                        data-teampts={p.name}
-                        key={p.name+':'+(teamPoints[p.name]??'')}
-                        defaultValue={teamPoints[p.name]??''} placeholder="0"
-                        style={{width:52,padding:'4px 6px',borderRadius:5,border:`1px solid ${T.inputBorder}`,fontSize:13,textAlign:'center'}}/>
-                    </label>)}
-                  </div>
+                <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
+                  {sessions.map(([sk,label])=>{
+                    const n = Object.keys(draft[sk]||{}).length, on = sk===active;
+                    return <button key={sk} type="button" onClick={()=>setTsTab(sk)} style={{flex:'1 1 0',minWidth:62,padding:'7px 4px',borderRadius:7,cursor:'pointer',
+                      fontSize:11,fontWeight:700,border:`1.5px solid ${on?T.primary:'#ddd'}`,background:on?T.primary:'#fff',color:on?'#fff':'#3a4a2e'}}>
+                      {label}<div style={{fontSize:9,fontWeight:600,opacity:.8}}>{n?`${n} entered`:'—'}</div>
+                    </button>;
+                  })}
+                </div>
+                {groups.map(g=>g.players.length>0&&<div key={g.label} style={{marginBottom:10}}>
+                  <div style={{fontSize:12,fontWeight:800,color:T.primary,margin:'4px 0 5px'}}>{g.label}</div>
+                  {g.players.map(p=>{
+                    const cur = draft[active]?.[p.name];
+                    return <div key={p.name} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 2px',borderBottom:'1px solid #f0f0ec'}}>
+                      <span style={{flex:1,minWidth:0,fontSize:13,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{flip(p.name)}</span>
+                      <span style={{fontSize:11,color:'#8a9580',width:44,textAlign:'right'}}>{fmtPts(totalFor(p.name))}</span>
+                      {['W','H','L'].map(r=><button key={r} type="button" onClick={()=>setRes(active,p.name,r)}
+                        style={{width:34,height:30,borderRadius:6,cursor:'pointer',fontWeight:800,fontSize:13,
+                          border:`1.5px solid ${cur===r?RB[r].bg:'#ddd'}`,background:cur===r?RB[r].bg:'#fff',color:cur===r?'#fff':'#999'}}>{RB[r].t}</button>)}
+                    </div>;
+                  })}
                 </div>)}
-                <button type="button" style={{...pri,width:'100%'}} onClick={async()=>{
-                  const points={};
-                  document.querySelectorAll('[data-teampts]').forEach(el=>{ if(el.value!=='') points[el.dataset.teampts]=el.value; });
-                  const d=await adminAction('set-team-points',{points});
-                  if(d?.ok){ setTeamPoints(d.points); teamPointsRef.current=d.points; msg(`Saved points for ${d.count} players`); }
-                }}>💾 Save Match Points</button>
+                <div style={{display:'flex',gap:8}}>
+                  <button type="button" disabled={!dirty} style={{...pri,flex:1,opacity:dirty?1:.45}} onClick={async()=>{
+                    const d=await adminAction('set-team-points',{sessions:draft});
+                    if(d?.ok){ setTeamSessions(d.sessions); setTeamPoints(d.points); teamPointsRef.current=d.points; setTsDraft(null);
+                      msg(`Saved — ${d.count} players scored`); }
+                  }}>💾 {dirty?'Save Results':'Saved'}</button>
+                  {dirty&&<button type="button" style={{padding:'8px 14px',borderRadius:7,border:'1px solid #ddd',background:'#fff',cursor:'pointer',fontSize:13}}
+                    onClick={()=>setTsDraft(null)}>Discard</button>}
+                </div>
               </div>;
             })()}
             {/* FINGERPRINT_V218_DPWORLD_MODE — three-way pool mode selector */}
