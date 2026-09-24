@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: live-status-v180-20260924-0500
+// build: team-invite-v182-20260924-0730
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -120,8 +120,26 @@ async function srvGetTeamMatches(eventName) {
   try { const r = await redis('GET', srvTeamMatchesKey(eventName, new Date().getFullYear())); return r ? JSON.parse(r) : {}; }
   catch { return {}; }
 }
-async function srvGetTeamPicks(poolId) {
-  try { const r = await redis('GET', k(poolId, 'teampicks')); return r ? JSON.parse(r) : {}; } catch { return {}; }
+// FINGERPRINT_V181_PICKS_PER_EVENT — picks are stored PER EVENT (pool:{id}:teampicks:{event}_{year}).
+// They used to live under one unscoped key, keyed by entry name + session + match number, which would
+// have carried this Cup's picks into the next one for anyone reusing a name. The 2026 Presidents Cup
+// picks were saved under the old key, so that one event reads it once as a bridge; the first save
+// then moves them to the new key.
+function srvTeamPicksKey(poolId, ev, year) {
+  const slug = (ev || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  return k(poolId, `teampicks:${slug}_${year}`);
+}
+async function srvGetTeamPicks(poolId, ev) {
+  const year = new Date().getFullYear();
+  try {
+    const r = await redis('GET', srvTeamPicksKey(poolId, ev, year));
+    if (r) return JSON.parse(r);
+    if (/presidents cup/i.test(ev || '') && year === 2026) {
+      const old = await redis('GET', k(poolId, 'teampicks'));
+      return old ? JSON.parse(old) : {};
+    }
+    return {};
+  } catch { return {}; }
 }
 const srvSessionLocked = (sess) => !!(sess && sess.lockAt && Date.now() >= new Date(sess.lockAt).getTime());
 // Picks from sessions that haven't locked stay private — only revealed once they can't change.
@@ -336,8 +354,20 @@ async function srvAlertCommissioners(pools, tag, subject, html) {
   }).catch(() => {})));
 }
 
+// FINGERPRINT_V181_ARCHIVE_DETAIL — what a pick'em archive keeps: each entry's final score, the
+// event's matches with results, and this pool's picks (only for entries in the pool), so History can
+// show the cup score and each entry's picks session by session — not just a total.
+async function srvTeamArchive(poolId, eventName, entries) {
+  const [matches, picks] = await Promise.all([srvGetTeamMatches(eventName), srvGetTeamPicks(poolId, eventName)]);
+  const entryTotals = {}, teamPicks = {};
+  (entries || []).forEach(e => { entryTotals[e.name] = srvMatchScore(picks[e.name], matches); if (picks[e.name]) teamPicks[e.name] = picks[e.name]; });
+  const teamMatches = {};
+  for (const [sk, sv] of Object.entries(matches || {}))
+    teamMatches[sk] = { lockAt: sv.lockAt, matches: (sv.matches || []).map(m => ({ id: m.id, usa: m.usa, intl: m.intl, result: m.result || null })) };
+  return { entryTotals, teamMatches, teamPicks };
+}
 async function srvTeamEntryTotals(poolId, eventName, entries) {
-  const [matches, picks] = await Promise.all([srvGetTeamMatches(eventName), srvGetTeamPicks(poolId)]);
+  const [matches, picks] = await Promise.all([srvGetTeamMatches(eventName), srvGetTeamPicks(poolId, eventName)]);
   const totals = {};
   (entries || []).forEach(e => { totals[e.name] = srvMatchScore(picks[e.name], matches); });
   return totals;
@@ -744,7 +774,7 @@ async function autoManage(poolId) {
             let rotEntryTotals = null;
             if (rotTeamEvent) {
               // FINGERPRINT_V173_MATCH_PICKEM — score entries from their match picks
-              rotEntryTotals = await srvTeamEntryTotals(poolId, meta.currentPgatourEvent || poolEventName, entries);
+              rotEntryTotals = await srvTeamArchive(poolId, meta.currentPgatourEvent || poolEventName, entries);
               earningsByPick = {};
               console.log(`[pgatour rotation] team event — archived match-pick totals for ${entries.length} entries`);
             } else if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
@@ -782,7 +812,7 @@ async function autoManage(poolId) {
 
             await redis('SET', archiveKey, JSON.stringify({
               major: tourKey, eventName: meta.currentPgatourEvent, year,
-              ...(rotTeamEvent ? { scoring: 'matchpicks', entryTotals: rotEntryTotals } : {}),
+              ...(rotTeamEvent ? { scoring: 'matchpicks', ...rotEntryTotals } : {}),
               archivedAt: new Date().toISOString(),
               entries, payments, earnings: earningsByPick,
               entryFee: fee,
@@ -1122,7 +1152,7 @@ export async function GET(request) {
     // FINGERPRINT_V171_TEAM_EVENTS — ship the event's stored match points to team-event pools
     let teamMatches, teamPicks;
     if (srvIsTourMode(meta?.major) && srvIsTeamEvent(meta?.currentPgatourEvent)) {
-      const [tm, tp] = await Promise.all([srvGetTeamMatches(meta.currentPgatourEvent), srvGetTeamPicks(poolId)]);
+      const [tm, tp] = await Promise.all([srvGetTeamMatches(meta.currentPgatourEvent), srvGetTeamPicks(poolId, meta.currentPgatourEvent)]);
       teamMatches = tm;
       teamPicks = srvLockedPicksOnly(tp, tm);   // FINGERPRINT_V173 — unlocked picks never leave the server
     }
@@ -1570,6 +1600,35 @@ export async function POST(request) {
       // Optional custom message from the commissioner
       const customNote = (body.message||'').trim();
 
+      // FINGERPRINT_V182_TEAM_INVITE — Presidents/Ryder Cup weeks get an invite that explains the match
+      // pick'em (no golfer draft) and the real join deadline: the first session lock, which is when the
+      // pool closes to new entries. Normal weeks keep the original email untouched.
+      const isTeam = srvIsTeamEvent(eventName);
+      let teamDeadline = '';
+      if (isTeam) {
+        const tm = await srvGetTeamMatches(eventName);
+        const locks = Object.values(tm || {}).map(sv => new Date(sv?.lockAt).getTime()).filter(Number.isFinite);
+        const first = locks.length ? Math.min(...locks) : null;
+        if (first && first > Date.now())
+          teamDeadline = new Date(first).toLocaleString('en-US', { timeZone:'America/New_York', weekday:'long', hour:'numeric', minute:'2-digit' }) + ' ET';
+      }
+      const escH = (x) => String(x || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const teamHtml = (p) => `
+                <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
+                  <h2 style="color:#1a2a5c;margin-bottom:6px;">It's ${escH(eventName)} week ⛳</h2>
+                  <p>Hey ${escH(p.name || 'there')},</p>
+                  <p><b>${escH(poolName)}</b> is running a <b>match pick'em</b> this week — no golfer draft.</p>
+                  <ul style="padding-left:18px;line-height:1.7;margin:12px 0;">
+                    <li>Pick the winner of <b>every match</b>, session by session</li>
+                    <li><b>1 point</b> per correct pick — a halved match is worth ½</li>
+                    <li>You'll get an email each time new pairings are posted</li>
+                  </ul>
+                  ${customNote ? `<p style="background:#f5f7fb;border-left:3px solid #1a2a5c;padding:10px 14px;margin:16px 0;">${escH(customNote)}</p>` : ''}
+                  <p>${fee > 0 ? `Entry is <b>$${fee}</b>. ` : ''}Join by <b>${teamDeadline ? escH(teamDeadline) : 'the first match'}</b> — after that the pool closes to new entries.</p>
+                  <p style="margin:22px 0;"><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:bold;">Join the pick'em →</a></p>
+                  <p style="font-size:12px;color:#888;margin-top:28px;">You're getting this because you've played in ${escH(poolName)} before. See you on the leaderboard.</p>
+                </div>`;
+
       let sent = 0, failed = 0;
       const failures = []; // FINGERPRINT_V143_INVITE_DIAG — capture why each send failed
       // Send individually so each person gets a personal greeting (and we don't leak the email list)
@@ -1587,8 +1646,8 @@ export async function POST(request) {
             body: JSON.stringify({
               from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
               to: p.email,
-              subject: `${poolName} is open for ${eventName} ⛳`,
-              html: `
+              subject: isTeam ? `${poolName}: ${eventName} match pick'em is open ⛳` : `${poolName} is open for ${eventName} ⛳`,
+              html: isTeam ? teamHtml(p) : `
                 <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
                   <h2 style="color:#1a2a5c;margin-bottom:6px;">New week, new pool ⛳</h2>
                   <p>Hey ${p.name||'there'},</p>
@@ -1702,7 +1761,7 @@ export async function POST(request) {
         let manEntryTotals = null;
         if (manTeamEvent) {
           // FINGERPRINT_V173_MATCH_PICKEM
-          manEntryTotals = await srvTeamEntryTotals(poolId, meta.currentPgatourEvent || poolEventName, entries);
+          manEntryTotals = await srvTeamArchive(poolId, meta.currentPgatourEvent || poolEventName, entries);
           earningsByPick = {};
         } else if (!existingHasMoney && finalInPlayPlayers && finalInPlayPlayers.length > 0) {
           const earnMap = srvComputeEarnings(finalInPlayPlayers, resolvedPurse, poolEventName, meta.major);
@@ -1730,7 +1789,7 @@ export async function POST(request) {
 
         await redis('SET', archiveKey, JSON.stringify({
           major: meta.major, eventName: meta.currentPgatourEvent, year,
-          ...(manTeamEvent ? { scoring: 'matchpicks', entryTotals: manEntryTotals } : {}),
+          ...(manTeamEvent ? { scoring: 'matchpicks', ...manEntryTotals } : {}),
           archivedAt: new Date().toISOString(),
           entries, payments, earnings: earningsByPick, entryFee: fee,
           prizes: prizes || null, logoUrl, logoNoBg, logoHeight,
@@ -1985,7 +2044,7 @@ export async function POST(request) {
       if (!entry) return Response.json({ error:'Sign in with your entry name and code' }, { status:401 });
       const meta = await getPoolMeta(poolId);
       const ev = meta?.currentPgatourEvent || '';
-      const [matches, all] = await Promise.all([srvGetTeamMatches(ev), srvGetTeamPicks(poolId)]);
+      const [matches, all] = await Promise.all([srvGetTeamMatches(ev), srvGetTeamPicks(poolId, ev)]);
       if (body.action === 'team-picks') {
         const sess = matches[body.sessionKey];
         if (!sess) return Response.json({ error:'That session has no matches yet' }, { status:400 });
@@ -1995,7 +2054,7 @@ export async function POST(request) {
           if (ids.has(mid) && (v === 'USA' || v === 'INT')) cleanP[mid] = v;
         }
         all[entry.name] = { ...(all[entry.name] || {}), [body.sessionKey]: cleanP };
-        await redis('SET', k(poolId, 'teampicks'), JSON.stringify(all));
+        await redis('SET', srvTeamPicksKey(poolId, ev, new Date().getFullYear()), JSON.stringify(all));
       }
       return Response.json({ ok:true, myPicks: all[entry.name] || {}, name: entry.name });
     }
