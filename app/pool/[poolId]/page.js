@@ -1,5 +1,5 @@
 'use client';
-// build: team-history-v258-20260924-0700
+// build: session-format-v259-20260924-0800
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -448,6 +448,23 @@ const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
 // posted in official match order. Sunday isn't evenly spaced, so its middle tee times are spread
 // between the exact first and last (within a minute or two). Ryder Cup spans aren't set yet, so
 // there only the session start is known.
+// FINGERPRINT_V259_SESSION_FORMAT — each session's format. Read from DataGolf's page by the scraper
+// (sv.format); the 2026 Presidents Cup order confirmed on that page is kept as a backup, and any
+// session of 1-v-1 matches is singles regardless.
+const TEAM_FORMAT_FALLBACK = { 'presidents cup_2026': { thu:'fourball', fri:'foursomes', satam:'fourball', satpm:'foursomes', sun:'singles' } };
+const FORMAT_INFO = {
+  fourball:  { name: 'Four-ball', desc: 'each plays his own ball; the better score on each hole counts' },
+  foursomes: { name: 'Foursomes', desc: 'partners alternate shots with one ball' },
+  singles:   { name: 'Singles',   desc: 'one-on-one' },
+};
+const sessionFormat = (evName, sk, sv) => {
+  if (sv?.format && FORMAT_INFO[sv.format]) return sv.format;
+  const yr = sv?.lockAt ? new Date(sv.lockAt).getUTCFullYear() : null;
+  const key = Object.keys(TEAM_FORMAT_FALLBACK).find(kk => { const [nm, y] = kk.split('_'); return (evName || '').toLowerCase().includes(nm) && +y === yr; });
+  if (key && TEAM_FORMAT_FALLBACK[key][sk]) return TEAM_FORMAT_FALLBACK[key][sk];
+  if (sv?.matches?.length && sv.matches.every(m => (m.usa || []).length === 1)) return 'singles';
+  return null;
+};
 const TEAM_SESSION_SPANS = { presidents: { thu: 72, fri: 56, satam: 54, satpm: 42, sun: 137 } };
 const matchTeeMs = (evName, sk, sv, idx) => {
   if (!sv?.lockAt || idx < 0) return null;
@@ -4117,7 +4134,7 @@ export default function App(){
                       else { txt = `Starts ${fmtTee(new Date(sv.lockAt).getTime(), true)}`; bg='#f2f4f0'; fg='#6b7c5e'; }
                     }
                     return <div key={sk} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:'1px solid #f0f0ea',fontSize:12}}>
-                      <span style={{width:52,flexShrink:0,fontSize:10,fontWeight:800,color:T.primary}}>{lb.toUpperCase()}</span>
+                      <span style={{width:62,flexShrink:0,fontSize:10,fontWeight:800,color:T.primary,lineHeight:1.25}}>{lb.toUpperCase()}{(()=>{const f=sessionFormat(tcEventName,sk,sv);return f?<div style={{fontSize:9,fontWeight:600,color:'#8a9580'}}>{FORMAT_INFO[f].name}</div>:null;})()}</span>
                       <span style={{flex:1,minWidth:0,color:'#3a4a2e',lineHeight:1.3}}>
                         {mates.length?<>w/ <b>{sur(mates)}</b></>:<b>Singles</b>} <span style={{color:'#999'}}>v</span> {sur(opps)}
                       </span>
@@ -4512,6 +4529,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <div style={{fontSize:12,fontWeight:700,marginBottom:8,color:sLocked?'#a33':T.primary}}>
                     {sLocked?'🔒 Locked — picks are final':`Locks ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})} · ${picked} of ${sv.matches.length} picked`}
                   </div>
+                  {(()=>{const f=sessionFormat(tcEventName,active,sv); if(!f) return null; const I=FORMAT_INFO[f];
+                    return <div style={{fontSize:12,color:'#6b7c5e',margin:'-4px 0 10px',lineHeight:1.4}}><b style={{color:T.primary}}>{I.name}</b> · {I.desc}</div>;})()}
                   {sv.matches.map((m,mi)=>{
                     const pk=mine[m.id];
                     const side=(v,names,flagE)=>{
@@ -4701,6 +4720,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   fontSize:11,fontWeight:700,border:`1.5px solid ${on?T.primary:'#ddd'}`,background:on?T.primary:'#fff',color:on?'#fff':'#3a4a2e'}}>
                   {lb}<div style={{fontSize:9,fontWeight:600,opacity:.85}}>{st==='live'?'● live':st}</div></button>;})}
             </div>
+            {sv&&(()=>{const f=sessionFormat(tcEventName,active,sv); if(!f) return null; const I=FORMAT_INFO[f];
+              return <div style={{fontSize:12,color:'#6b7c5e',margin:'0 2px 9px',lineHeight:1.4}}><b style={{color:T.primary}}>{I.name}</b> · {I.desc}</div>;})()}
             {!sv ? <div style={bx}><div style={{fontSize:36,marginBottom:8}}>⛳</div><p style={{color:'#8a9580',fontSize:13}}>{lbl} pairings haven't been announced yet.</p></div>
             : sv.matches.map((m,mi)=>{
               const picks = Object.values(teamPicksPublic).map(ep=>ep?.[active]?.[m.id]).filter(Boolean);
