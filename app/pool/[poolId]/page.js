@@ -1,5 +1,5 @@
 'use client';
-// build: matches-view-v250-20260924-0200
+// build: match-names-v251-20260924-0330
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -4615,9 +4615,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,boxShadow:'0 1px 2px rgba(0,0,0,.15)'}}>
               {shot?<img src={shot} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';}} style={{width:26,height:26,objectFit:'cover',objectPosition:'top center'}}/>:<Flag c={pl?.country}/>}
             </div>;})}</div>;
-          const names = (arr) => <span>{arr.map((n,ix)=>{const pl=field.find(f=>f.name===n);
-            return <React.Fragment key={n}>{ix?' / ':''}<span onClick={()=>pl&&setSelectedPlayer(pl)}
-              style={{cursor:pl?'pointer':'default',textDecoration:pl?'underline':'none',textDecorationStyle:'dotted',textUnderlineOffset:2}}>{flip(n).split(' ').slice(-1)[0]}</span></React.Fragment>;})}</span>;
+          // FINGERPRINT_V251_MATCH_NAMES — one surname per line so pairs fit a phone-width half card;
+          // long surnames wrap rather than get cut off
+          const names = (arr) => arr.map(n=>{const pl=field.find(f=>f.name===n);
+            return <div key={n} onClick={()=>pl&&setSelectedPlayer(pl)} style={{cursor:pl?'pointer':'default',lineHeight:1.25,overflowWrap:'anywhere',
+              textDecoration:pl?'underline':'none',textDecorationStyle:'dotted',textUnderlineOffset:2}}>{flip(n).split(' ').slice(-1)[0]}</div>;});
           return <>
             <div style={{...sec,textAlign:'center',padding:'14px 12px'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:14}}>
@@ -4653,11 +4655,21 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <span style={{color:m.result?T.primary:sLocked?'#b5892c':'#8a9580'}}>{status.toUpperCase()}</span>
                 </div>
                 <div style={{display:'flex',alignItems:'stretch',gap:6}}>
-                  <div style={sideStyle('USA')}>{avatarStack(m.usa)}<div style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>🇺🇸 {names(m.usa)}</div>
-                    {my==='USA'&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}</div>
+                  <div style={{...sideStyle('USA'),flexDirection:'column',alignItems:'flex-start',gap:5}}>
+                    <div style={{display:'flex',alignItems:'center',gap:5,width:'100%'}}>
+                      {avatarStack(m.usa)}<span style={{fontSize:13}}>🇺🇸</span>
+                      {my==='USA'&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}
+                    </div>
+                    <div style={{width:'100%',minWidth:0}}>{names(m.usa)}</div>
+                  </div>
                   <div style={{alignSelf:'center',fontSize:11,color:'#aaa',fontWeight:700}}>v</div>
-                  <div style={{...sideStyle('INT'),flexDirection:'row-reverse',textAlign:'right'}}>{avatarStack(m.intl)}<div style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{names(m.intl)} {iFlag}</div>
-                    {my==='INT'&&<span style={{marginRight:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}</div>
+                  <div style={{...sideStyle('INT'),flexDirection:'column',alignItems:'flex-end',gap:5,textAlign:'right'}}>
+                    <div style={{display:'flex',flexDirection:'row-reverse',alignItems:'center',gap:5,width:'100%'}}>
+                      {avatarStack(m.intl)}<span style={{fontSize:13}}>{iFlag}</span>
+                      {my==='INT'&&<span style={{marginRight:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}
+                    </div>
+                    <div style={{width:'100%',minWidth:0}}>{names(m.intl)}</div>
+                  </div>
                 </div>
                 {sLocked&&(nU+nI)>0&&<div style={{marginTop:8}}>
                   <div style={{display:'flex',height:6,borderRadius:3,overflow:'hidden',background:'#eee'}}>
