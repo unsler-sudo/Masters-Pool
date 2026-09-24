@@ -1,5 +1,5 @@
 'use client';
-// build: footer-rules-v252-20260924-0400
+// build: photo-name-rows-v253-20260924-0430
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -4609,17 +4609,16 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           const active = mvTab || (live||next||posted[posted.length-1]||sessions[0])[0];
           const sv = teamMatches[active], sLocked = isSessLocked(sv);
           const lbl = (sessions.find(([sk])=>sk===active)||[])[1];
-          const avatarStack = (names) => <div style={{display:'flex',flexShrink:0}}>{names.map((n,ix)=>{
-            const pl=field.find(f=>f.name===n), shot=pl&&headshotFor(pl);
-            return <div key={n} style={{width:26,height:26,borderRadius:'50%',marginLeft:ix?-8:0,border:'2px solid #fff',background:'#f2f4f0',
-              overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,boxShadow:'0 1px 2px rgba(0,0,0,.15)'}}>
-              {shot?<img src={shot} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';}} style={{width:26,height:26,objectFit:'cover',objectPosition:'top center'}}/>:<Flag c={pl?.country}/>}
-            </div>;})}</div>;
-          // FINGERPRINT_V251_MATCH_NAMES — one surname per line so pairs fit a phone-width half card;
-          // long surnames wrap rather than get cut off
-          const names = (arr) => arr.map(n=>{const pl=field.find(f=>f.name===n);
-            return <div key={n} onClick={()=>pl&&setSelectedPlayer(pl)} style={{cursor:pl?'pointer':'default',lineHeight:1.25,overflowWrap:'anywhere',
-              textDecoration:pl?'underline':'none',textDecorationStyle:'dotted',textUnderlineOffset:2}}>{flip(n).split(' ').slice(-1)[0]}</div>;});
+          // FINGERPRINT_V253_PHOTO_NAME_ROWS — one row per player: photo, then surname (both sides alike)
+          const playerRows = (arr) => arr.map(n=>{const pl=field.find(f=>f.name===n), shot=pl&&headshotFor(pl);
+            return <div key={n} onClick={()=>pl&&setSelectedPlayer(pl)} style={{display:'flex',alignItems:'center',gap:6,minWidth:0,cursor:pl?'pointer':'default'}}>
+              <div style={{width:26,height:26,borderRadius:'50%',flexShrink:0,overflow:'hidden',background:'#f2f4f0',border:'1.5px solid #fff',
+                boxShadow:'0 1px 2px rgba(0,0,0,.15)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>
+                {shot?<img src={shot} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';}} style={{width:26,height:26,objectFit:'cover',objectPosition:'top center'}}/>:<Flag c={pl?.country}/>}
+              </div>
+              <span style={{minWidth:0,lineHeight:1.2,overflowWrap:'anywhere',textDecoration:pl?'underline':'none',textDecorationStyle:'dotted',textUnderlineOffset:2}}>
+                {flip(n).split(' ').slice(-1)[0]}</span>
+            </div>;});
           return <>
             <div style={{...sec,textAlign:'center',padding:'14px 12px'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:14}}>
@@ -4655,21 +4654,16 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <span style={{color:m.result?T.primary:sLocked?'#b5892c':'#8a9580'}}>{status.toUpperCase()}</span>
                 </div>
                 <div style={{display:'flex',alignItems:'stretch',gap:6}}>
-                  <div style={{...sideStyle('USA'),flexDirection:'column',alignItems:'flex-start',gap:5}}>
-                    <div style={{display:'flex',alignItems:'center',gap:5,width:'100%'}}>
-                      {avatarStack(m.usa)}<span style={{fontSize:13}}>🇺🇸</span>
-                      {my==='USA'&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}
+                  {[['USA','🇺🇸',m.usa],['INT',iFlag,m.intl]].map(([side,flg,list],six)=><React.Fragment key={side}>
+                    {six===1&&<div style={{alignSelf:'center',fontSize:11,color:'#aaa',fontWeight:700}}>v</div>}
+                    <div style={{...sideStyle(side),flexDirection:'column',alignItems:'stretch',gap:5}}>
+                      <div style={{display:'flex',alignItems:'center',fontSize:12,lineHeight:1}}>
+                        <span>{flg}</span>
+                        {my===side&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}
+                      </div>
+                      {playerRows(list)}
                     </div>
-                    <div style={{width:'100%',minWidth:0}}>{names(m.usa)}</div>
-                  </div>
-                  <div style={{alignSelf:'center',fontSize:11,color:'#aaa',fontWeight:700}}>v</div>
-                  <div style={{...sideStyle('INT'),flexDirection:'column',alignItems:'flex-end',gap:5,textAlign:'right'}}>
-                    <div style={{display:'flex',flexDirection:'row-reverse',alignItems:'center',gap:5,width:'100%'}}>
-                      {avatarStack(m.intl)}<span style={{fontSize:13}}>{iFlag}</span>
-                      {my==='INT'&&<span style={{marginRight:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}
-                    </div>
-                    <div style={{width:'100%',minWidth:0}}>{names(m.intl)}</div>
-                  </div>
+                  </React.Fragment>)}
                 </div>
                 {sLocked&&(nU+nI)>0&&<div style={{marginTop:8}}>
                   <div style={{display:'flex',height:6,borderRadius:3,overflow:'hidden',background:'#eee'}}>
