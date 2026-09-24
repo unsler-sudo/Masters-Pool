@@ -185,14 +185,17 @@ export default function LandingPage() {
         <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:42,fontWeight:900,marginBottom:12,letterSpacing:-1}}>
           Tuna Golf Pool
         </h1>
-        <p style={{fontSize:18,opacity:.75,maxWidth:480,margin:'0 auto 20px',lineHeight:1.6}}>
-          Create a private golf pool for your friends, office, or group. Pick 10 golfers across 3 tiers and track live earnings during the majors — and now <b style={{color:'#fff'}}>every PGA Tour and DP World Tour event</b>.
+        <p style={{fontSize:18,opacity:.8,maxWidth:520,margin:'0 auto 20px',lineHeight:1.6}}>
+          A private golf pool for your friends, office, or group — with a <b style={{color:'#fff'}}>live money leaderboard</b>.
+          Play the <b style={{color:'#fff'}}>majors</b>, any <b style={{color:'#fff'}}>PGA Tour</b> or <b style={{color:'#fff'}}>DP World Tour</b> event,
+          and now the <b style={{color:'#fff'}}>Presidents Cup &amp; Ryder Cup</b>.
         </p>
         <div style={{maxWidth:440,margin:'0 auto 16px',padding:'12px 18px',background:'linear-gradient(135deg,rgba(80,140,255,.22),rgba(80,140,255,.10))',borderRadius:12,border:'1px solid rgba(120,160,255,.4)'}}>
-          <div style={{fontSize:11,fontWeight:700,color:'#7aa8ff',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🌍 New Feature</div>
-          <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:4}}>DP World Tour Mode</div>
-          <div style={{fontSize:12,opacity:.75,lineHeight:1.5}}>
-            Now run your pool on the DP World Tour too — alongside the majors and every PGA Tour event. Live scoring, exact payouts, and event branding rotate weekly on all three.
+          <div style={{fontSize:11,fontWeight:700,color:'#7aa8ff',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🏆 New · Presidents Cup &amp; Ryder Cup</div>
+          <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:4}}>Match Pick'em</div>
+          <div style={{fontSize:12,opacity:.8,lineHeight:1.5}}>
+            Pick the winner of every match, session by session. Pairings post automatically as they're announced,
+            everyone gets an email when picks open, and a live cup score tracks it all.
           </div>
         </div>
         <button type="button" onClick={()=>setStep('create')} style={{
@@ -204,17 +207,26 @@ export default function LandingPage() {
         </button>
         <div style={{fontSize:12,opacity:.5,marginTop:10}}>$10 per major · Renew each tournament · Cancel anytime</div>
       </div>
-      <div style={{maxWidth:700,margin:'0 auto',padding:'0 20px 60px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16}}>
+      <div style={{maxWidth:760,margin:'0 auto',padding:'0 20px 16px',textAlign:'center'}}>
+        <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,marginBottom:6}}>Everything your pool needs</h2>
+        <div style={{fontSize:13,opacity:.6,marginBottom:22}}>No app to download, no accounts — players just open your link.</div>
+      </div>
+      <div style={{maxWidth:760,margin:'0 auto',padding:'0 20px 60px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12}}>
         {[
-          { emoji:'🏆', title:'Live Standings', desc:'Real-time earnings from DataGolf updated every 60 seconds' },
-          { emoji:'🎯', title:'3-Tier Picks', desc:'2 Favorites + 4 Contenders + 4 Longshots = 10 total picks' },
-          { emoji:'🌍', title:'Majors + PGA & DP World Tours', desc:'All 5 majors plus any weekly PGA Tour or DP World Tour event — themed automatically' },
-          { emoji:'🔒', title:'Private Pool', desc:'Your own link, your own password, invite only who you want' },
-          { emoji:'⚡', title:'Fully Automated', desc:'Auto-locks at tee time, auto-rotates Tuesday after each major' },
-          { emoji:'📚', title:'Past Results', desc:'Final standings archived after every tournament' },
+          { emoji:'💰', title:'Live Money Leaderboard', desc:'Real prize-money earnings, updated every 60 seconds and calculated from each event\'s official payout structure' },
+          { emoji:'🎯', title:'Tiered Picks', desc:'Favorites, contenders and longshots — everyone gets a few stars and has to find some sleepers' },
+          { emoji:'🌍', title:'Majors, PGA Tour & DP World', desc:'All five majors plus any weekly PGA Tour or DP World Tour event, each branded automatically' },
+          { emoji:'🇺🇸', title:'Presidents Cup & Ryder Cup', desc:'A match pick\'em with auto-posted pairings, daily picks, pick splits and a live cup score' },
+          { emoji:'📋', title:'Scorecards & Pairings', desc:'Tap any golfer for his photo and hole-by-hole card. Tee times show in your own timezone' },
+          { emoji:'💬', title:'Pool Chat', desc:'Built-in trash talk with reactions, unread counts and read receipts' },
+          { emoji:'📸', title:'Share the Standings', desc:'One tap turns the leaderboard into an image for your group chat' },
+          { emoji:'⚡', title:'Runs Itself', desc:'Locks at the first tee, rotates to the next event, and archives the results' },
+          { emoji:'🔒', title:'Commissioner Tools', desc:'Private link and password, join codes, payment tracking and invites for past players' },
+          { emoji:'📧', title:'Email Updates', desc:'Entry codes, reminders, and alerts when picks open' },
+          { emoji:'📚', title:'History', desc:'Every event\'s final standings and payouts, archived season by season' },
         ].map(f=>(
-          <div key={f.title} style={{background:'rgba(255,255,255,.07)',borderRadius:12,padding:'20px 18px',backdropFilter:'blur(10px)',border:'1px solid rgba(255,255,255,.1)'}}>
-            <div style={{fontSize:28,marginBottom:8}}>{f.emoji}</div>
+          <div key={f.title} style={{background:'rgba(255,255,255,.07)',borderRadius:12,padding:'18px 16px',backdropFilter:'blur(10px)',border:'1px solid rgba(255,255,255,.1)'}}>
+            <div style={{fontSize:26,marginBottom:8}}>{f.emoji}</div>
             <div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{f.title}</div>
             <div style={{fontSize:12,opacity:.65,lineHeight:1.5}}>{f.desc}</div>
           </div>
@@ -225,9 +237,9 @@ export default function LandingPage() {
           <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,marginBottom:28}}>How it works</h2>
           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:20,textAlign:'center'}}>
             {[
-              { n:'1', title:'Create your pool', desc:'Name it, set a password, pick your starting major' },
-              { n:'2', title:'Share the link', desc:'Send your pool URL to friends — they pick 9 golfers' },
-              { n:'3', title:'Watch & win', desc:'Live earnings update every 60s during the tournament' },
+              { n:'1', title:'Create your pool', desc:'Name it, set a password, and choose majors, PGA Tour or DP World Tour' },
+              { n:'2', title:'Share the link', desc:'Friends open it, enter their name and make their picks — no account needed' },
+              { n:'3', title:'Watch & win', desc:'The leaderboard updates live, then the pool rolls on to the next event' },
             ].map(s=>(
               <div key={s.n}>
                 <div style={{width:36,height:36,borderRadius:'50%',background:'#c9a84c',color:'#1a2a5c',fontWeight:800,fontSize:16,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 10px'}}>{s.n}</div>
