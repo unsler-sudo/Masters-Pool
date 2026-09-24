@@ -1,5 +1,5 @@
 'use client';
-// build: team-popup-v255-20260924-0530
+// build: team-start-v256-20260924-0600
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1474,7 +1474,14 @@ export default function App(){
   // time, so a corrupted value can't hold entries open (or lock them) absurdly.
   const realEarliestTee = eventStartRef.current && eventStartRef.current > 0 ? eventStartRef.current : 0;
   const teeSane = realEarliestTee > 0 && Math.abs(realEarliestTee - TEE_TIME) < 3 * 24 * 60 * 60 * 1000;
-  const effectiveTeeStart = teeSane ? realEarliestTee : TEE_TIME;
+  // FINGERPRINT_V256_TEAM_START — team events have no tee times in DataGolf's feed, so the PGA Tour
+  // path above falls back to a flat 7:00 AM ET placeholder. That drove the countdown AND closed joining
+  // hours early. For team events the real start is the earliest session lock the commissioner set.
+  const teamFirstLock = isTeamPool
+    ? Math.min(...Object.values(teamMatches||{}).map(sv=>new Date(sv?.lockAt).getTime()).filter(Number.isFinite))
+    : Infinity;
+  const effectiveTeeStart = (isTeamPool && Number.isFinite(teamFirstLock)) ? teamFirstLock
+    : (teeSane ? realEarliestTee : TEE_TIME);
   const pastTeeTime = now >= effectiveTeeStart && now <= TOURNAMENT_END;
   const isLive = pastTeeTime || isTourMode(activeMajor); // pgatour mode always shows live data
   const locked = serverLocked || pastTeeTime;
