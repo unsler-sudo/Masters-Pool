@@ -1,5 +1,5 @@
 'use client';
-// build: match-tees-v257-20260924-0630
+// build: team-history-v258-20260924-0700
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -5242,7 +5242,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   if (matchKey) THEME = {...THEME, ...PGATOUR_EVENT_THEMES[matchKey]};
                 }
                 const earnings=a.earnings||{};
-                const hasEarnings=Object.keys(earnings).length>0;
+                const hasEarnings=Object.keys(earnings).length>0 || !!a.entryTotals;
                 // For pgatour archives, include event slug in ID to avoid collisions
                 const archiveId = isTourMode(a.major)
                   ? `pgatour_${(a.eventName||'').toLowerCase().replace(/[^a-z0-9]+/g,'-')}_${a.year}`
@@ -5292,6 +5292,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <span style={{fontSize:18,color:'rgba(255,255,255,0.6)'}}>{isExpanded?'▲':'▼'}</span>
                   </div>
                   {isExpanded&&<div style={{background:'#fff',animation:'sd .2s ease'}}>
+                    {/* FINGERPRINT_V258_TEAM_HISTORY — pick'em archives: final cup score */}
+                    {a.scoring==='matchpicks'&&a.teamMatches&&(()=>{
+                      let u=0,n=0; Object.values(a.teamMatches).forEach(sv=>(sv.matches||[]).forEach(m=>{
+                        if(m.result==='USA')u+=1; else if(m.result==='INT')n+=1; else if(m.result==='H'){u+=.5;n+=.5;} }));
+                      const f=(x)=>Number.isInteger(x)?x:x.toFixed(1);
+                      const other=/ryder/i.test(a.eventName||'')?'🇪🇺 Europe':'🌏 International';
+                      return <div style={{padding:'10px 14px',textAlign:'center',fontSize:14,fontWeight:800,color:THEME.primary,background:'#fafaf5',borderBottom:`1px solid ${THEME.cardBorder}`}}>
+                        🇺🇸 USA {f(u)} — {f(n)} {other}</div>;
+                    })()}
                     {ranked.map((e,i)=>{
                       const picksWithEarnings=e.picks.map(pn=>({name:pn,earned:earnings[pn]||0})).sort((x,y)=>y.earned-x.earned);
                       const prize = !showPrizes ? 0
@@ -5304,7 +5313,18 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                           {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${fmtPrize(prize)}</span>}
                           {hasEarnings&&<span style={{fontWeight:800,color:THEME.primary,fontSize:14}}>{((a.scoring==='points'||a.scoring==='matchpicks')?fmtPts:fmt)(e.total)}</span>}
                         </div>
-                        {hasEarnings&&<div style={{padding:'4px 14px 10px 50px',display:'flex',flexWrap:'wrap',gap:6,fontSize:11}}>
+                        {a.scoring==='matchpicks'&&a.teamMatches&&(()=>{
+                          const ep=(a.teamPicks||{})[e.name]||{};
+                          const rows=teamSessionsFor(a.eventName).filter(([sk])=>a.teamMatches[sk]);
+                          if(!rows.length) return null;
+                          return <div style={{padding:'4px 14px 10px 50px',display:'flex',flexWrap:'wrap',gap:6,fontSize:11}}>
+                            {rows.map(([sk,lb])=>{const sv=a.teamMatches[sk];
+                              const picked=(sv.matches||[]).filter(m=>ep[sk]?.[m.id]).length;
+                              return <span key={sk} style={{background:`${THEME.primary}10`,padding:'2px 6px',borderRadius:4,color:THEME.primary}}>
+                                {lb} <b>{fmtPts(scoreTeamPicks({[sk]:ep[sk]||{}},{[sk]:sv}))}</b>{picked<(sv.matches||[]).length?` · ${picked}/${sv.matches.length} picked`:''}</span>;})}
+                          </div>;
+                        })()}
+                        {a.scoring!=='matchpicks'&&hasEarnings&&<div style={{padding:'4px 14px 10px 50px',display:'flex',flexWrap:'wrap',gap:6,fontSize:11}}>
                           {picksWithEarnings.map(pk=><span key={pk.name} style={{background:`${THEME.primary}10`,padding:'2px 6px',borderRadius:4,color:THEME.primary}}>
                             {pk.name.split(', ')[0]} <b>{((a.scoring==='points'||a.scoring==='matchpicks')?fmtPts:fmt)(pk.earned)}</b>
                           </span>)}
@@ -5313,7 +5333,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     })}
                   </div>}
                   {!isExpanded&&<div style={{padding:'10px 14px',background:'#fafafa',fontSize:11,color:'#888',textAlign:'center'}}>
-                    Tap to see picks & earnings — Top 3: {ranked.slice(0,3).map(r=>r.name).join(' · ')}
+                    Tap to see picks & {a.scoring==='matchpicks'?'points':'earnings'} — Top 3: {ranked.slice(0,3).map(r=>r.name).join(' · ')}
                   </div>}
                 </div>;
                 };
@@ -5744,7 +5764,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   :archives.map(a=>{
                     const THEME=THEMES[a.major]||THEMES.pga;
                     const earnings=a.earnings||{};
-                    const hasEarnings=Object.keys(earnings).length>0;
+                    const hasEarnings=Object.keys(earnings).length>0 || !!a.entryTotals;
                     const ranked=[...a.entries].map(e=>({
                       ...e,
                       total:a.entryTotals?(+a.entryTotals[e.name]||0):e.picks.reduce((s,n)=>s+(earnings[n]||0),0),
