@@ -1,5 +1,5 @@
 'use client';
-// build: session-format-v259-20260924-0800
+// build: match-prob-v260-20260924-0830
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1446,6 +1446,10 @@ export default function App(){
     const side = L.leader==='USA' ? '🇺🇸 ' : L.leader==='INT' ? teamLabel('INT').split(' ')[0]+' ' : '';
     return L.margin ? `${side}${L.margin} UP · thru ${L.thru}` : `All square · thru ${L.thru}`;
   };
+  // FINGERPRINT_V260_MATCH_PROB — DataGolf's win probability for an unfinished match; hidden if the
+  // reading is over 30 minutes old so a stalled scraper never leaves stale odds on screen
+  const probOf = (m) => { const P = m?.prob; if (!P || m.result || !P.at || Date.now() - new Date(P.at).getTime() > 30*60*1000) return null; return P; };
+  const pctR = (x) => `${Math.round(+x || 0)}%`;
   const surnames = (arr) => (arr||[]).filter(Boolean).map(n=>flip(n).split(' ').slice(-1)[0]).join(' / ');   // FINGERPRINT_V245
   const teamLabel = (t) => t === 'USA' ? '🇺🇸 USA' : (/ryder/i.test(tcEventName) ? '🇪🇺 Europe' : '🌏 International');
   // FINGERPRINT_V216_TIER_COLOR_CLASH
@@ -4539,6 +4543,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         cursor:sLocked?'default':'pointer',textAlign:'center',fontSize:13,fontWeight:700,lineHeight:1.3,
                         border:`2px solid ${on?T.primary:(won?'#1a7a3a':'#e2e2dc')}`,background:on?T.primary:'#fff',color:on?'#fff':'#3a4a2e'}}>
                         <div style={{fontSize:16}}>{flagE}</div>{surnames(names)}{won&&<div style={{fontSize:10,marginTop:2,color:on?'#fff':'#1a7a3a'}}>WON</div>}
+                      {!won&&probOf(m)&&<div style={{fontSize:10,marginTop:2,fontWeight:600,color:on?'rgba(255,255,255,.85)':'#8a9580'}}>{pctR(v==='USA'?probOf(m).usa:probOf(m).intl)} to win</div>}
                       </button>;
                     };
                     const mark = !m.result||!pk ? '' : m.result==='H' ? '½ pt' : (pk===m.result ? '✓ 1 pt' : '✗');
@@ -4548,7 +4553,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       </div>
                       <div style={{display:'flex',gap:6,alignItems:'stretch'}}>
                         {side('USA',m.usa,'🇺🇸')}
-                        <div style={{alignSelf:'center',fontSize:11,color:'#aaa',fontWeight:700}}>v</div>
+                        <div style={{alignSelf:'center',fontSize:11,color:'#aaa',fontWeight:700,textAlign:'center'}}>v{probOf(m)&&<div style={{fontSize:9,fontWeight:600,marginTop:2,whiteSpace:'nowrap'}}>½ {pctR(probOf(m).halve)}</div>}</div>
                         {side('INT',m.intl,intlFlag)}
                       </div>
                     </div>;
@@ -4753,6 +4758,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     </div>
                   </React.Fragment>)}
                 </div>
+                {(()=>{const pr=probOf(m); if(!pr) return null;
+                  return <div style={{display:'flex',alignItems:'center',fontSize:11,color:'#6b7c5e',marginTop:7}}>
+                    <span style={{flex:1,fontWeight:700}}>🇺🇸 {pctR(pr.usa)}</span>
+                    <span style={{fontSize:10,color:'#8a9580'}}>win chance · halve {pctR(pr.halve)}</span>
+                    <span style={{flex:1,textAlign:'right',fontWeight:700}}>{pctR(pr.intl)} {iFlag}</span>
+                  </div>;})()}
                 {sLocked&&(nU+nI)>0&&<div style={{marginTop:8}}>
                   <div style={{display:'flex',height:6,borderRadius:3,overflow:'hidden',background:'#eee'}}>
                     <div style={{width:`${nU/(nU+nI)*100}%`,background:'#2a4d8f'}}/><div style={{width:`${nI/(nU+nI)*100}%`,background:'#b5892c'}}/>
