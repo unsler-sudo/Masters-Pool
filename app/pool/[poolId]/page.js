@@ -1,5 +1,5 @@
 'use client';
-// build: team-start-v256-20260924-0600
+// build: match-tees-v257-20260924-0630
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -441,6 +441,26 @@ const teamSessionsFor = (n) => /ryder/i.test(n || '')
   ? [['friam','Fri AM'],['fripm','Fri PM'],['satam','Sat AM'],['satpm','Sat PM'],['sun','Sun Singles']]
   : [['thu','Thu'],['fri','Fri'],['satam','Sat AM'],['satpm','Sat PM'],['sun','Sun Singles']];
 const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
+// FINGERPRINT_V257_MATCH_TEES — each match's tee time. Within a session the gap between matches is
+// fixed, so match n tees off at (session first tee) + n × gap. Spans are first→last tee in minutes,
+// from the official 2024 Presidents Cup times, which the published 2026 Medinah windows repeat
+// (Thu 11:35–12:47, Fri 1:05–2:01, Sat 7:02–7:56 and 1:15–1:57, Sun singles 137 min). Matches are
+// posted in official match order. Sunday isn't evenly spaced, so its middle tee times are spread
+// between the exact first and last (within a minute or two). Ryder Cup spans aren't set yet, so
+// there only the session start is known.
+const TEAM_SESSION_SPANS = { presidents: { thu: 72, fri: 56, satam: 54, satpm: 42, sun: 137 } };
+const matchTeeMs = (evName, sk, sv, idx) => {
+  if (!sv?.lockAt || idx < 0) return null;
+  const base = new Date(sv.lockAt).getTime();
+  if (!Number.isFinite(base)) return null;
+  if (idx === 0) return base;
+  const span = /ryder/i.test(evName || '') ? null : TEAM_SESSION_SPANS.presidents[sk];
+  const n = sv.matches?.length || 0;
+  if (!span || n < 2) return null;
+  return base + Math.round(idx * span / (n - 1)) * 60000;
+};
+const fmtTee = (ms, withDay) => new Date(ms).toLocaleString([], withDay
+  ? { weekday: 'short', hour: 'numeric', minute: '2-digit' } : { hour: 'numeric', minute: '2-digit' });
 
 // FINGERPRINT_V245_MATCH_PICKEM
 // Team events are a match pick'em: entries pick USA or the other side in every match, session by
@@ -4090,8 +4110,12 @@ export default function App(){
                     if (m.result) {
                       const r = m.result==='H' ? 'Halved' : m.result===side ? 'Won' : 'Lost';
                       txt = r; [bg,fg] = r==='Won'?['#e7f5ec','#1a7a3a']:r==='Lost'?['#fbe9e9','#a33']:['#f7f2dc','#7a6a1a'];
-                    } else if (isSessLocked(sv)) { txt = liveText(m) || 'In progress'; bg='#fff4e0'; fg='#9a6a00'; }
-                    else { txt = `Starts ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`; bg='#f2f4f0'; fg='#6b7c5e'; }
+                    } else {
+                      const tee = matchTeeMs(tcEventName, sk, sv, sv.matches.indexOf(m));
+                      if (tee && Date.now() < tee) { txt = `Tees off ${fmtTee(tee, true)}`; bg='#f2f4f0'; fg='#6b7c5e'; }
+                      else if (isSessLocked(sv)) { txt = liveText(m) || 'In progress'; bg='#fff4e0'; fg='#9a6a00'; }
+                      else { txt = `Starts ${fmtTee(new Date(sv.lockAt).getTime(), true)}`; bg='#f2f4f0'; fg='#6b7c5e'; }
+                    }
                     return <div key={sk} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:'1px solid #f0f0ea',fontSize:12}}>
                       <span style={{width:52,flexShrink:0,fontSize:10,fontWeight:800,color:T.primary}}>{lb.toUpperCase()}</span>
                       <span style={{flex:1,minWidth:0,color:'#3a4a2e',lineHeight:1.3}}>
@@ -4501,7 +4525,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     const mark = !m.result||!pk ? '' : m.result==='H' ? '½ pt' : (pk===m.result ? '✓ 1 pt' : '✗');
                     return <div key={m.id} style={{marginBottom:10}}>
                       <div style={{display:'flex',fontSize:10,fontWeight:700,color:'#8a9580',marginBottom:4,letterSpacing:.4}}>
-                        <span style={{flex:1}}>MATCH {mi+1}{m.result==='H'?' · HALVED':(liveText(m)?` · ${liveText(m).toUpperCase()}`:'')}</span><span>{mark}</span>
+                        <span style={{flex:1}}>MATCH {mi+1}{m.result==='H'?' · HALVED':(liveText(m)?` · ${liveText(m).toUpperCase()}`:(()=>{const tee=matchTeeMs(tcEventName,active,sv,mi);return tee&&Date.now()<tee?` · ${fmtTee(tee)}`:'';})())}</span><span>{mark}</span>
                       </div>
                       <div style={{display:'flex',gap:6,alignItems:'stretch'}}>
                         {side('USA',m.usa,'🇺🇸')}
@@ -4683,7 +4707,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               const nU = picks.filter(x=>x==='USA').length, nI = picks.filter(x=>x==='INT').length;
               const my = chatVerified ? (myTeamPicks[active]||{})[m.id] : null;
               const status = m.result==='USA' ? '🇺🇸 USA won' : m.result==='INT' ? `${iFlag} ${iName} won` : m.result==='H' ? 'Halved'
-                : sLocked ? `● ${liveText(m) || 'In progress'}` : `Starts ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`;
+                : (()=>{ const tee = matchTeeMs(tcEventName, active, sv, mi);
+                    if (tee && Date.now() < tee) return `Tees off ${fmtTee(tee, !sLocked)}`;
+                    if (sLocked) return `● ${liveText(m) || 'In progress'}`;
+                    return `Starts ${fmtTee(new Date(sv.lockAt).getTime(), true)}`; })();
               const sideStyle = (side) => ({flex:1,minWidth:0,display:'flex',alignItems:'center',gap:7,padding:'8px 9px',borderRadius:8,
                 background: m.result===side ? `${T.primary}14` : m.result==='H' ? '#f7f2dc' : '#fafaf7',
                 border:`1.5px solid ${m.result===side?T.primary:'transparent'}`, fontWeight: m.result===side?800:600, fontSize:13});
