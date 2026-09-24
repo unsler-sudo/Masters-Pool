@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: match-prob-v184-20260924-0830
+// build: text-chunks-v185-20260924-1100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -2003,22 +2003,45 @@ export async function POST(request) {
         if (f && sv.format !== f) { sv.format = f; fmtChanged = true; }
       }
       // FINGERPRINT_V180_LIVE_STATUS — store each in-progress match's status with a timestamp
+      // FINGERPRINT_V185_TEXT_CHUNKS — read each match's probability and live score from TWO sources:
+      // the scraper's per-match blocks, and the session's full text split at each "MATCH PREVIEW".
+      // The text runs in page order, so it works however DataGolf nests its elements (the probability
+      // line may sit beside the match's block rather than inside it). Blocks go first because only they
+      // carry flags (the leader's side); text fills anything blocks missed. A diagnostic per session
+      // goes into the report, which the droplet logs.
       let liveChanged = fmtChanged;
       const nowIso = new Date().toISOString();
+      const diag = {};
+      const FIN = /THRU\s*F(?=\s*(\d|HALVED|\s|$))/i;
       for (const [sk, sv] of Object.entries(all)) {
-        const blocks = body.sessions?.[sk]?.blocks;
-        if (!Array.isArray(blocks) || !blocks.length) continue;
         const byKey = new Map(sv.matches.map(m => [keyOf(m.usa, m.intl), m]));
-        for (const b of blocks) {
-          const parsed = srvParseMatchText(b?.text || '', roster).matches[0];
+        const blocks = Array.isArray(body.sessions?.[sk]?.blocks) ? body.sessions[sk].blocks : [];
+        const chunks = String(body.sessions?.[sk]?.text || '').split(/MATCH\s*PREVIEW/i).slice(1).map(c => 'MATCH PREVIEW ' + c);
+        if (!blocks.length && !chunks.length) continue;
+        const done = {};
+        const handle = (text, block) => {
+          const parsed = srvParseMatchText(text, roster).matches[0];
           const m = parsed && byKey.get(keyOf(parsed.usa, parsed.intl));
-          if (!m || m.result) continue;
-          const pr = srvMatchProb(b);
-          if (pr) { m.prob = { ...pr, at: nowIso }; liveChanged = true; }
-          const st = srvLiveStatus(b, !notStartedWithFlag.length);
-          if (st) { m.live = { ...st, at: nowIso }; liveChanged = true; }
-        }
+          if (!m) return;
+          const d = done[m.id] || (done[m.id] = {});
+          if (m.result) return;
+          const final = block ? !!block.final : FIN.test(text);
+          if (!d.prob) {
+            const pr = srvMatchProb({ text, final });
+            if (pr) { m.prob = { ...pr, at: nowIso }; d.prob = true; liveChanged = true; }
+          }
+          if (!d.live) {
+            const st = srvLiveStatus({ text, final, flags: block?.flags || {} }, !!block && !notStartedWithFlag.length);
+            if (st) { m.live = { ...st, at: nowIso }; d.live = true; liveChanged = true; }
+          }
+        };
+        blocks.forEach(b => b && handle(String(b.text || ''), b));
+        chunks.forEach(c => handle(c, null));
+        const got = Object.values(done);
+        diag[sk] = `${blocks.length} blocks/${chunks.length} text → ${got.length}/${sv.matches.length} matched, ` +
+                   `${got.filter(x => x.prob).length} chances, ${got.filter(x => x.live).length} live`;
       }
+      report._live = diag;
       if (liveChanged && !resChanged) await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
       if (resChanged) {
         await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
