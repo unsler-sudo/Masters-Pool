@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: name-orders-v186-20260924-1130
+// build: match-rows-v187-20260924-1230
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -338,6 +338,19 @@ function srvMatchProb(block) {
   return { usa, intl, halve };
 }
 
+// FINGERPRINT_V187_MATCH_ROWS — the scraper now reads each match row's own markup: players' DataGolf IDs,
+// "THRU 3", the scorebox ("1UP" / "AS" / "4&3" / "HALVED") and which side DataGolf's win caret points at
+// (usa-win-caret / eur-win-caret) — that caret is how the page marks the leader, and the winner at the end.
+function srvRowState(row) {
+  const thru = String(row?.thru || '').toUpperCase().replace(/\s+/g, ' ').trim();
+  const score = String(row?.score || '').toUpperCase().replace(/\s+/g, '');
+  const final = /THRU\s*F\b/.test(thru) || thru === 'F' || /&/.test(score) || /HALVED/.test(score);
+  const sq = /^(AS|A\/S|ALLSQUARE)$/.test(score);
+  const up = (score.match(/^(\d{1,2})UP/) || [])[1];
+  return { final, halved: /HALVED/.test(score) || (final && sq), holes: +(thru.match(/THRU\s*(\d{1,2})/) || [])[1] || 0,
+           margin: sq ? 0 : (up ? +up : null), lead: row?.lead === 'USA' || row?.lead === 'INT' ? row.lead : null };
+}
+
 async function srvTeamRoster() {
   const r = await fetch(`https://feeds.datagolf.com/field-updates?tour=pga&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
     { cache: 'no-store', signal: AbortSignal.timeout(8000) });
@@ -346,7 +359,7 @@ async function srvTeamRoster() {
   // Names built exactly as the pool page builds its field ("Last, First" → "First Last")
   const roster = (d.field || []).filter(p => p.player_name).map(p => ({
     name: p.player_name.includes(',') ? p.player_name.split(',').reverse().map(x => x.trim()).join(' ') : p.player_name,
-    country: p.country || '' }));
+    country: p.country || '', dg_id: +p.dg_id || null }));
   return { event: d.event_name || '', roster };
 }
 // FINGERPRINT_V179_TEAM_SUPERVISOR — SCAN + a single MGET (2 Redis commands however many pools),
@@ -1971,6 +1984,15 @@ export async function POST(request) {
       const allBlocks = Object.values(body.sessions || {}).flatMap(v => Array.isArray(v?.blocks) ? v.blocks : []);
       const notStartedWithFlag = allBlocks.filter(b => b && !b.final && /THRU\s*0(?!\d)/i.test(b.text || '')
         && ((b.flags?.USA || 0) > 0) !== ((b.flags?.INT || 0) > 0));
+      // FINGERPRINT_V187_MATCH_ROWS — rows are matched by DataGolf ID (exact); a caret on a match that
+      // hasn't started would mean the caret isn't a lead marker, so it's then ignored everywhere
+      const nameById = new Map(roster.filter(p => p.dg_id).map(p => [p.dg_id, p.name]));
+      const rowKey = (r) => {
+        const u = (r?.usa || []).map(id => nameById.get(+id)), i = (r?.intl || []).map(id => nameById.get(+id));
+        return (!u.length || !i.length || [...u, ...i].some(x => !x)) ? null : keyOf(u, i);
+      };
+      const caretBad = Object.values(body.sessions || {}).flatMap(v => Array.isArray(v?.rows) ? v.rows : [])
+        .some(r => { const st = srvRowState(r); return !st.final && st.holes === 0 && st.lead; });
       const results = {}, unclear = [], recorded = [];
       let resChanged = false;
       if (notStartedWithFlag.length) {
@@ -1981,10 +2003,22 @@ export async function POST(request) {
         results.paused = 'team flag appears on unstarted matches';
       } else {
         for (const [sk, sv] of Object.entries(all)) {
-          const blocks = body.sessions?.[sk]?.blocks;
-          if (!Array.isArray(blocks) || !blocks.length) continue;
           const byKey = new Map(sv.matches.map(m => [keyOf(m.usa, m.intl), m]));
           let wrote = 0;
+          // FINGERPRINT_V187_MATCH_ROWS — winner from the caret on a finished row
+          if (!caretBad) for (const r of (body.sessions?.[sk]?.rows || [])) {
+            const kk = rowKey(r), m = kk && byKey.get(kk);
+            if (!m || m.result) continue;
+            const st = srvRowState(r);
+            if (!st.final) continue;
+            const res = st.halved ? 'H' : st.lead;
+            if (res) {
+              m.result = res; wrote++; resChanged = true;
+              recorded.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')} → ${res === 'H' ? 'Halved' : res === 'USA' ? 'USA won' : 'International won'}`);
+            }
+          }
+          const blocks = body.sessions?.[sk]?.blocks;
+          if (!Array.isArray(blocks) || !blocks.length) { if (wrote) results[sk] = `${wrote} recorded`; continue; }
           for (const b of blocks) {
             if (!b || !b.final) continue;
             const parsed = srvParseMatchText(b.text || '', roster).matches[0];
@@ -2040,11 +2074,27 @@ export async function POST(request) {
             if (st) { m.live = { ...st, at: nowIso }; d.live = true; liveChanged = true; }
           }
         };
+        // FINGERPRINT_V187_MATCH_ROWS — rows first: exact players, caret gives the leader's side
+        const rows = Array.isArray(body.sessions?.[sk]?.rows) ? body.sessions[sk].rows : [];
+        for (const r of rows) {
+          const kk = rowKey(r), m = kk && byKey.get(kk);
+          if (!m) continue;
+          const d = done[m.id] || (done[m.id] = {});
+          if (m.result) continue;
+          const st = srvRowState(r);
+          const pr = srvMatchProb({ text: r.prob || '', final: st.final });
+          if (pr) { m.prob = { ...pr, at: nowIso }; d.prob = true; liveChanged = true; }
+          if (!st.final && st.holes >= 1 && st.margin != null) {
+            m.live = { thru: st.holes, margin: st.margin, leader: st.margin && !caretBad ? st.lead : null, at: nowIso };
+            d.live = true; liveChanged = true;
+          }
+        }
         blocks.forEach(b => b && handle(String(b.text || ''), b));
         chunks.forEach(c => handle(c, null));
         const got = Object.values(done);
-        diag[sk] = `${blocks.length} blocks/${chunks.length} text → ${got.length}/${sv.matches.length} matched, ` +
-                   `${got.filter(x => x.prob).length} chances, ${got.filter(x => x.live).length} live`;
+        diag[sk] = `${rows.length} rows/${blocks.length} blocks/${chunks.length} text → ${got.length}/${sv.matches.length} matched, ` +
+                   `${got.filter(x => x.prob).length} chances, ${got.filter(x => x.live).length} live, ` +
+          `${sv.matches.filter(x => x.live?.leader && x.live.at === nowIso).length} with leader`;
       }
       report._live = diag;
       if (liveChanged && !resChanged) await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
