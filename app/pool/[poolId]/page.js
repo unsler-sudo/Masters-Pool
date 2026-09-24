@@ -1,5 +1,5 @@
 'use client';
-// build: match-prob-v260-20260924-0830
+// build: name-orders-v261-20260924-1130
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -508,12 +508,15 @@ const parseMatchPaste = (text, field) => {
   const dict = new Map();
   (field || []).forEach(p => {
     const w = String(p.name || '').split(/\s+/).filter(Boolean);
-    new Set([norm(w[w.length - 1]), norm(w.slice(-2).join('')), norm(p.name)]).forEach(k => {
+    // FINGERPRINT_V261_NAME_ORDERS — surname-only (phone), surname-first (desktop USA side) and
+    // first-name-first (desktop other side) all resolve
+    new Set([norm(w[w.length - 1]), norm(w.slice(-2).join('')), norm(p.name),
+             norm(w[w.length - 1] + w.slice(0, -1).join(''))]).forEach(k => {
       if (k.length >= 2) { if (!dict.has(k)) dict.set(k, []); dict.get(k).push(p); }
     });
   });
   const used = new Set(), out = [];
-  for (const chunk of String(text || '').split(/MATCH\s*PREVIEW/i).slice(1)) {
+  for (const chunk of String(text || '').split(/MATCH\s*PREVIEW/i).slice(1).filter(c => /THRU/i.test(c))) {
     const blob = norm(chunk.split(/THRU/i)[0]);
     const best = Array(blob.length + 1).fill(null); best[0] = [];
     for (let i = 0; i < blob.length; i++) {
