@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: session-format-v183-20260924-0800
+// build: match-prob-v184-20260924-0830
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -317,6 +317,20 @@ function srvSessionFormat(sessionScrape) {
   if (!m) return null;
   const f = m[1].toUpperCase().replace(/[\s-]/g, '');
   return f.startsWith('FOURBALL') ? 'fourball' : f.startsWith('FOURSOME') ? 'foursomes' : 'singles';
+}
+
+// FINGERPRINT_V184_MATCH_PROB — DataGolf's win probability for a match that isn't finished:
+// "LIVE PROBABILITY 56.2%31.6%HALVE: 12.2%" → USA 56.2, other side 31.6, halve 12.2. The first number
+// is the USA side (names are listed USA first, and it matches DataGolf making the USA favourites).
+// Accepted only if the three add up to ~100, so a misread can never produce nonsense.
+function srvMatchProb(block) {
+  if (!block || block.final) return null;
+  const t = String(block.text || '').replace(/\s+/g, ' ');
+  const m = t.match(/PROBABILITY\s*([\d.]+)\s*%\s*([\d.]+)\s*%\s*HALVE:?\s*([\d.]+)\s*%/i);
+  if (!m) return null;
+  const usa = +m[1], intl = +m[2], halve = +m[3];
+  if (![usa, intl, halve].every(Number.isFinite) || Math.abs(usa + intl + halve - 100) > 1.5) return null;
+  return { usa, intl, halve };
 }
 
 async function srvTeamRoster() {
@@ -1999,6 +2013,8 @@ export async function POST(request) {
           const parsed = srvParseMatchText(b?.text || '', roster).matches[0];
           const m = parsed && byKey.get(keyOf(parsed.usa, parsed.intl));
           if (!m || m.result) continue;
+          const pr = srvMatchProb(b);
+          if (pr) { m.prob = { ...pr, at: nowIso }; liveChanged = true; }
           const st = srvLiveStatus(b, !notStartedWithFlag.length);
           if (st) { m.live = { ...st, at: nowIso }; liveChanged = true; }
         }
