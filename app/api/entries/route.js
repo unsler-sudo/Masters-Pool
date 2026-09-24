@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: team-auto-sync-v176-20260923-2300
+// build: auto-results-v177-20260924-0100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1812,7 +1812,73 @@ export async function POST(request) {
         await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
         for (const sk of posted) for (const pl of pools) await srvNotifyPicksOpen(pl.poolId, ev, year, sk, all[sk]);
       }
-      return Response.json({ ok:true, event: ev, report });
+
+      // FINGERPRINT_V177_AUTO_RESULTS — results from the team flag DataGolf shows on a finished match.
+      // That signal is unproven until we've seen it on real matches, so it starts in SHADOW mode:
+      // it predicts each result and checks the prediction against what the commissioner enters. After
+      // 4+ agreements and zero disagreements it switches itself LIVE for this event; a single
+      // disagreement keeps it off. Live mode only fills matches with no result — it never overwrites.
+      const evTag = `${ev}_${year}`.toLowerCase();
+      const modeKey = `teamauto:resultsmode:${evTag}`, statsKey = `teamauto:shadowstats:${evTag}`;
+      let rMode = 'shadow';
+      try { rMode = (await redis('GET', modeKey)) || 'shadow'; } catch {}
+      let stats = { agree: 0, disagree: 0, checked: {} };
+      try { const r = await redis('GET', statsKey); if (r) stats = JSON.parse(r); } catch {}
+      const keyOf = (u, i) => [...u].sort().join('|') + '~' + [...i].sort().join('|');
+      const results = {}, unclear = [];
+      let resChanged = false;
+      for (const [sk, sv] of Object.entries(all)) {
+        const blocks = body.sessions?.[sk]?.blocks;
+        if (!Array.isArray(blocks) || !blocks.length) continue;
+        const byKey = new Map(sv.matches.map(m => [keyOf(m.usa, m.intl), m]));
+        let wrote = 0;
+        for (const b of blocks) {
+          if (!b || !b.final) continue;
+          const parsed = srvParseMatchText(b.text || '', roster).matches[0];
+          if (!parsed) continue;
+          const m = byKey.get(keyOf(parsed.usa, parsed.intl));   // matched by players, never by position
+          if (!m) continue;
+          const f = b.flags || {}, u = (f.USA || 0) > 0, i = (f.INT || 0) > 0;
+          const pred = b.halved ? 'H' : (u !== i ? (u ? 'USA' : 'INT') : null);
+          if (rMode === 'shadow') {
+            const mk = `${sk}:${m.id}`;
+            if (m.result && pred && !stats.checked[mk]) {
+              stats.checked[mk] = pred === m.result ? 'agree' : `disagree (said ${pred}, was ${m.result})`;
+              if (pred === m.result) stats.agree++; else stats.disagree++;
+            }
+          } else if (!m.result) {
+            if (pred) { m.result = pred; wrote++; resChanged = true; }
+            else unclear.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')}`);
+          }
+        }
+        if (wrote) results[sk] = `${wrote} recorded`;
+      }
+      if (rMode === 'shadow') {
+        await redis('SET', statsKey, JSON.stringify(stats));
+        if (stats.disagree > 0) {
+          const bad = Object.entries(stats.checked).filter(([, v]) => v !== 'agree').map(([mk, v]) => `${mk} — ${v}`);
+          await srvAlertCommissioners(pools, `${evTag}_autoresults_disagree`,
+            `${ev}: automatic results stay OFF — please keep entering results`,
+            `<p>The app compared its reading of DataGolf's winner flags with the results you entered, and they didn't match:</p>
+             <p>${bad.join('<br>')}</p><p>Results stay manual for this event. Nothing was changed.</p>`);
+        } else if (stats.agree >= 4) {
+          await redis('SET', modeKey, 'live');
+          rMode = 'live';
+          await srvAlertCommissioners(pools, `${evTag}_autoresults_live`,
+            `✅ ${ev}: automatic results are now ON`,
+            `<p>The app's reading of DataGolf's winner flags matched all ${stats.agree} results you entered, so from here
+             it records results automatically. It never overwrites a result you've entered — fix anything in Admin as usual.</p>`);
+        }
+      }
+      if (resChanged) await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
+      if (unclear.length) {
+        await srvAlertCommissioners(pools, `${evTag}_unclear_${unclear.join('/')}`,
+          `🏳️ ${ev}: couldn't read ${unclear.length === 1 ? 'a result' : unclear.length + ' results'}`,
+          `<p>These matches have finished, but the page didn't clearly show who won:</p><p>${unclear.join('<br>')}</p>
+           <p>Enter them in Admin → Match Pick'em.</p>`);
+      }
+      return Response.json({ ok:true, event: ev, report,
+        results: { mode: rMode, agree: stats.agree, disagree: stats.disagree, ...results } });
     }
 
     if (body.action === 'set-team-session') {
