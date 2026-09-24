@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: text-chunks-v185-20260924-1100
+// build: name-orders-v186-20260924-1130
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -247,12 +247,17 @@ function srvParseMatchText(text, roster) {
   const dict = new Map();
   roster.forEach(p => {
     const w = p.name.split(/\s+/).filter(Boolean);
-    new Set([norm(w[w.length - 1]), norm(w.slice(-2).join('')), norm(p.name)]).forEach(kk => {
+    // FINGERPRINT_V186_NAME_ORDERS — DataGolf's desktop layout writes USA players surname-first
+    // ("SCHEFFLER SCOTTIE") and the other side first-name-first ("MIN WOO LEE"); the phone layout shows
+    // surnames only. Accept all three. Full names also settle shared surnames (the two Kims) exactly.
+    new Set([norm(w[w.length - 1]), norm(w.slice(-2).join('')), norm(p.name),
+             norm(w[w.length - 1] + w.slice(0, -1).join(''))]).forEach(kk => {
       if (kk.length >= 2) { if (!dict.has(kk)) dict.set(kk, []); dict.get(kk).push(p); }
     });
   });
   const used = new Set(), matches = [], keyUse = new Map();
-  String(text || '').split(/MATCH\s*PREVIEW/i).slice(1).forEach((chunk, mi) => {
+  // only sections with THRU are match rows (skips each match's hidden "Match Preview" popup)
+  String(text || '').split(/MATCH\s*PREVIEW/i).slice(1).filter(c => /THRU/i.test(c)).forEach((chunk, mi) => {
     const blob = norm(chunk.split(/THRU/i)[0]);
     const best = Array(blob.length + 1).fill(null); best[0] = [];
     for (let i = 0; i < blob.length; i++) {
