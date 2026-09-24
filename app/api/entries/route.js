@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: team-supervisor-v179-20260924-0300
+// build: live-status-v180-20260924-0500
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -262,6 +262,32 @@ function srvParseMatchText(text, roster) {
   }
   return { matches, ambiguous: [...ambiguous].sort((a, b) => a - b) };
 }
+// FINGERPRINT_V180_LIVE_STATUS
+// Read "thru N" and the margin from a match that's in progress. DataGolf's text can run numbers
+// together ("THRU F4 & 3" on finished matches), so "THRU 142 UP" must be split by what's POSSIBLE:
+// thru 1–18, margin 1–10 and never more than the holes played. If more than one reading fits (or
+// none), return null and the page simply shows "In progress". Leader side comes from the flag.
+function srvLiveStatus(block, flagsTrusted) {
+  if (!block || block.final) return null;
+  const t = String(block.text || '').replace(/\s+/g, ' ');
+  const mm = t.match(/THRU\s*([0-9][^L]*?)(?:LIVE|$)/i);
+  if (!mm) return null;
+  const s = mm[1].replace(/[\s—–-]+/g, '').toUpperCase();          // e.g. "142UP", "9AS", "0"
+  if (/^0(?!\d)/.test(s)) return null;                                // not started
+  const cands = [];
+  for (const k of [1, 2]) {
+    const thru = +s.slice(0, k), rem = s.slice(k);
+    if (!(thru >= 1 && thru <= 18) || s.length < k) continue;
+    if (/^(AS|ALLSQUARE|A\/S)/.test(rem)) cands.push({ thru, margin: 0 });
+    const up = rem.match(/^([1-9]\d?)UP/);                        // a margin never has a leading zero
+    if (up) { const mg = +up[1]; if (mg >= 1 && mg <= Math.min(thru, 10)) cands.push({ thru, margin: mg }); }
+  }
+  if (cands.length !== 1) return null;
+  const f = block.flags || {}, u = (f.USA || 0) > 0, i = (f.INT || 0) > 0;
+  const leader = cands[0].margin && flagsTrusted && u !== i ? (u ? 'USA' : 'INT') : null;
+  return { ...cands[0], leader };
+}
+
 async function srvTeamRoster() {
   const r = await fetch(`https://feeds.datagolf.com/field-updates?tour=pga&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
     { cache: 'no-store', signal: AbortSignal.timeout(8000) });
@@ -1883,6 +1909,22 @@ export async function POST(request) {
           if (wrote) results[sk] = `${wrote} recorded`;
         }
       }
+      // FINGERPRINT_V180_LIVE_STATUS — store each in-progress match's status with a timestamp
+      let liveChanged = false;
+      const nowIso = new Date().toISOString();
+      for (const [sk, sv] of Object.entries(all)) {
+        const blocks = body.sessions?.[sk]?.blocks;
+        if (!Array.isArray(blocks) || !blocks.length) continue;
+        const byKey = new Map(sv.matches.map(m => [keyOf(m.usa, m.intl), m]));
+        for (const b of blocks) {
+          const parsed = srvParseMatchText(b?.text || '', roster).matches[0];
+          const m = parsed && byKey.get(keyOf(parsed.usa, parsed.intl));
+          if (!m || m.result) continue;
+          const st = srvLiveStatus(b, !notStartedWithFlag.length);
+          if (st) { m.live = { ...st, at: nowIso }; liveChanged = true; }
+        }
+      }
+      if (liveChanged && !resChanged) await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
       if (resChanged) {
         await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
         await srvAlertCommissioners(pools, `${evTag}_first_results`,
