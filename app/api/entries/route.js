@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: team-invite-v182-20260924-0730
+// build: session-format-v183-20260924-0800
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -178,7 +178,8 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
   const esc = (x) => String(x || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const LABEL = { thu:'Thursday', fri:'Friday', friam:'Friday morning', fripm:'Friday afternoon',
                   satam:'Saturday morning', satpm:'Saturday afternoon', sun:'Sunday singles' };
-  const label = LABEL[sk] || sk;
+  const FMT = { fourball:'four-ball', foursomes:'foursomes', singles:'singles' };
+  const label = (LABEL[sk] || sk).replace(/ singles$/, '') + (sessNow.format && !(sk === 'sun' && sessNow.format === 'singles') ? ` ${FMT[sessNow.format]}` : (sk === 'sun' ? ' singles' : ''));
   const other = /ryder/i.test(ev) ? 'Europe' : 'International';
   const lockTxt = new Date(sessNow.lockAt).toLocaleString('en-US',
     { timeZone:'America/New_York', weekday:'long', hour:'numeric', minute:'2-digit' }) + ' ET';
@@ -304,6 +305,18 @@ function srvLiveStatus(block, flagsTrusted) {
   const f = block.flags || {}, u = (f.USA || 0) > 0, i = (f.INT || 0) > 0;
   const leader = cands[0].margin && flagsTrusted && u !== i ? (u ? 'USA' : 'INT') : null;
   return { ...cands[0], leader };
+}
+
+// FINGERPRINT_V183_SESSION_FORMAT — DataGolf prints "SESSION FORMAT: FOURBALLS" above each session's
+// matches, and the scraper already sends that part of the page. Only trusted when the same scrape
+// also read that session's OWN matches (otherwise the page may still be showing another session).
+function srvSessionFormat(sessionScrape) {
+  if (!sessionScrape || !/MATCH\s*PREVIEW/i.test(sessionScrape.text || '')) return null;
+  const plain = String(sessionScrape.html || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+  const m = plain.match(/SESSION\s*FORMAT:?\s*(FOUR[\s-]*BALLS?|FOUR[\s-]*SOMES|SINGLES)/i);
+  if (!m) return null;
+  const f = m[1].toUpperCase().replace(/[\s-]/g, '');
+  return f.startsWith('FOURBALL') ? 'fourball' : f.startsWith('FOURSOME') ? 'foursomes' : 'singles';
 }
 
 async function srvTeamRoster() {
@@ -1908,7 +1921,8 @@ export async function POST(request) {
              <p>Nothing was posted. Open Admin → Match Pick'em and paste this session in by hand.</p>`);
           continue;
         }
-        all[sk] = { lockAt: rule.lockAt, matches: matches.map((m, i) => ({ id: `m${i + 1}`, usa: m.usa, intl: m.intl, result: null })) };
+        all[sk] = { lockAt: rule.lockAt, matches: matches.map((m, i) => ({ id: `m${i + 1}`, usa: m.usa, intl: m.intl, result: null })),
+                    ...(srvSessionFormat(body.sessions?.[sk]) ? { format: srvSessionFormat(body.sessions?.[sk]) } : {}) };
         taken.set(sig(matches), sk);
         posted.push(sk);
         report[sk] = 'POSTED' + (ambiguous.length ? ` (check match ${ambiguous.join(', ')})` : '');
@@ -1968,8 +1982,14 @@ export async function POST(request) {
           if (wrote) results[sk] = `${wrote} recorded`;
         }
       }
+      // FINGERPRINT_V183_SESSION_FORMAT — fill in the format for sessions posted without one
+      let fmtChanged = false;
+      for (const [sk, sv] of Object.entries(all)) {
+        const f = srvSessionFormat(body.sessions?.[sk]);
+        if (f && sv.format !== f) { sv.format = f; fmtChanged = true; }
+      }
       // FINGERPRINT_V180_LIVE_STATUS — store each in-progress match's status with a timestamp
-      let liveChanged = false;
+      let liveChanged = fmtChanged;
       const nowIso = new Date().toISOString();
       for (const [sk, sv] of Object.entries(all)) {
         const blocks = body.sessions?.[sk]?.blocks;
@@ -2027,7 +2047,7 @@ export async function POST(request) {
       }
       const year = new Date().getFullYear();
       const all = await srvGetTeamMatches(ev);
-      if (clean.length) all[sk] = { lockAt: new Date(lockMs).toISOString(), matches: clean }; else delete all[sk];
+      if (clean.length) all[sk] = { lockAt: new Date(lockMs).toISOString(), matches: clean, ...(all[sk]?.format ? { format: all[sk].format } : {}) }; else delete all[sk];
       await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
 
       // FINGERPRINT_V175_PICKS_OPEN_EMAIL — shared with the auto-poster (see srvNotifyPicksOpen)
