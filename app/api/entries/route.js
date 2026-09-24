@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: picks-open-email-v175-20260923-2100
+// build: team-auto-sync-v176-20260923-2300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -145,6 +145,167 @@ function srvMatchScore(entryPicks, matches) {
   }
   return t;
 }
+// FINGERPRINT_V175_PICKS_OPEN_EMAIL / FINGERPRINT_V176_TEAM_AUTOSYNC
+// "Picks are open" email for one session, to every entry in one pool. Sends at most once per
+// session per pool (tracked in pool:{id}:teamnotified), and never after the session has locked.
+// Used by the commissioner's manual save AND by the automatic poster, so both send the same email.
+async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
+  let emailed = 0;
+  if (!sessNow || Date.now() >= new Date(sessNow.lockAt).getTime() || !process.env.RESEND_API_KEY) return 0;
+  const notifKey = k(poolId, 'teamnotified');
+  let notified = {};
+  try { const r = await redis('GET', notifKey); if (r) notified = JSON.parse(r); } catch {}
+  const tag = `${ev}_${year}_${sk}`.toLowerCase();
+  if (notified[tag]) return 0;
+  const esc = (x) => String(x || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const LABEL = { thu:'Thursday', fri:'Friday', friam:'Friday morning', fripm:'Friday afternoon',
+                  satam:'Saturday morning', satpm:'Saturday afternoon', sun:'Sunday singles' };
+  const label = LABEL[sk] || sk;
+  const other = /ryder/i.test(ev) ? 'Europe' : 'International';
+  const lockTxt = new Date(sessNow.lockAt).toLocaleString('en-US',
+    { timeZone:'America/New_York', weekday:'long', hour:'numeric', minute:'2-digit' }) + ' ET';
+  const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
+  const rows = sessNow.matches.map((m, i) =>
+    `<tr><td style="padding:6px 8px;color:#888;font-size:12px">${i+1}</td>` +
+    `<td style="padding:6px 8px">🇺🇸 ${esc(m.usa.join(' & '))}</td>` +
+    `<td style="padding:6px 4px;color:#aaa">v</td>` +
+    `<td style="padding:6px 8px">${esc(m.intl.join(' & '))}</td></tr>`).join('');
+  // Mark first, so two overlapping calls (manual save + auto-poster) can't double-send.
+  notified[tag] = new Date().toISOString();
+  await redis('SET', notifKey, JSON.stringify(notified));
+  const entries = await getEntries(poolId);
+  const targets = entries.filter(e => e.email);
+  const sendOne = (e) => fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
+      to: e.email,
+      subject: `${ev}: ${label} pairings are out — make your picks ⛳`,
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2a3a1e">
+          <h2 style="margin:0 0 6px">${esc(label)} pairings are out</h2>
+          <p style="margin:0 0 14px">Hi ${esc(e.name)} — pick the winner of each match before picks
+            lock at <b>${esc(lockTxt)}</b>.</p>
+          <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:16px">
+            <tr style="background:#f4f4ef"><td></td><td style="padding:6px 8px;font-weight:700">USA</td>
+              <td></td><td style="padding:6px 8px;font-weight:700">${other}</td></tr>
+            ${rows}
+          </table>
+          <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
+          <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> · your code:
+            <b style="letter-spacing:2px">${esc(e.editCode)}</b></p>
+          <p style="font-size:12px;color:#999">1 pt per correct pick · a halved match gives ½ to everyone who picked it.</p>
+        </div>`,
+    }),
+  }).then(r => { if (r.ok) emailed++; }).catch(() => {});
+  for (let i = 0; i < targets.length; i += 6) await Promise.all(targets.slice(i, i + 6).map(sendOne));
+  return emailed;
+}
+// FINGERPRINT_V176_TEAM_AUTOSYNC
+// Fully automatic posting. The droplet scrapes DataGolf's live-model page every 5 minutes and sends
+// each session's text here. A session is posted only if EVERY guard passes — otherwise nothing is
+// posted and the commissioner is emailed. Lock times are the official first tees (UTC).
+// 2026 Presidents Cup, Medinah (CDT = UTC-5): Thu 11:35, Fri 1:05p, Sat 7:02a / 1:15p, Sun 11:02 CT.
+const SRV_TEAM_SCHEDULE = {
+  'presidents cup_2026': {
+    thu:   { lockAt: '2026-09-24T16:35:00Z', count: 5,  size: 2 },
+    fri:   { lockAt: '2026-09-25T18:05:00Z', count: 5,  size: 2 },
+    satam: { lockAt: '2026-09-26T12:02:00Z', count: 4,  size: 2 },
+    satpm: { lockAt: '2026-09-26T18:15:00Z', count: 4,  size: 2 },
+    sun:   { lockAt: '2026-09-27T16:02:00Z', count: 12, size: 1 },
+  },
+};
+function srvTeamScheduleFor(ev, year) {
+  const n = (ev || '').toLowerCase();
+  const key = Object.keys(SRV_TEAM_SCHEDULE).find(kk => { const [nm, y] = kk.split('_'); return n.includes(nm) && +y === year; });
+  return key ? SRV_TEAM_SCHEDULE[key] : null;
+}
+// Same segmentation as the admin paste button, plus AMBIGUITY detection: a surname shared by two
+// rostered players (the two Kims) is only certain when both land in the same match.
+function srvParseMatchText(text, roster) {
+  const norm = (x) => String(x || '').toUpperCase().replace(/[^A-Z]/g, '');
+  const dict = new Map();
+  roster.forEach(p => {
+    const w = p.name.split(/\s+/).filter(Boolean);
+    new Set([norm(w[w.length - 1]), norm(w.slice(-2).join('')), norm(p.name)]).forEach(kk => {
+      if (kk.length >= 2) { if (!dict.has(kk)) dict.set(kk, []); dict.get(kk).push(p); }
+    });
+  });
+  const used = new Set(), matches = [], keyUse = new Map();
+  String(text || '').split(/MATCH\s*PREVIEW/i).slice(1).forEach((chunk, mi) => {
+    const blob = norm(chunk.split(/THRU/i)[0]);
+    const best = Array(blob.length + 1).fill(null); best[0] = [];
+    for (let i = 0; i < blob.length; i++) {
+      if (!best[i]) continue;
+      for (const kk of dict.keys()) if (blob.startsWith(kk, i)) {
+        const c = [...best[i], kk], j = i + kk.length;
+        if (!best[j] || best[j].length > c.length) best[j] = c;
+      }
+    }
+    const seg = best[blob.length];
+    if (!seg) { matches.push(null); return; }
+    const players = [];
+    for (const kk of seg) {
+      const cand = dict.get(kk);
+      if (cand.length > 1) { if (!keyUse.has(kk)) keyUse.set(kk, []); keyUse.get(kk).push(mi); }
+      const pick = cand.find(x => !used.has(x.name) && !players.includes(x)) || cand[0];
+      players.push(pick); used.add(pick.name);
+    }
+    matches.push({ usa: players.filter(x => x.country === 'USA').map(x => x.name),
+                   intl: players.filter(x => x.country !== 'USA').map(x => x.name) });
+  });
+  const ambiguous = new Set();
+  for (const [kk, uses] of keyUse) {
+    const sameMatch = uses.every(u => u === uses[0]);
+    if (!(sameMatch && uses.length === dict.get(kk).length)) uses.forEach(u => ambiguous.add(u + 1));
+  }
+  return { matches, ambiguous: [...ambiguous].sort((a, b) => a - b) };
+}
+async function srvTeamRoster() {
+  const r = await fetch(`https://feeds.datagolf.com/field-updates?tour=pga&file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+    { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error('field-updates ' + r.status);
+  const d = await r.json();
+  // Names built exactly as the pool page builds its field ("Last, First" → "First Last")
+  const roster = (d.field || []).filter(p => p.player_name).map(p => ({
+    name: p.player_name.includes(',') ? p.player_name.split(',').reverse().map(x => x.trim()).join(' ') : p.player_name,
+    country: p.country || '' }));
+  return { event: d.event_name || '', roster };
+}
+async function srvTeamEventPools() {
+  const pools = []; let cursor = '0'; let guard = 0;
+  do {
+    const res = await redis('SCAN', cursor, 'MATCH', 'pool:*:meta', 'COUNT', '200');
+    if (!Array.isArray(res) || res.length !== 2) break;
+    cursor = String(res[0]);
+    for (const key of (res[1] || [])) {
+      try {
+        const m = JSON.parse(await redis('GET', key));
+        const pid = key.split(':')[1];
+        const major = m?.major || await redis('GET', `pool:${pid}:major`);
+        if (srvIsTourMode(major) && srvIsTeamEvent(m?.currentPgatourEvent)) pools.push({ poolId: pid, meta: m });
+      } catch {}
+    }
+  } while (cursor !== '0' && ++guard < 50);
+  return pools;
+}
+async function srvAlertCommissioners(pools, tag, subject, html) {
+  if (!process.env.RESEND_API_KEY) return;
+  let sent = {};
+  try { const r = await redis('GET', 'teamauto:alerts'); if (r) sent = JSON.parse(r); } catch {}
+  if (sent[tag]) return;                     // each distinct problem alerts once, not every 5 minutes
+  sent[tag] = new Date().toISOString();
+  await redis('SET', 'teamauto:alerts', JSON.stringify(sent));
+  const to = [...new Set(pools.map(p => p.meta?.commissionerEmail).filter(Boolean))];
+  await Promise.all(to.map(addr => fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: 'Tuna Golf Pool <noreply@tunagolfpool.com>', to: addr, subject,
+      html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px">${html}</div>` }),
+  }).catch(() => {})));
+}
+
 async function srvTeamEntryTotals(poolId, eventName, entries) {
   const [matches, picks] = await Promise.all([srvGetTeamMatches(eventName), srvGetTeamPicks(poolId)]);
   const totals = {};
@@ -1586,6 +1747,74 @@ export async function POST(request) {
     // ─── MATCH PICK'EM ──────────────────────────────────────────────────────
     // FINGERPRINT_V173_MATCH_PICKEM
     // Commissioner posts/edits one session: its lock time, its matches, and results as they finish.
+    // FINGERPRINT_V176_TEAM_AUTOSYNC — called by the droplet with each session's scraped text
+    if (body.action === 'team-auto-sync') {
+      if (!process.env.TEAM_SYNC_SECRET || body.secret !== process.env.TEAM_SYNC_SECRET)
+        return Response.json({ error:'Unauthorized' }, { status:401 });
+      const pools = await srvTeamEventPools();
+      if (!pools.length) return Response.json({ ok:true, skipped:'no pools on a team event' });
+      const ev = pools[0].meta.currentPgatourEvent, year = new Date().getFullYear();
+      const sched = srvTeamScheduleFor(ev, year);
+      if (!sched) return Response.json({ ok:true, skipped:`no schedule configured for ${ev} ${year}` });
+      // keep the latest raw page for each session (used to build automatic results next)
+      for (const [sk, v] of Object.entries(body.sessions || {})) {
+        if (v?.html) await redis('SETEX', `teamauto:debug:${sk}`, 60 * 60 * 24 * 7, String(v.html).slice(0, 60000));
+      }
+      let roster;
+      try {
+        const r = await srvTeamRoster();
+        if (!srvIsTeamEvent(r.event)) return Response.json({ ok:true, skipped:`roster is for "${r.event}"` });
+        roster = r.roster;
+      } catch (e) { return Response.json({ ok:false, error:'roster unavailable: ' + e.message }); }
+
+      const all = await srvGetTeamMatches(ev);
+      const sig = (ms) => JSON.stringify(ms.map(m => [...m.usa].sort().join('|') + '~' + [...m.intl].sort().join('|')));
+      const taken = new Map(Object.entries(all).map(([sk, sv]) => [sig(sv.matches), sk]));
+      const report = {}, posted = [];
+      for (const [sk, rule] of Object.entries(sched)) {
+        if (all[sk]) { report[sk] = 'already posted'; continue; }
+        if (Date.now() >= new Date(rule.lockAt).getTime()) { report[sk] = 'past lock time'; continue; }
+        const text = body.sessions?.[sk]?.text || '';
+        if (!/MATCH\s*PREVIEW/i.test(text)) { report[sk] = 'pairings not out yet'; continue; }
+        const { matches, ambiguous } = srvParseMatchText(text, roster);
+        const problems = [];
+        if (matches.length !== rule.count) problems.push(`found ${matches.length} matches, expected ${rule.count}`);
+        const seen = new Set();
+        matches.forEach((m, i) => {
+          if (!m) return problems.push(`match ${i + 1}: names didn't resolve`);
+          if (m.usa.length !== rule.size || m.intl.length !== rule.size)
+            problems.push(`match ${i + 1}: expected ${rule.size} v ${rule.size}, got ${m.usa.length} v ${m.intl.length}`);
+          [...m.usa, ...m.intl].forEach(n => { if (seen.has(n)) problems.push(`${n} appears twice`); seen.add(n); });
+        });
+        if (!problems.length && taken.has(sig(matches))) problems.push(`identical to the ${taken.get(sig(matches))} session — tab likely didn't switch`);
+        if (problems.length) {
+          report[sk] = 'REJECTED: ' + problems.join('; ');
+          await srvAlertCommissioners(pools, `${ev}_${year}_${sk}_reject_${problems[0]}`,
+            `⚠️ ${ev}: couldn't auto-post ${sk} — please post it manually`,
+            `<h3>Automatic posting stopped for <b>${sk}</b></h3><p>${problems.join('<br>')}</p>
+             <p>Nothing was posted. Open Admin → Match Pick'em and paste this session in by hand.</p>`);
+          continue;
+        }
+        all[sk] = { lockAt: rule.lockAt, matches: matches.map((m, i) => ({ id: `m${i + 1}`, usa: m.usa, intl: m.intl, result: null })) };
+        taken.set(sig(matches), sk);
+        posted.push(sk);
+        report[sk] = 'POSTED' + (ambiguous.length ? ` (check match ${ambiguous.join(', ')})` : '');
+        if (ambiguous.length) {
+          const lines = ambiguous.map(i => { const m = all[sk].matches[i - 1]; return `Match ${i}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')}`; });
+          await srvAlertCommissioners(pools, `${ev}_${year}_${sk}_ambiguous`,
+            `🔎 ${ev}: ${sk} auto-posted — please check ${ambiguous.length === 1 ? 'one match' : ambiguous.length + ' matches'}`,
+            `<p>${sk} pairings were posted automatically, but these involve players who share a surname,
+             so the app had to guess which is which:</p><p>${lines.join('<br>')}</p>
+             <p>If one's wrong, fix it in Admin → Match Pick'em and save.</p>`);
+        }
+      }
+      if (posted.length) {
+        await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
+        for (const sk of posted) for (const pl of pools) await srvNotifyPicksOpen(pl.poolId, ev, year, sk, all[sk]);
+      }
+      return Response.json({ ok:true, event: ev, report });
+    }
+
     if (body.action === 'set-team-session') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const meta = await getPoolMeta(poolId);
@@ -1615,62 +1844,8 @@ export async function POST(request) {
       if (clean.length) all[sk] = { lockAt: new Date(lockMs).toISOString(), matches: clean }; else delete all[sk];
       await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
 
-      // FINGERPRINT_V175_PICKS_OPEN_EMAIL
-      // First time a session's pairings are saved (and it hasn't locked yet), email every entry in
-      // THIS pool that picks are open. Once per session per pool: later edits and result entry don't
-      // re-send. Each person gets their own message with their own code, so no addresses are shared.
-      let emailed = 0;
-      const sessNow = all[sk];
-      if (sessNow && Date.now() < new Date(sessNow.lockAt).getTime() && process.env.RESEND_API_KEY) {
-        const notifKey = k(poolId, 'teamnotified');
-        let notified = {};
-        try { const r = await redis('GET', notifKey); if (r) notified = JSON.parse(r); } catch {}
-        const tag = `${ev}_${year}_${sk}`.toLowerCase();
-        if (!notified[tag]) {
-          const esc = (x) => String(x || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-          const LABEL = { thu:'Thursday', fri:'Friday', friam:'Friday morning', fripm:'Friday afternoon',
-                          satam:'Saturday morning', satpm:'Saturday afternoon', sun:'Sunday singles' };
-          const label = LABEL[sk] || sk;
-          const other = /ryder/i.test(ev) ? 'Europe' : 'International';
-          const lockTxt = new Date(sessNow.lockAt).toLocaleString('en-US',
-            { timeZone:'America/New_York', weekday:'long', hour:'numeric', minute:'2-digit' }) + ' ET';
-          const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
-          const rows = sessNow.matches.map((m, i) =>
-            `<tr><td style="padding:6px 8px;color:#888;font-size:12px">${i+1}</td>` +
-            `<td style="padding:6px 8px">🇺🇸 ${esc(m.usa.join(' & '))}</td>` +
-            `<td style="padding:6px 4px;color:#aaa">v</td>` +
-            `<td style="padding:6px 8px">${esc(m.intl.join(' & '))}</td></tr>`).join('');
-          const entries = await getEntries(poolId);
-          const targets = entries.filter(e => e.email);
-          const sendOne = (e) => fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
-              to: e.email,
-              subject: `${ev}: ${label} pairings are out — make your picks ⛳`,
-              html: `
-                <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2a3a1e">
-                  <h2 style="margin:0 0 6px">${esc(label)} pairings are out</h2>
-                  <p style="margin:0 0 14px">Hi ${esc(e.name)} — pick the winner of each match before picks
-                    lock at <b>${esc(lockTxt)}</b>.</p>
-                  <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:16px">
-                    <tr style="background:#f4f4ef"><td></td><td style="padding:6px 8px;font-weight:700">USA</td>
-                      <td></td><td style="padding:6px 8px;font-weight:700">${other}</td></tr>
-                    ${rows}
-                  </table>
-                  <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
-                  <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> · your code:
-                    <b style="letter-spacing:2px">${esc(e.editCode)}</b></p>
-                  <p style="font-size:12px;color:#999">1 pt per correct pick · a halved match gives ½ to everyone who picked it.</p>
-                </div>`,
-            }),
-          }).then(r => { if (r.ok) emailed++; }).catch(() => {});
-          for (let i = 0; i < targets.length; i += 6) await Promise.all(targets.slice(i, i + 6).map(sendOne));
-          notified[tag] = new Date().toISOString();
-          await redis('SET', notifKey, JSON.stringify(notified));
-        }
-      }
+      // FINGERPRINT_V175_PICKS_OPEN_EMAIL — shared with the auto-poster (see srvNotifyPicksOpen)
+      const emailed = await srvNotifyPicksOpen(poolId, ev, year, sk, all[sk]);
       return Response.json({ ok:true, teamMatches: all, emailed });
     }
 
