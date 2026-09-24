@@ -1,5 +1,5 @@
 'use client';
-// build: live-status-v254-20260924-0500
+// build: team-popup-v255-20260924-0530
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -3924,8 +3924,8 @@ export default function App(){
                   })()}
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800}}>{flip(p.name)}</div>
-                    <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country} · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span>{!isTeamPool&&<> · {p.odds}</>}{p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
-                    {(()=>{
+                    <div style={{fontSize:12,color:'#8a9580',marginTop:2}}>{p.country}{!isTeamPool&&<> · <span style={{fontWeight:700,color:t?.color}}>{t?.label}</span> · {p.odds}</>}{p.confirmed&&!pastTeeTime&&field.some(q=>q.onTrack&&!q.confirmed)&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#2d7a1e',background:'#e8f5e8',padding:'1px 6px',borderRadius:8}}>✓ Confirmed</span>}{p.onTrack&&!p.confirmed&&!pastTeeTime&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:'#7a4a00',background:'#fff0d6',padding:'1px 6px',borderRadius:8}}>– On Track</span>}</div>
+                    {!isTeamPool&&(()=>{
                       // FINGERPRINT_V102_POPUP_TEE
                       // Show the tee time for the player's active round (next to play), not always R1.
                       const completed=(p.r1!=null?1:0)+(p.r2!=null?1:0)+(p.r3!=null?1:0)+(p.r4!=null?1:0);
@@ -3941,11 +3941,16 @@ export default function App(){
                     })()}
                   </div>
                   <div style={{textAlign:'right'}}>
-                    <div style={{fontSize:26,fontWeight:800,color:T.primary}}>{p.score}</div>
-                    <div style={{fontSize:12,color:'#8a9580'}}>Pos <b style={{color:'#333'}}>{p.pos}</b></div>
+                    {isTeamPool ? <>
+                      <div style={{fontSize:26,fontWeight:800,color:T.primary}}>{fmtPts(p.earnings).replace(/ pts?$/,'')}</div>
+                      <div style={{fontSize:12,color:'#8a9580'}}>match {(Math.round((+p.earnings||0)*2)/2)===1?'pt':'pts'}</div>
+                    </> : <>
+                      <div style={{fontSize:26,fontWeight:800,color:T.primary}}>{p.score}</div>
+                      <div style={{fontSize:12,color:'#8a9580'}}>Pos <b style={{color:'#333'}}>{p.pos}</b></div>
+                    </>}
                   </div>
                 </div>
-                {(() => {
+                {!isTeamPool&&(() => {
                   // liveStatsLoaded triggers re-render when stats arrive
                   if (!liveStatsLoaded) return null;
                   const stats = liveStatsRef.current?.[(p.name||'').toLowerCase().trim()];
@@ -3985,7 +3990,7 @@ export default function App(){
                     </a>
                   );
                 })()}
-                <div style={{marginBottom:4}}>
+                <div style={{marginBottom:4,display:isTeamPool?'none':undefined}}>
                   <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:1,marginBottom:8}}>ROUNDS — tap any started round for hole scores</div>
                   <div style={{display:'flex',gap:8}}>
                     {rounds.map(r=>{
@@ -4048,7 +4053,7 @@ export default function App(){
                     </div>
                   </div>);
                 })()}
-                {!holeData.loading&&!holeData.round&&completedRounds.length===0&&p.thru&&(
+                {!isTeamPool&&!holeData.loading&&!holeData.round&&completedRounds.length===0&&p.thru&&(
                   <div style={{display:'flex',gap:8,marginTop:4,marginBottom:4}}>
                     <div style={{flex:2,textAlign:'center',background:`${T.primary}0a`,borderRadius:12,padding:'10px 8px',border:`2px solid ${T.primary}22`}}>
                       <div style={{fontSize:10,color:'#888',fontWeight:600,marginBottom:4}}>TODAY</div>
@@ -4059,15 +4064,35 @@ export default function App(){
                       <div style={{fontSize:22,fontWeight:800,color:'#555'}}>{p.thru}</div>
                     </div>
                   </div>)}
-                {p.earnings>0&&<div style={{background:`${T.primary}10`,borderRadius:10,padding:'10px 14px',marginTop:14,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:13,color:T.primary,fontWeight:600}}>{isTeamPool?'Points Earned':'Projected Earnings'}</span><span style={{fontSize:20,fontWeight:800,color:T.primary}}>{fmtE(p.earnings)}</span></div>}
-              {/* FINGERPRINT_V242_TEAM_SESSIONS — this player's record by session */}
+                {!isTeamPool&&p.earnings>0&&<div style={{background:`${T.primary}10`,borderRadius:10,padding:'10px 14px',marginTop:14,display:'flex',justifyContent:'space-between',alignItems:'center'}}><span style={{fontSize:13,color:T.primary,fontWeight:600}}>{isTeamPool?'Points Earned':'Projected Earnings'}</span><span style={{fontSize:20,fontWeight:800,color:T.primary}}>{fmtE(p.earnings)}</span></div>}
+              {/* FINGERPRINT_V255_POPUP_MATCHES — team events: his matches this week instead of rounds 1-4 */}
               {isTeamPool&&(()=>{
-                const ss = teamSessionsFor(tcEventName).filter(([sk])=>teamSessions?.[sk]?.[p.name]);
-                if(!ss.length) return null;
-                const C = { W:['#e7f5ec','#1a7a3a','Won'], H:['#f7f2dc','#7a6a1a','Halved'], L:['#fbe9e9','#a33','Lost'] };
-                return <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:10}}>
-                  {ss.map(([sk,label])=>{const r=teamSessions[sk][p.name];const [bg,fg,word]=C[r];
-                    return <span key={sk} style={{fontSize:11,fontWeight:700,padding:'4px 9px',borderRadius:12,background:bg,color:fg}}>{label}: {word}</span>;})}
+                const rows = teamSessionsFor(tcEventName).map(([sk,lb])=>{
+                  const sv = teamMatches[sk];
+                  const m = sv?.matches?.find(x=>x.usa.includes(p.name)||x.intl.includes(p.name));
+                  return m ? { sk, lb, sv, m, side: m.usa.includes(p.name)?'USA':'INT' } : null;
+                }).filter(Boolean);
+                if (!rows.length) return <div style={{fontSize:12,color:'#8a9580',textAlign:'center',marginTop:12}}>No matches posted for him yet.</div>;
+                const sur = (arr)=>arr.map(n=>flip(n).split(' ').slice(-1)[0]).join(' / ');
+                return <div style={{marginTop:14}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:1,marginBottom:8}}>THIS WEEK'S MATCHES</div>
+                  {rows.map(({sk,lb,sv,m,side})=>{
+                    const mates = (side==='USA'?m.usa:m.intl).filter(n=>n!==p.name);
+                    const opps = side==='USA'?m.intl:m.usa;
+                    let txt, bg, fg;
+                    if (m.result) {
+                      const r = m.result==='H' ? 'Halved' : m.result===side ? 'Won' : 'Lost';
+                      txt = r; [bg,fg] = r==='Won'?['#e7f5ec','#1a7a3a']:r==='Lost'?['#fbe9e9','#a33']:['#f7f2dc','#7a6a1a'];
+                    } else if (isSessLocked(sv)) { txt = liveText(m) || 'In progress'; bg='#fff4e0'; fg='#9a6a00'; }
+                    else { txt = `Starts ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`; bg='#f2f4f0'; fg='#6b7c5e'; }
+                    return <div key={sk} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:'1px solid #f0f0ea',fontSize:12}}>
+                      <span style={{width:52,flexShrink:0,fontSize:10,fontWeight:800,color:T.primary}}>{lb.toUpperCase()}</span>
+                      <span style={{flex:1,minWidth:0,color:'#3a4a2e',lineHeight:1.3}}>
+                        {mates.length?<>w/ <b>{sur(mates)}</b></>:<b>Singles</b>} <span style={{color:'#999'}}>v</span> {sur(opps)}
+                      </span>
+                      <span style={{flexShrink:0,fontSize:11,fontWeight:700,padding:'3px 8px',borderRadius:10,background:bg,color:fg,whiteSpace:'nowrap'}}>{txt}</span>
+                    </div>;
+                  })}
                 </div>;
               })()}
                 {!picksHidden&&<div style={{fontSize:12,color:'#8a9580',borderTop:'1px solid #f0ebe0',paddingTop:10,marginTop:12}}>{ow.length>0?(<><span style={{fontWeight:600}}>Picked by: </span>{ow.join(', ')}</>):'Not picked by anyone in the pool'}</div>}
