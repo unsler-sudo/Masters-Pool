@@ -1,5 +1,5 @@
 'use client';
-// build: match-names-v251-20260924-0330
+// build: footer-rules-v252-20260924-0400
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -5743,8 +5743,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
       </main>
 
       <footer style={{textAlign:'center',padding:'16px 12px',fontSize:10,color:'#8a9580',borderTop:`1px solid ${T.cardBorder}`,background:T.bodyBg}}>
-        <div style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:12,color:T.primary,marginBottom:4}}>2 Favorites · 4 Contenders · 4 Longshots</div>
-        <div>Highest combined earnings wins</div>
+        {/* FINGERPRINT_V252_FOOTER_RULES — rules line follows the game being played. Built from the real
+            tier counts, so normal weeks read "2 Favorites · 4 Contenders · 4 Longshots" as before and the
+            TOUR Championship correctly reads 2 · 2 · 2; team events describe the match pick'em. */}
+        <div style={{fontFamily:"'Playfair Display',serif",fontStyle:'italic',fontSize:12,color:T.primary,marginBottom:4}}>
+          {isTeamPool ? 'Pick the winner of every match · 1 pt per correct pick' : TIERS.map(t=>`${t.picks} ${t.name}`).join(' · ')}
+        </div>
+        <div>{isTeamPool ? 'Most points wins · a halved match is worth ½' : 'Highest combined earnings wins'}</div>
       </footer>
     </div>
   );
