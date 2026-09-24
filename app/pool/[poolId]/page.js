@@ -1,5 +1,5 @@
 'use client';
-// build: photo-name-rows-v253-20260924-0430
+// build: live-status-v254-20260924-0500
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1401,6 +1401,14 @@ export default function App(){
   const fmtE = (v) => isTeamPool ? fmtPts(v) : fmt(v);   // player/entry score formatter
   // FINGERPRINT_V243_TEAM_TIERS — sides for team events (Europe for the Ryder Cup)
   const teamOf = (pl) => (pl?.country === 'USA') ? 'USA' : 'INT';
+  // FINGERPRINT_V254_LIVE_STATUS — "🇺🇸 2 UP · thru 14" / "All square · thru 9" for a match in play.
+  // Hidden if the reading is over 30 minutes old (e.g. the scraper stopped), so it never shows stale.
+  const liveText = (m) => {
+    const L = m?.live;
+    if (!L || m.result || !L.at || Date.now() - new Date(L.at).getTime() > 30*60*1000) return null;
+    const side = L.leader==='USA' ? '🇺🇸 ' : L.leader==='INT' ? teamLabel('INT').split(' ')[0]+' ' : '';
+    return L.margin ? `${side}${L.margin} UP · thru ${L.thru}` : `All square · thru ${L.thru}`;
+  };
   const surnames = (arr) => (arr||[]).filter(Boolean).map(n=>flip(n).split(' ').slice(-1)[0]).join(' / ');   // FINGERPRINT_V245
   const teamLabel = (t) => t === 'USA' ? '🇺🇸 USA' : (/ryder/i.test(tcEventName) ? '🇪🇺 Europe' : '🌏 International');
   // FINGERPRINT_V216_TIER_COLOR_CLASH
@@ -4461,7 +4469,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     const mark = !m.result||!pk ? '' : m.result==='H' ? '½ pt' : (pk===m.result ? '✓ 1 pt' : '✗');
                     return <div key={m.id} style={{marginBottom:10}}>
                       <div style={{display:'flex',fontSize:10,fontWeight:700,color:'#8a9580',marginBottom:4,letterSpacing:.4}}>
-                        <span style={{flex:1}}>MATCH {mi+1}{m.result==='H'?' · HALVED':''}</span><span>{mark}</span>
+                        <span style={{flex:1}}>MATCH {mi+1}{m.result==='H'?' · HALVED':(liveText(m)?` · ${liveText(m).toUpperCase()}`:'')}</span><span>{mark}</span>
                       </div>
                       <div style={{display:'flex',gap:6,alignItems:'stretch'}}>
                         {side('USA',m.usa,'🇺🇸')}
@@ -4643,7 +4651,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               const nU = picks.filter(x=>x==='USA').length, nI = picks.filter(x=>x==='INT').length;
               const my = chatVerified ? (myTeamPicks[active]||{})[m.id] : null;
               const status = m.result==='USA' ? '🇺🇸 USA won' : m.result==='INT' ? `${iFlag} ${iName} won` : m.result==='H' ? 'Halved'
-                : sLocked ? '● In progress' : `Starts ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`;
+                : sLocked ? `● ${liveText(m) || 'In progress'}` : `Starts ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`;
               const sideStyle = (side) => ({flex:1,minWidth:0,display:'flex',alignItems:'center',gap:7,padding:'8px 9px',borderRadius:8,
                 background: m.result===side ? `${T.primary}14` : m.result==='H' ? '#f7f2dc' : '#fafaf7',
                 border:`1.5px solid ${m.result===side?T.primary:'transparent'}`, fontWeight: m.result===side?800:600, fontSize:13});
