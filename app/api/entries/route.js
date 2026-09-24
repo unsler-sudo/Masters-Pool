@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: results-live-v178-20260924-0130
+// build: team-supervisor-v179-20260924-0300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -273,21 +273,25 @@ async function srvTeamRoster() {
     country: p.country || '' }));
   return { event: d.event_name || '', roster };
 }
+// FINGERPRINT_V179_TEAM_SUPERVISOR — SCAN + a single MGET (2 Redis commands however many pools),
+// since the droplet now asks this every 5 minutes all year and Upstash is on the free tier.
 async function srvTeamEventPools() {
-  const pools = []; let cursor = '0'; let guard = 0;
+  const keys = []; let cursor = '0'; let guard = 0;
   do {
-    const res = await redis('SCAN', cursor, 'MATCH', 'pool:*:meta', 'COUNT', '200');
+    const res = await redis('SCAN', cursor, 'MATCH', 'pool:*:meta', 'COUNT', '500');
     if (!Array.isArray(res) || res.length !== 2) break;
     cursor = String(res[0]);
-    for (const key of (res[1] || [])) {
-      try {
-        const m = JSON.parse(await redis('GET', key));
-        const pid = key.split(':')[1];
-        const major = m?.major || await redis('GET', `pool:${pid}:major`);
-        if (srvIsTourMode(major) && srvIsTeamEvent(m?.currentPgatourEvent)) pools.push({ poolId: pid, meta: m });
-      } catch {}
-    }
+    keys.push(...(res[1] || []));
   } while (cursor !== '0' && ++guard < 50);
+  if (!keys.length) return [];
+  const vals = await redis('MGET', ...keys);
+  const pools = [];
+  (vals || []).forEach((raw, ix) => {
+    try {
+      const m = JSON.parse(raw);
+      if (srvIsTourMode(m?.major) && srvIsTeamEvent(m?.currentPgatourEvent)) pools.push({ poolId: keys[ix].split(':')[1], meta: m });
+    } catch {}
+  });
   return pools;
 }
 async function srvAlertCommissioners(pools, tag, subject, html) {
@@ -1747,6 +1751,18 @@ export async function POST(request) {
     // ─── MATCH PICK'EM ──────────────────────────────────────────────────────
     // FINGERPRINT_V173_MATCH_PICKEM
     // Commissioner posts/edits one session: its lock time, its matches, and results as they finish.
+    // FINGERPRINT_V179_TEAM_SUPERVISOR — the droplet asks this every few minutes, all year:
+    // is any pool on a team event right now? That decides whether it runs the Presidents/Ryder Cup
+    // scraper or hands the droplet back to the majors scraper. Nothing is date-based.
+    if (body.action === 'team-auto-status') {
+      if (!process.env.TEAM_SYNC_SECRET || body.secret !== process.env.TEAM_SYNC_SECRET)
+        return Response.json({ error:'Unauthorized' }, { status:401 });
+      const pools = await srvTeamEventPools();
+      const ev = pools[0]?.meta?.currentPgatourEvent || null;
+      return Response.json({ ok:true, active: pools.length > 0, event: ev, pools: pools.length,
+        scheduled: !!(ev && srvTeamScheduleFor(ev, new Date().getFullYear())) });
+    }
+
     // FINGERPRINT_V176_TEAM_AUTOSYNC — called by the droplet with each session's scraped text
     if (body.action === 'team-auto-sync') {
       if (!process.env.TEAM_SYNC_SECRET || body.secret !== process.env.TEAM_SYNC_SECRET)
@@ -1754,8 +1770,9 @@ export async function POST(request) {
       const pools = await srvTeamEventPools();
       if (!pools.length) return Response.json({ ok:true, skipped:'no pools on a team event' });
       const ev = pools[0].meta.currentPgatourEvent, year = new Date().getFullYear();
+      // No session times configured for this year's event → can't set locks, so don't auto-post;
+      // alert the commissioner when pairings appear, and still record results below.
       const sched = srvTeamScheduleFor(ev, year);
-      if (!sched) return Response.json({ ok:true, skipped:`no schedule configured for ${ev} ${year}` });
       // keep the latest raw page for each session (used to build automatic results next)
       for (const [sk, v] of Object.entries(body.sessions || {})) {
         if (v?.html) await redis('SETEX', `teamauto:debug:${sk}`, 60 * 60 * 24 * 7, String(v.html).slice(0, 60000));
@@ -1771,7 +1788,18 @@ export async function POST(request) {
       const sig = (ms) => JSON.stringify(ms.map(m => [...m.usa].sort().join('|') + '~' + [...m.intl].sort().join('|')));
       const taken = new Map(Object.entries(all).map(([sk, sv]) => [sig(sv.matches), sk]));
       const report = {}, posted = [];
-      for (const [sk, rule] of Object.entries(sched)) {
+      if (!sched) {
+        for (const [sk, v] of Object.entries(body.sessions || {})) {
+          if (all[sk] || !/MATCH\s*PREVIEW/i.test(v?.text || '')) continue;
+          report[sk] = 'pairings out — no session times configured, commissioner alerted';
+          await srvAlertCommissioners(pools, `${ev}_${year}_${sk}_nosched`,
+            `${ev}: ${sk} pairings are out — please post them`,
+            `<p>${sk} pairings for the ${ev} are out, but this year's session start times aren't set up in the app,
+             so it can't lock picks by itself.</p><p>Post it from Admin → Match Pick'em (paste the pairings, set the first
+             tee time, save) — players are emailed as soon as you save.</p>`);
+        }
+      }
+      for (const [sk, rule] of Object.entries(sched || {})) {
         if (all[sk]) { report[sk] = 'already posted'; continue; }
         if (Date.now() >= new Date(rule.lockAt).getTime()) { report[sk] = 'past lock time'; continue; }
         const text = body.sessions?.[sk]?.text || '';
