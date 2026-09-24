@@ -1,5 +1,5 @@
 'use client';
-// build: picks-open-email-v249-20260923-2100
+// build: matches-view-v250-20260924-0200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1311,7 +1311,8 @@ export default function App(){
   const [myTeamPicks,setMyTeamPicks]=useState({});        // the signed-in entry's own picks, all sessions
   const [pickDraft,setPickDraft]=useState({});            // unsaved picks, per session
   const [pickTab,setPickTab]=useState(null);
-  const [pickMode,setPickMode]=useState('new');           // FINGERPRINT_V248 — 'new' entry or 'back' (already joined)
+  const [pickMode,setPickMode]=useState('new');
+  const [mvTab,setMvTab]=useState(null);                  // FINGERPRINT_V250 — Matches view session tab           // FINGERPRINT_V248 — 'new' entry or 'back' (already joined)
   const [admSess,setAdmSess]=useState({});                // admin: unsaved session edits
   const [pasteText,setPasteText]=useState('');
   // Results → each player's points and session record, which drive the Field tab and scorecard.
@@ -4135,7 +4136,7 @@ export default function App(){
 
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
-        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{t==='Enter Pool'&&isTeamPool?'Match Picks':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
+        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
       </nav>
       {lastUp&&!picksHidden&&<div style={{padding:'4px 14px',background:T.navActive,borderBottom:`1px solid ${T.cardBorder}`,textAlign:'center'}}><span style={{fontSize:10,color:'#8a9580'}}>Scores update automatically · Last: {lastUp}</span></div>}
       {justActivated&&<div style={{background:'#d1fae5',padding:'10px 16px',fontSize:13,color:'#065f46',textAlign:'center',fontWeight:600}}>🎉 Your pool is live! Share this link with your friends to start entering picks.</div>}
@@ -4587,7 +4588,90 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </button>
           </>)}
 
-        {tab==='Field'&&<>
+        {/* FINGERPRINT_V250_MATCHES_VIEW — team events: matches by session instead of a player list */}
+        {tab==='Field'&&isTeamPool&&(()=>{
+          const sessions = teamSessionsFor(tcEventName);
+          const posted = sessions.filter(([sk])=>teamMatches[sk]?.matches?.length);
+          const iLbl = teamLabel('INT'), iFlag = iLbl.split(' ')[0], iName = iLbl.split(' ').slice(1).join(' ');
+          // cup score from every recorded result
+          let usaPts = 0, intPts = 0, decided = 0, totalMatches = 0;
+          for (const [, sv] of Object.entries(teamMatches)) for (const m of (sv.matches||[])) {
+            totalMatches++;
+            if (m.result==='USA') { usaPts+=1; decided++; } else if (m.result==='INT') { intPts+=1; decided++; }
+            else if (m.result==='H') { usaPts+=.5; intPts+=.5; decided++; }
+          }
+          const TOTAL_POINTS = /ryder/i.test(tcEventName) ? 28 : 30;
+          const toWin = TOTAL_POINTS/2 + .5;
+          const fmtP = (n) => Number.isInteger(n) ? String(n) : n.toFixed(1);
+          // open on the live session, else the next one up, else the last played
+          const live = posted.find(([sk])=>isSessLocked(teamMatches[sk]) && teamMatches[sk].matches.some(m=>!m.result));
+          const next = posted.find(([sk])=>!isSessLocked(teamMatches[sk]));
+          const active = mvTab || (live||next||posted[posted.length-1]||sessions[0])[0];
+          const sv = teamMatches[active], sLocked = isSessLocked(sv);
+          const lbl = (sessions.find(([sk])=>sk===active)||[])[1];
+          const avatarStack = (names) => <div style={{display:'flex',flexShrink:0}}>{names.map((n,ix)=>{
+            const pl=field.find(f=>f.name===n), shot=pl&&headshotFor(pl);
+            return <div key={n} style={{width:26,height:26,borderRadius:'50%',marginLeft:ix?-8:0,border:'2px solid #fff',background:'#f2f4f0',
+              overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12,boxShadow:'0 1px 2px rgba(0,0,0,.15)'}}>
+              {shot?<img src={shot} alt="" loading="lazy" onError={e=>{e.currentTarget.style.display='none';}} style={{width:26,height:26,objectFit:'cover',objectPosition:'top center'}}/>:<Flag c={pl?.country}/>}
+            </div>;})}</div>;
+          const names = (arr) => <span>{arr.map((n,ix)=>{const pl=field.find(f=>f.name===n);
+            return <React.Fragment key={n}>{ix?' / ':''}<span onClick={()=>pl&&setSelectedPlayer(pl)}
+              style={{cursor:pl?'pointer':'default',textDecoration:pl?'underline':'none',textDecorationStyle:'dotted',textUnderlineOffset:2}}>{flip(n).split(' ').slice(-1)[0]}</span></React.Fragment>;})}</span>;
+          return <>
+            <div style={{...sec,textAlign:'center',padding:'14px 12px'}}>
+              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:14}}>
+                <div><div style={{fontSize:11,fontWeight:700,color:'#8a9580'}}>🇺🇸 USA</div><div style={{fontSize:30,fontWeight:800,color:usaPts>intPts?T.primary:'#3a4a2e',fontFamily:"'Playfair Display',serif"}}>{fmtP(usaPts)}</div></div>
+                <div style={{fontSize:14,color:'#bbb',fontWeight:700}}>—</div>
+                <div><div style={{fontSize:11,fontWeight:700,color:'#8a9580'}}>{iFlag} {iName}</div><div style={{fontSize:30,fontWeight:800,color:intPts>usaPts?T.primary:'#3a4a2e',fontFamily:"'Playfair Display',serif"}}>{fmtP(intPts)}</div></div>
+              </div>
+              <div style={{fontSize:11,color:'#8a9580',marginTop:4}}>
+                {usaPts>=toWin?'🏆 USA wins the Cup':intPts>=toWin?`🏆 ${iName} wins the Cup`:`${fmtP(toWin)} to win · ${decided} of ${totalMatches||TOTAL_POINTS} matches decided`}
+              </div>
+            </div>
+            <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:9}}>
+              {sessions.map(([sk,lb])=>{const x=teamMatches[sk], on=sk===active;
+                const st=!x?'TBA':!isSessLocked(x)?'upcoming':x.matches.every(m=>m.result)?'final':'live';
+                return <button key={sk} type="button" onClick={()=>setMvTab(sk)} style={{flex:'1 1 0',minWidth:58,padding:'7px 3px',borderRadius:7,cursor:'pointer',
+                  fontSize:11,fontWeight:700,border:`1.5px solid ${on?T.primary:'#ddd'}`,background:on?T.primary:'#fff',color:on?'#fff':'#3a4a2e'}}>
+                  {lb}<div style={{fontSize:9,fontWeight:600,opacity:.85}}>{st==='live'?'● live':st}</div></button>;})}
+            </div>
+            {!sv ? <div style={bx}><div style={{fontSize:36,marginBottom:8}}>⛳</div><p style={{color:'#8a9580',fontSize:13}}>{lbl} pairings haven't been announced yet.</p></div>
+            : sv.matches.map((m,mi)=>{
+              const picks = Object.values(teamPicksPublic).map(ep=>ep?.[active]?.[m.id]).filter(Boolean);
+              const nU = picks.filter(x=>x==='USA').length, nI = picks.filter(x=>x==='INT').length;
+              const my = chatVerified ? (myTeamPicks[active]||{})[m.id] : null;
+              const status = m.result==='USA' ? '🇺🇸 USA won' : m.result==='INT' ? `${iFlag} ${iName} won` : m.result==='H' ? 'Halved'
+                : sLocked ? '● In progress' : `Starts ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`;
+              const sideStyle = (side) => ({flex:1,minWidth:0,display:'flex',alignItems:'center',gap:7,padding:'8px 9px',borderRadius:8,
+                background: m.result===side ? `${T.primary}14` : m.result==='H' ? '#f7f2dc' : '#fafaf7',
+                border:`1.5px solid ${m.result===side?T.primary:'transparent'}`, fontWeight: m.result===side?800:600, fontSize:13});
+              const myMark = !my ? null : !m.result ? 'your pick' : m.result==='H' ? '½' : my===m.result ? '✓' : '✗';
+              return <div key={m.id} style={{...sec,padding:'10px 10px 11px'}}>
+                <div style={{display:'flex',alignItems:'center',marginBottom:7,fontSize:10,fontWeight:700,letterSpacing:.4,color:'#8a9580'}}>
+                  <span style={{flex:1}}>MATCH {mi+1}</span>
+                  <span style={{color:m.result?T.primary:sLocked?'#b5892c':'#8a9580'}}>{status.toUpperCase()}</span>
+                </div>
+                <div style={{display:'flex',alignItems:'stretch',gap:6}}>
+                  <div style={sideStyle('USA')}>{avatarStack(m.usa)}<div style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>🇺🇸 {names(m.usa)}</div>
+                    {my==='USA'&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}</div>
+                  <div style={{alignSelf:'center',fontSize:11,color:'#aaa',fontWeight:700}}>v</div>
+                  <div style={{...sideStyle('INT'),flexDirection:'row-reverse',textAlign:'right'}}>{avatarStack(m.intl)}<div style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{names(m.intl)} {iFlag}</div>
+                    {my==='INT'&&<span style={{marginRight:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}</div>
+                </div>
+                {sLocked&&(nU+nI)>0&&<div style={{marginTop:8}}>
+                  <div style={{display:'flex',height:6,borderRadius:3,overflow:'hidden',background:'#eee'}}>
+                    <div style={{width:`${nU/(nU+nI)*100}%`,background:'#2a4d8f'}}/><div style={{width:`${nI/(nU+nI)*100}%`,background:'#b5892c'}}/>
+                  </div>
+                  <div style={{display:'flex',fontSize:10,color:'#8a9580',marginTop:3}}>
+                    <span style={{flex:1}}>{nU} picked USA</span><span>{nI} picked {iName}</span>
+                  </div>
+                </div>}
+              </div>;
+            })}
+          </>;
+        })()}
+        {tab==='Field'&&!isTeamPool&&<>
           <input style={{...inp,marginBottom:6}} placeholder="Search players..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <div style={{display:'flex',gap:6,marginBottom:8,justifyContent:'center',flexWrap:'wrap'}}>
             {/* FINGERPRINT_V145_PAIRINGS_TOGGLE
