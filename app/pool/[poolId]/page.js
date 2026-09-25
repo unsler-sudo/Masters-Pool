@@ -1,5 +1,5 @@
 'use client';
-// build: final-margins-v263-20260925-0100
+// build: needs-picks-v264-20260925-0200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1357,6 +1357,7 @@ export default function App(){
   const [mvTab,setMvTab]=useState(null);                  // FINGERPRINT_V250 — Matches view session tab           // FINGERPRINT_V248 — 'new' entry or 'back' (already joined)
   const [admSess,setAdmSess]=useState({});                // admin: unsaved session edits
   const [pasteText,setPasteText]=useState('');
+  const [teamPickCounts,setTeamPickCounts]=useState({});  // FINGERPRINT_V264 — {entry:{session:count}} for OPEN sessions
   // Results → each player's points and session record, which drive the Field tab and scorecard.
   const applyTeamMatches=(tm)=>{
     setTeamMatches(tm||{});
@@ -1586,7 +1587,7 @@ export default function App(){
       if(d.purses){setDynamicPurses(d.purses); dynamicPursesRef.current=d.purses;}
       if(d.teamPoints){setTeamPoints(d.teamPoints); teamPointsRef.current=d.teamPoints;}
       if(d.teamSessions){setTeamSessions(d.teamSessions);}
-      if(d.teamMatches){applyTeamMatches(d.teamMatches); setTeamPicksPublic(d.teamPicks||{});}
+      if(d.teamMatches){applyTeamMatches(d.teamMatches); setTeamPicksPublic(d.teamPicks||{}); setTeamPickCounts(d.teamPickCounts||{});}
       if(d.major&&THEMES[d.major]){
         const prevMajor = activeMajorRef.current;
         const isFirstLoad = !field || field.length === 0;
@@ -4381,6 +4382,21 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       {/* FINGERPRINT_V166_MR_CHALK — chalkiest picks (highest combined win prob) */}
                       {mrChalk===e.name&&<span title="Picked all the favorites — chalkiest entry in the pool" style={{marginLeft:6,fontSize:9,fontWeight:700,color:'#5a4a1a',background:'#f0e6c8',border:'1px solid #c9a84c80',padding:'1px 7px',borderRadius:9,whiteSpace:'nowrap',verticalAlign:'middle'}}>Mr. Chalk</span>}
                       {prize>0&&<span style={{fontSize:11,fontWeight:800,padding:'2px 8px',borderRadius:10,background:i===0?'#fef3c7':i===1?'#e5e7eb':'#fde0c4',color:i===0?'#92400e':i===1?'#555':'#9a4a00',border:`1px solid ${i===0?'#fbbf24':i===1?'#999':'#e08040'}`}}>💰 ${fmtPrize(prize)}</span>}
+                      {/* FINGERPRINT_V264_NEEDS_PICKS — who still has to pick the next open session (counts only —
+                          nobody's choices are revealed). Pulses in the last 2 hours before that session locks. */}
+                      {isTeamPool&&(()=>{
+                        const next = teamSessionsFor(tcEventName)
+                          .filter(([sk])=>teamMatches[sk]?.matches?.length && !isSessLocked(teamMatches[sk]))
+                          .sort((a,b)=>new Date(teamMatches[a[0]].lockAt)-new Date(teamMatches[b[0]].lockAt))[0];
+                        if(!next) return null;
+                        const [sk,lb]=next, sv=teamMatches[sk], total=sv.matches.length;
+                        const n=teamPickCounts?.[e.name]?.[sk] ?? 0;
+                        if(n>=total) return null;
+                        const urgent = new Date(sv.lockAt).getTime()-Date.now() <= 2*60*60*1000;
+                        return <span title={`${lb} picks lock ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`}
+                          style={{fontSize:10,fontWeight:800,padding:'1px 7px',borderRadius:10,marginRight:4,background:'#fff4e0',color:'#9a5a00',
+                            border:'1px solid #f0c060',whiteSpace:'nowrap',animation:urgent?'glow 1.1s ease-in-out infinite':'none'}}>⏳ {lb} {n}/{total}</span>;
+                      })()}
                       {/* FINGERPRINT_V193_UNPAID_BLINK — nag unpaid entries once R1 is in the books */}
                       {!paymentsHidden&&(()=>{
                         const nag = !paid && roundOneComplete;
@@ -4464,7 +4480,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 setChatName(d.name); setChatCode(chatCode.trim().toUpperCase()); setChatVerified(true);
               }
               setMyTeamPicks(d.myPicks||{}); setPickDraft(prev=>{const n={...prev};delete n[active];return n;});
-              msg(`Picks saved for ${d.name||chatName} ✓`);
+              msg(`Picks saved for ${d.name||chatName} ✓`); loadEntries();
             }catch{ msg('Error saving — check connection'); }
           };
           // FINGERPRINT_V247_JOIN_THEN_PICK — joining signs you straight in (the server returns your own
