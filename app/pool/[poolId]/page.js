@@ -1,5 +1,5 @@
 'use client';
-// build: cup-total-v265-20260925-0230
+// build: official-scoreboard-v267-20260925-0330
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -4731,14 +4731,41 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>;});
           return <>
             <div style={{...sec,textAlign:'center',padding:'14px 12px'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:14}}>
-                <div><div style={{fontSize:11,fontWeight:700,color:'#8a9580'}}>🇺🇸 USA</div><div style={{fontSize:30,fontWeight:800,color:usaPts>intPts?T.primary:'#3a4a2e',fontFamily:"'Playfair Display',serif"}}>{fmtP(usaPts)}</div></div>
-                <div style={{fontSize:14,color:'#bbb',fontWeight:700}}>—</div>
-                <div><div style={{fontSize:11,fontWeight:700,color:'#8a9580'}}>{iFlag} {iName}</div><div style={{fontSize:30,fontWeight:800,color:intPts>usaPts?T.primary:'#3a4a2e',fontFamily:"'Playfair Display',serif"}}>{fmtP(intPts)}</div></div>
-              </div>
-              <div style={{fontSize:11,color:'#8a9580',marginTop:4}}>
-                {usaPts>=toWin?'🏆 USA wins the Cup':intPts>=toWin?`🏆 ${iName} wins the Cup`:`${fmtP(toWin)} to win · ${decided} of ${TOTAL_POINTS} matches decided`}
-              </div>
+              {/* FINGERPRINT_V267_SCOREBOARD — official-style: score, full name, PROJECTED (current points plus
+                  whoever leads each match in progress; all square = ½ each), and the points needed to win */}
+              {(()=>{
+                let pu = usaPts, pi = intPts;
+                for (const sv2 of Object.values(teamMatches)) for (const mm of (sv2.matches||[])) {
+                  if (mm.result) continue;
+                  const L = liveOf(mm);
+                  if (!L) continue;
+                  if (L.margin === 0) { pu += .5; pi += .5; }
+                  else if (L.leader === 'USA') pu += 1;
+                  else if (L.leader === 'INT') pi += 1;
+                }
+                const isRyder = /ryder/i.test(tcEventName);
+                const TEAM = {
+                  USA: { tag: '🇺🇸 USA', full: 'UNITED STATES', pts: usaPts, proj: pu },
+                  INT: { tag: `${iFlag} ${isRyder ? 'EUR' : 'INTL'}`, full: isRyder ? 'EUROPE' : 'INTERNATIONAL', pts: intPts, proj: pi },
+                };
+                const side = (t) => <div style={{textAlign:'center'}}>
+                  <div style={{fontSize:12,fontWeight:800,letterSpacing:1.5,color:TEAM_COLOUR[t],whiteSpace:'nowrap'}}>{TEAM[t].tag}</div>
+                  <div style={{fontSize:40,fontWeight:800,color:TEAM_COLOUR[t],fontFamily:"'Playfair Display',serif",lineHeight:1.1}}>{fmtP(TEAM[t].pts)}</div>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#3a4a2e',marginTop:6,whiteSpace:'nowrap'}}>{TEAM[t].full}</div>
+                  <div style={{fontSize:10,fontWeight:700,letterSpacing:.8,color:'#6b7c5e',marginTop:3}}>{fmtP(TEAM[t].proj)} PROJECTED</div>
+                  <div style={{fontSize:10,fontWeight:700,letterSpacing:.8,color:'#8a9580',marginTop:1}}>{fmtP(toWin)} TO WIN</div>
+                </div>;
+                return <>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'start',columnGap:10}}>
+                    {side('USA')}
+                    <div style={{fontSize:18,color:'#bbb',fontWeight:700,paddingTop:26}}>—</div>
+                    {side('INT')}
+                  </div>
+                  <div style={{fontSize:11,color:'#8a9580',marginTop:10,paddingTop:8,borderTop:'1px solid #f0f0ea'}}>
+                    {usaPts>=toWin?'🏆 USA wins the Cup':intPts>=toWin?`🏆 ${iName} wins the Cup`:`${decided} of ${TOTAL_POINTS} matches decided`}
+                  </div>
+                </>;
+              })()}
             </div>
             <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:9}}>
               {sessions.map(([sk,lb])=>{const x=teamMatches[sk], on=sk===active;
