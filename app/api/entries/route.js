@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: match-rows-v187-20260924-1230
+// build: results-rows-only-v188-20260924-1430
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1993,7 +1993,7 @@ export async function POST(request) {
       };
       const caretBad = Object.values(body.sessions || {}).flatMap(v => Array.isArray(v?.rows) ? v.rows : [])
         .some(r => { const st = srvRowState(r); return !st.final && st.holes === 0 && st.lead; });
-      const results = {}, unclear = [], recorded = [];
+      const results = {}, unclear = [], recorded = [], corrected = [];
       let resChanged = false;
       if (notStartedWithFlag.length) {
         await srvAlertCommissioners(pools, `${evTag}_flags_unreliable`,
@@ -2005,32 +2005,29 @@ export async function POST(request) {
         for (const [sk, sv] of Object.entries(all)) {
           const byKey = new Map(sv.matches.map(m => [keyOf(m.usa, m.intl), m]));
           let wrote = 0;
-          // FINGERPRINT_V187_MATCH_ROWS — winner from the caret on a finished row
+          // FINGERPRINT_V188_RESULTS_FROM_ROWS_ONLY
+          // Results come ONLY from each match row's own winner mark: DataGolf swaps the live caret for a
+          // winner flag (usa-win-flag / eur-win-flag) when a match ends, and the scraper reads either.
+          // The old guess from team-flag images near a match is gone — each match's hidden preview popup
+          // sits beside it holding BOTH teams' flags, which is how Match 3 came out backwards.
+          // Results the app wrote itself are marked auto and are CORRECTED if the page later shows a
+          // different winner; a result the commissioner entered is never touched.
+          const verdict = (st) => st.halved ? 'H' : st.lead;
+          const label = (res) => res === 'H' ? 'Halved' : res === 'USA' ? 'USA won' : 'International won';
           if (!caretBad) for (const r of (body.sessions?.[sk]?.rows || [])) {
             const kk = rowKey(r), m = kk && byKey.get(kk);
-            if (!m || m.result) continue;
+            if (!m) continue;
             const st = srvRowState(r);
             if (!st.final) continue;
-            const res = st.halved ? 'H' : st.lead;
-            if (res) {
+            const res = verdict(st);
+            if (!res) { if (!m.result) unclear.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')}`); continue; }
+            if (!m.result) {
+              m.result = res; m.auto = true; wrote++; resChanged = true;
+              recorded.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')} → ${label(res)}`);
+            } else if (m.auto && m.result !== res) {
+              corrected.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')} — was ${label(m.result)}, now ${label(res)}`);
               m.result = res; wrote++; resChanged = true;
-              recorded.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')} → ${res === 'H' ? 'Halved' : res === 'USA' ? 'USA won' : 'International won'}`);
             }
-          }
-          const blocks = body.sessions?.[sk]?.blocks;
-          if (!Array.isArray(blocks) || !blocks.length) { if (wrote) results[sk] = `${wrote} recorded`; continue; }
-          for (const b of blocks) {
-            if (!b || !b.final) continue;
-            const parsed = srvParseMatchText(b.text || '', roster).matches[0];
-            if (!parsed) continue;
-            const m = byKey.get(keyOf(parsed.usa, parsed.intl));
-            if (!m || m.result) continue;
-            const f = b.flags || {}, u = (f.USA || 0) > 0, i = (f.INT || 0) > 0;
-            const res = b.halved ? 'H' : (u !== i ? (u ? 'USA' : 'INT') : null);
-            if (res) {
-              m.result = res; wrote++; resChanged = true;
-              recorded.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')} → ${res === 'H' ? 'Halved' : res === 'USA' ? 'USA won' : 'International won'}`);
-            } else unclear.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')}`);
           }
           if (wrote) results[sk] = `${wrote} recorded`;
         }
@@ -2070,7 +2067,8 @@ export async function POST(request) {
             if (pr) { m.prob = { ...pr, at: nowIso }; d.prob = true; liveChanged = true; }
           }
           if (!d.live) {
-            const st = srvLiveStatus({ text, final, flags: block?.flags || {} }, !!block && !notStartedWithFlag.length);
+            // FINGERPRINT_V188 — never take a side from nearby flag images (popups hold both teams' flags)
+            const st = srvLiveStatus({ text, final, flags: {} }, false);
             if (st) { m.live = { ...st, at: nowIso }; d.live = true; liveChanged = true; }
           }
         };
@@ -2098,6 +2096,13 @@ export async function POST(request) {
       }
       report._live = diag;
       if (liveChanged && !resChanged) await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
+      if (corrected.length) {
+        await srvAlertCommissioners(pools, `${evTag}_corrected_${corrected.join('/')}`,
+          `${ev}: ${corrected.length === 1 ? 'a result was' : corrected.length + ' results were'} corrected automatically`,
+          `<p>DataGolf's final result differed from what the app had recorded, so it was corrected:</p>
+           <p>${corrected.join('<br>')}</p><p>Results you entered yourself are never changed.</p>`);
+        results.corrected = corrected.length;
+      }
       if (resChanged) {
         await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
         await srvAlertCommissioners(pools, `${evTag}_first_results`,
