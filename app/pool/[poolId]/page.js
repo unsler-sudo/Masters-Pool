@@ -1,5 +1,5 @@
 'use client';
-// build: needs-picks-v264-20260925-0200
+// build: cup-total-v265-20260925-0230
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -4737,7 +4737,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <div><div style={{fontSize:11,fontWeight:700,color:'#8a9580'}}>{iFlag} {iName}</div><div style={{fontSize:30,fontWeight:800,color:intPts>usaPts?T.primary:'#3a4a2e',fontFamily:"'Playfair Display',serif"}}>{fmtP(intPts)}</div></div>
               </div>
               <div style={{fontSize:11,color:'#8a9580',marginTop:4}}>
-                {usaPts>=toWin?'🏆 USA wins the Cup':intPts>=toWin?`🏆 ${iName} wins the Cup`:`${fmtP(toWin)} to win · ${decided} of ${totalMatches||TOTAL_POINTS} matches decided`}
+                {usaPts>=toWin?'🏆 USA wins the Cup':intPts>=toWin?`🏆 ${iName} wins the Cup`:`${fmtP(toWin)} to win · ${decided} of ${TOTAL_POINTS} matches decided`}
               </div>
             </div>
             <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:9}}>
