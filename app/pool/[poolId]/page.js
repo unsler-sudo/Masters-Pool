@@ -1,5 +1,5 @@
 'use client';
-// build: official-scoreboard-v267-20260925-0330
+// build: magic-links-v268-20260925-0400
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -3165,6 +3165,30 @@ export default function App(){
       setChatCode(savedCode);
       setChatVerified(true);
     }
+  },[poolId]);
+
+  // FINGERPRINT_V268_MAGIC_LINKS — arriving from an email button (?t=token): sign that entry straight in.
+  // The token is removed from the address bar immediately, so it isn't left in history or screenshots.
+  useEffect(()=>{
+    if(typeof window==='undefined') return;
+    const u=new URL(window.location.href);
+    const t=u.searchParams.get('t'); if(!t) return;
+    const openTab=u.searchParams.get('tab');
+    u.searchParams.delete('t'); u.searchParams.delete('tab');
+    window.history.replaceState({}, '', u.pathname + (u.searchParams.toString()?'?'+u.searchParams.toString():'') + u.hash);
+    (async()=>{
+      try{
+        const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({poolId,action:'magic-signin',token:t})});
+        const d=await r.json();
+        if(d.ok){
+          try{ localStorage.setItem(`chat_${poolId}_name`,d.name); localStorage.setItem(`chat_${poolId}_code`,d.code); }catch{}
+          setChatName(d.name); setChatCode(d.code); setChatVerified(true);
+          if(openTab==='picks') setTab('Enter Pool');
+          msg(`Signed in as ${d.name} ✓`);
+        } else msg(d.error||'That sign-in link has expired — sign in with your name and code');
+      }catch{}
+    })();
   },[poolId]);
 
   // Refetch schedule when active major changes (so pgatour mode loads current event info)
