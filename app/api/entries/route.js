@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: final-margins-v189-20260925-0100
+// build: reminders-batch-v190-20260925-0200
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -163,6 +163,27 @@ function srvMatchScore(entryPicks, matches) {
   }
   return t;
 }
+// FINGERPRINT_V190_BATCH — send many emails as Resend BATCH requests (up to 100 per request, counted as
+// ONE request against the 5-per-second limit). Returns how many were accepted.
+async function srvResendBatch(emails) {
+  if (!process.env.RESEND_API_KEY || !emails.length) return 0;
+  let sent = 0;
+  for (let i = 0; i < emails.length; i += 100) {
+    const chunk = emails.slice(i, i + 100);
+    try {
+      const r = await fetch('https://api.resend.com/emails/batch', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(chunk),
+      });
+      if (r.ok) { const d = await r.json().catch(() => null); sent += Array.isArray(d?.data) ? d.data.length : chunk.length; }
+      else console.log('[resend batch] HTTP', r.status, (await r.text().catch(() => '')).slice(0, 200));
+    } catch (e) { console.log('[resend batch] failed:', e.message); }
+    if (i + 100 < emails.length) await new Promise(res => setTimeout(res, 400));
+  }
+  return sent;
+}
+
 // FINGERPRINT_V175_PICKS_OPEN_EMAIL / FINGERPRINT_V176_TEAM_AUTOSYNC
 // "Picks are open" email for one session, to every entry in one pool. Sends at most once per
 // session per pool (tracked in pool:{id}:teamnotified), and never after the session has locked.
@@ -194,10 +215,9 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
   await redis('SET', notifKey, JSON.stringify(notified));
   const entries = await getEntries(poolId);
   const targets = entries.filter(e => e.email);
-  const sendOne = (e) => fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+  // FINGERPRINT_V190_BATCH — one Resend batch request (≤100 emails) instead of bursts of single sends:
+  // Resend allows 5 requests/second with no burst, so bursts of 6 were silently rejected.
+  const emails = targets.map(e => ({
       from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
       to: e.email,
       subject: `${ev}: ${label} pairings are out — make your picks ⛳`,
@@ -216,9 +236,8 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
             <b style="letter-spacing:2px">${esc(e.editCode)}</b></p>
           <p style="font-size:12px;color:#999">1 pt per correct pick · a halved match gives ½ to everyone who picked it.</p>
         </div>`,
-    }),
-  }).then(r => { if (r.ok) emailed++; }).catch(() => {});
-  for (let i = 0; i < targets.length; i += 6) await Promise.all(targets.slice(i, i + 6).map(sendOne));
+}));
+  emailed = await srvResendBatch(emails);
   return emailed;
 }
 // FINGERPRINT_V176_TEAM_AUTOSYNC
@@ -420,6 +439,57 @@ async function srvTeamArchive(poolId, eventName, entries) {
     teamMatches[sk] = { lockAt: sv.lockAt, matches: (sv.matches || []).map(m => ({ id: m.id, usa: m.usa, intl: m.intl, result: m.result || null })) };
   return { entryTotals, teamMatches, teamPicks };
 }
+// FINGERPRINT_V190_PICK_REMINDERS — about an hour before a session locks, email each entry that hasn't
+// finished picking it. At most once per entry per session (tracked in pool:{id}:teamreminded); never
+// to anyone who's done; nothing once the session has locked.
+async function srvSendPickReminders(pools, ev, year, all) {
+  if (!process.env.RESEND_API_KEY) return 0;
+  const now = Date.now(), WINDOW = 60 * 60 * 1000;
+  const due = Object.entries(all || {}).filter(([, sv]) => {
+    const t = new Date(sv?.lockAt).getTime();
+    return Number.isFinite(t) && t > now && t - now <= WINDOW && (sv.matches || []).length;
+  });
+  if (!due.length) return 0;
+  const esc = (x) => String(x || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const LABEL = { thu:'Thursday', fri:'Friday', friam:'Friday morning', fripm:'Friday afternoon',
+                  satam:'Saturday morning', satpm:'Saturday afternoon', sun:'Sunday singles' };
+  let sent = 0;
+  for (const pl of pools) {
+    const remKey = k(pl.poolId, 'teamreminded');
+    let rem = {};
+    try { const r = await redis('GET', remKey); if (r) rem = JSON.parse(r); } catch {}
+    const [entries, picks] = await Promise.all([getEntries(pl.poolId), srvGetTeamPicks(pl.poolId, ev)]);
+    const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${pl.poolId}`;
+    const jobs = [];
+    for (const [sk, sv] of due) {
+      const tag = `${ev}_${year}_${sk}`.toLowerCase();
+      const done = rem[tag] = rem[tag] || {};
+      const ids = new Set(sv.matches.map(m => m.id)), total = ids.size;
+      const lockTxt = new Date(sv.lockAt).toLocaleString('en-US', { timeZone:'America/New_York', hour:'numeric', minute:'2-digit' }) + ' ET';
+      const label = LABEL[sk] || sk;
+      for (const e of entries) {
+        if (!e.email || done[e.name]) continue;
+        const n = Object.keys((picks[e.name] || {})[sk] || {}).filter(id => ids.has(id)).length;
+        if (n >= total) continue;
+        done[e.name] = new Date().toISOString();        // mark first — never double-send
+        jobs.push({
+            from: 'Tuna Golf Pool <noreply@tunagolfpool.com>', to: e.email,
+            subject: `⏰ ${ev}: ${label} locks at ${lockTxt} — you've picked ${n} of ${total}`,
+            html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2a3a1e">
+              <h2 style="margin:0 0 6px">${esc(label)} picks lock in about an hour</h2>
+              <p>Hi ${esc(e.name)} — you've picked <b>${n} of ${total}</b> ${esc(label)} matches. Picks lock at <b>${esc(lockTxt)}</b>,
+                and any match you haven't picked scores nothing.</p>
+              <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
+              <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> · your code: <b style="letter-spacing:2px">${esc(e.editCode)}</b></p>
+            </div>` });
+      }
+    }
+    await redis('SET', remKey, JSON.stringify(rem));
+    sent += await srvResendBatch(jobs);
+  }
+  return sent;
+}
+
 async function srvTeamEntryTotals(poolId, eventName, entries) {
   const [matches, picks] = await Promise.all([srvGetTeamMatches(eventName), srvGetTeamPicks(poolId, eventName)]);
   const totals = {};
@@ -1204,13 +1274,24 @@ export async function GET(request) {
     }
 
     // FINGERPRINT_V171_TEAM_EVENTS — ship the event's stored match points to team-event pools
-    let teamMatches, teamPicks;
+    let teamMatches, teamPicks, teamPickCounts;
     if (srvIsTourMode(meta?.major) && srvIsTeamEvent(meta?.currentPgatourEvent)) {
       const [tm, tp] = await Promise.all([srvGetTeamMatches(meta.currentPgatourEvent), srvGetTeamPicks(poolId, meta.currentPgatourEvent)]);
       teamMatches = tm;
       teamPicks = srvLockedPicksOnly(tp, tm);   // FINGERPRINT_V173 — unlocked picks never leave the server
+      // FINGERPRINT_V190_PICK_COUNTS — for sessions still OPEN, only HOW MANY matches each entry has picked
+      // (never which side), so Standings can flag who still needs to pick
+      teamPickCounts = {};
+      for (const [sk, sv] of Object.entries(tm || {})) {
+        if (srvSessionLocked(sv)) continue;
+        const ids = new Set((sv.matches || []).map(m => m.id));
+        for (const e of entries) {
+          const n = Object.keys((tp[e.name] || {})[sk] || {}).filter(id => ids.has(id)).length;
+          (teamPickCounts[e.name] = teamPickCounts[e.name] || {})[sk] = n;
+        }
+      }
     }
-    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses, teamMatches, teamPicks });
+    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses, teamMatches, teamPicks, teamPickCounts });
   } catch (err) {
     return Response.json({ entries:[], locked:false, picksHidden:true, paymentsHidden:false, payments:{}, major:'pga', error:err.message });
   }
@@ -2133,6 +2214,8 @@ export async function POST(request) {
           `<p>These matches have finished, but the page didn't clearly show who won:</p><p>${unclear.join('<br>')}</p>
            <p>Enter them in Admin → Match Pick'em.</p>`);
       }
+      // FINGERPRINT_V190_PICK_REMINDERS
+      try { const nRem = await srvSendPickReminders(pools, ev, year, all); if (nRem) report._reminders = nRem; } catch {}
       return Response.json({ ok:true, event: ev, report, results });
     }
 
