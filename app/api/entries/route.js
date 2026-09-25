@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-// build: results-rows-only-v188-20260924-1430
+// build: final-margins-v189-20260925-0100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -349,6 +349,15 @@ function srvRowState(row) {
   const up = (score.match(/^(\d{1,2})UP/) || [])[1];
   return { final, halved: /HALVED/.test(score) || (final && sq), holes: +(thru.match(/THRU\s*(\d{1,2})/) || [])[1] || 0,
            margin: sq ? 0 : (up ? +up : null), lead: row?.lead === 'USA' || row?.lead === 'INT' ? row.lead : null };
+}
+
+// FINGERPRINT_V189_FINAL_SCORE — the margin a finished match was won by, as DataGolf shows it:
+// "4 & 3" → "4&3", "1UP" → "1 UP". Halved matches have none.
+function srvFinalScore(score) {
+  const s = String(score || '').toUpperCase().replace(/\s+/g, '');
+  if (/^\d{1,2}&\d{1,2}$/.test(s)) return s;
+  const up = s.match(/^(\d{1,2})UP$/);
+  return up ? `${up[1]} UP` : null;
 }
 
 async function srvTeamRoster() {
@@ -2021,12 +2030,19 @@ export async function POST(request) {
             if (!st.final) continue;
             const res = verdict(st);
             if (!res) { if (!m.result) unclear.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')}`); continue; }
+            const fs = res === 'H' ? null : srvFinalScore(r.score);
             if (!m.result) {
               m.result = res; m.auto = true; wrote++; resChanged = true;
-              recorded.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')} → ${label(res)}`);
+              if (fs) m.finalScore = fs;
+              recorded.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')} → ${label(res)}${fs ? ' ' + fs : ''}`);
             } else if (m.auto && m.result !== res) {
               corrected.push(`${sk}: ${m.usa.join(' & ')} v ${m.intl.join(' & ')} — was ${label(m.result)}, now ${label(res)}`);
               m.result = res; wrote++; resChanged = true;
+              if (fs) m.finalScore = fs; else delete m.finalScore;
+            } else if (m.result === res && fs && m.finalScore !== fs) {
+              // FINGERPRINT_V189 — fill the margin in for results already recorded (incl. the commissioner's),
+              // but only when the recorded winner agrees with the page
+              m.finalScore = fs; resChanged = true;
             }
           }
           if (wrote) results[sk] = `${wrote} recorded`;
@@ -2146,6 +2162,11 @@ export async function POST(request) {
       }
       const year = new Date().getFullYear();
       const all = await srvGetTeamMatches(ev);
+      // FINGERPRINT_V189 — keep each match's final margin if its result didn't change
+      clean.forEach(m => {
+        const prev = (all[sk]?.matches || []).find(x => x.id === m.id);
+        if (prev && prev.result && prev.result === m.result && prev.finalScore) m.finalScore = prev.finalScore;
+      });
       if (clean.length) all[sk] = { lockAt: new Date(lockMs).toISOString(), matches: clean, ...(all[sk]?.format ? { format: all[sk].format } : {}) }; else delete all[sk];
       await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
 
