@@ -1,5 +1,5 @@
 'use client';
-// build: lead-badge-v262-20260924-1230
+// build: final-margins-v263-20260925-0100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -441,6 +441,8 @@ const teamSessionsFor = (n) => /ryder/i.test(n || '')
   ? [['friam','Fri AM'],['fripm','Fri PM'],['satam','Sat AM'],['satpm','Sat PM'],['sun','Sun Singles']]
   : [['thu','Thu'],['fri','Fri'],['satam','Sat AM'],['satpm','Sat PM'],['sun','Sun Singles']];
 const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
+// FINGERPRINT_V263_TEAM_COLOURS — USA red; International (and Europe, for the Ryder Cup) blue
+const TEAM_COLOUR = { USA: '#c8102e', INT: '#1f4e9c' };
 // FINGERPRINT_V257_MATCH_TEES — each match's tee time. Within a session the gap between matches is
 // fixed, so match n tees off at (session first tee) + n × gap. Spans are first→last tee in minutes,
 // from the official 2024 Presidents Cup times, which the published 2026 Medinah windows repeat
@@ -4736,7 +4738,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               const picks = Object.values(teamPicksPublic).map(ep=>ep?.[active]?.[m.id]).filter(Boolean);
               const nU = picks.filter(x=>x==='USA').length, nI = picks.filter(x=>x==='INT').length;
               const my = chatVerified ? (myTeamPicks[active]||{})[m.id] : null;
-              const status = m.result==='USA' ? '🇺🇸 USA won' : m.result==='INT' ? `${iFlag} ${iName} won` : m.result==='H' ? 'Halved'
+              const status = m.result==='USA' ? `🇺🇸 USA wins${m.finalScore?' '+m.finalScore:''}` : m.result==='INT' ? `${iFlag} ${iName} wins${m.finalScore?' '+m.finalScore:''}` : m.result==='H' ? 'Halved'
                 : (()=>{ const tee = matchTeeMs(tcEventName, active, sv, mi);
                     if (tee && Date.now() < tee) return `Tees off ${fmtTee(tee, !sLocked)}`;
                     // FINGERPRINT_V262_LEAD_BADGE — the margin sits on the leading side; header stays neutral
@@ -4745,13 +4747,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     if (sLocked) return '● In progress';
                     return `Starts ${fmtTee(new Date(sv.lockAt).getTime(), true)}`; })();
               const sideStyle = (side) => ({flex:1,minWidth:0,display:'flex',alignItems:'center',gap:7,padding:'8px 9px',borderRadius:8,
-                background: m.result===side ? `${T.primary}14` : m.result==='H' ? '#f7f2dc' : '#fafaf7',
-                border:`1.5px solid ${m.result===side?T.primary:'transparent'}`, fontWeight: m.result===side?800:600, fontSize:13});
+                background: m.result===side ? `${TEAM_COLOUR[side]}14` : m.result==='H' ? '#f7f2dc' : '#fafaf7',
+                border:`1.5px solid ${m.result===side?TEAM_COLOUR[side]:'transparent'}`, fontWeight: m.result===side?800:600, fontSize:13});
               const myMark = !my ? null : !m.result ? 'your pick' : m.result==='H' ? '½' : my===m.result ? '✓' : '✗';
               return <div key={m.id} style={{...sec,padding:'10px 10px 11px'}}>
                 <div style={{display:'flex',alignItems:'center',marginBottom:7,fontSize:10,fontWeight:700,letterSpacing:.4,color:'#8a9580'}}>
                   <span style={{flex:1}}>MATCH {mi+1}</span>
-                  <span style={{color:m.result?T.primary:sLocked?'#b5892c':'#8a9580'}}>{status.toUpperCase()}</span>
+                  <span style={{color:m.result==='USA'||m.result==='INT'?TEAM_COLOUR[m.result]:m.result==='H'?'#8a6d1a':sLocked?'#b5892c':'#8a9580'}}>{status.toUpperCase()}</span>
                 </div>
                 <div style={{display:'flex',alignItems:'stretch',gap:6}}>
                   {[['USA','🇺🇸',m.usa],['INT',iFlag,m.intl]].map(([side,flg,list],six)=><React.Fragment key={side}>
@@ -4759,8 +4761,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <div style={{...sideStyle(side),flexDirection:'column',alignItems:'stretch',gap:5}}>
                       <div style={{display:'flex',alignItems:'center',fontSize:12,lineHeight:1}}>
                         <span>{flg}</span>
-                        {(()=>{const L=liveOf(m); return L&&L.margin&&L.leader===side
-                          ? <span style={{marginLeft:5,fontSize:10,fontWeight:800,color:'#fff',background:'#1a7a3a',padding:'2px 7px',borderRadius:9,letterSpacing:.3}}>{L.margin} UP</span> : null;})()}
+                        {(()=>{
+                          const pill=(txt)=><span style={{marginLeft:5,fontSize:10,fontWeight:800,color:'#fff',background:TEAM_COLOUR[side],padding:'2px 7px',borderRadius:9,letterSpacing:.3}}>{txt}</span>;
+                          if (m.result===side) return pill(m.finalScore || 'WON');
+                          const L=liveOf(m); return L&&L.margin&&L.leader===side ? pill(`${L.margin} UP`) : null;})()}
                         {my===side&&<span style={{marginLeft:'auto',fontSize:10,fontWeight:800,color:myMark==='✗'?'#a33':T.primary}}>{myMark}</span>}
                       </div>
                       {playerRows(list)}
