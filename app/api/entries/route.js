@@ -1,5 +1,6 @@
+import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 export const dynamic = 'force-dynamic';
-// build: reminders-batch-v190-20260925-0200
+// build: magic-links-v191-20260925-0400
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -163,6 +164,35 @@ function srvMatchScore(entryPicks, matches) {
   }
   return t;
 }
+// FINGERPRINT_V191_MAGIC_LINKS — email buttons sign the entry straight in. The link carries a signed
+// token, never the code: token = base64url({p:pool, n:entry, x:expiry}) + "." + HMAC(secret, payload|code).
+// Valid only for that entry in that pool, for 10 days, and only while their code is unchanged.
+function srvMagicSecret() { return process.env.MAGIC_LINK_SECRET || process.env.TEAM_SYNC_SECRET || ''; }
+function srvMagicToken(poolId, entry, days = 10) {
+  const secret = srvMagicSecret();
+  if (!secret || !entry?.name || !entry?.editCode) return null;
+  const payload = Buffer.from(JSON.stringify({ p: poolId, n: entry.name, x: Date.now() + days * 864e5 })).toString('base64url');
+  const sig = createHmac('sha256', secret).update(payload + '|' + String(entry.editCode).toUpperCase()).digest('base64url').slice(0, 32);
+  return `${payload}.${sig}`;
+}
+function srvMagicLink(poolUrl, poolId, entry, tab) {
+  const t = srvMagicToken(poolId, entry);
+  return t ? `${poolUrl}?t=${t}${tab ? '&tab=' + tab : ''}` : poolUrl;
+}
+function srvMagicVerify(poolId, token, entries) {
+  const secret = srvMagicSecret();
+  const dot = String(token || '').lastIndexOf('.');
+  if (!secret || dot < 1) return null;
+  const payload = token.slice(0, dot), sig = token.slice(dot + 1);
+  let data; try { data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')); } catch { return null; }
+  if (!data || data.p !== poolId || !(data.x > Date.now())) return null;
+  const entry = (entries || []).find(e => e.name.toLowerCase() === String(data.n || '').toLowerCase());
+  if (!entry?.editCode) return null;
+  const expect = createHmac('sha256', secret).update(payload + '|' + String(entry.editCode).toUpperCase()).digest('base64url').slice(0, 32);
+  if (sig.length !== expect.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(expect))) return null;
+  return entry;
+}
+
 // FINGERPRINT_V190_BATCH — send many emails as Resend BATCH requests (up to 100 per request, counted as
 // ONE request against the 5-per-second limit). Returns how many were accepted.
 async function srvResendBatch(emails) {
@@ -231,7 +261,7 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
               <td></td><td style="padding:6px 8px;font-weight:700">${other}</td></tr>
             ${rows}
           </table>
-          <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
+          <p><a href="${srvMagicLink(poolUrl, poolId, e, 'picks')}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
           <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> · your code:
             <b style="letter-spacing:2px">${esc(e.editCode)}</b></p>
           <p style="font-size:12px;color:#999">1 pt per correct pick · a halved match gives ½ to everyone who picked it.</p>
@@ -479,7 +509,7 @@ async function srvSendPickReminders(pools, ev, year, all) {
               <h2 style="margin:0 0 6px">${esc(label)} picks lock in about an hour</h2>
               <p>Hi ${esc(e.name)} — you've picked <b>${n} of ${total}</b> ${esc(label)} matches. Picks lock at <b>${esc(lockTxt)}</b>,
                 and any match you haven't picked scores nothing.</p>
-              <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
+              <p><a href="${srvMagicLink(poolUrl, pl.poolId, e, 'picks')}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
               <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> · your code: <b style="letter-spacing:2px">${esc(e.editCode)}</b></p>
             </div>` });
       }
@@ -1369,7 +1399,7 @@ export async function POST(request) {
                     <div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1a2a5c;">${editCode}</div>
                   </div>
                   <p>Visit your pool and tap "Edit my picks" on your entry to use it.</p>
-                  <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
+                  <p><a href="${srvMagicLink(poolUrl, poolId, { name: name.trim(), editCode })}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
                   <p style="font-size:12px;color:#888;margin-top:30px;">Save this email — you'll need the code if you want to edit your picks before the tournament starts.</p>
                 </div>
               `,
@@ -1447,7 +1477,7 @@ export async function POST(request) {
                   <div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0;">
                     <div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1a2a5c;">${entry.editCode}</div>
                   </div>
-                  <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
+                  <p><a href="${srvMagicLink(poolUrl, poolId, entry)}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
                 </div>
               `,
             }),
@@ -1497,7 +1527,7 @@ export async function POST(request) {
                     <div style="font-size:11px;color:#888;letter-spacing:1px;margin-bottom:6px;">YOUR EDIT CODE</div>
                     <div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1a2a5c;">${editCode}</div>
                   </div>
-                  <p><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
+                  <p><a href="${srvMagicLink(poolUrl, poolId, entries[idx])}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
                 </div>
               `,
             }),
@@ -1968,6 +1998,13 @@ export async function POST(request) {
     // Saves the official per-player match points for the pool's current team event. Stored once
     // per event, so every pool on the Presidents/Ryder Cup reads the same numbers. Values are
     // clamped to 0–5 in half-point steps (5 sessions max, ½ for a halved match).
+    // FINGERPRINT_V191_MAGIC_LINKS — sign in from an email link
+    if (body.action === 'magic-signin') {
+      const entry = srvMagicVerify(poolId, body.token, await getEntries(poolId));
+      if (!entry) return Response.json({ error:'That sign-in link has expired — sign in with your name and code' }, { status:401 });
+      return Response.json({ ok:true, name: entry.name, code: String(entry.editCode).toUpperCase() });
+    }
+
     // ─── MATCH PICK'EM ──────────────────────────────────────────────────────
     // FINGERPRINT_V173_MATCH_PICKEM
     // Commissioner posts/edits one session: its lock time, its matches, and results as they finish.
