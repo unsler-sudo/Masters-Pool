@@ -1,5 +1,5 @@
 'use client';
-// build: match-locks-v270-20260926-1600
+// build: push-notifications-v271-20260926-1800
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -443,6 +443,9 @@ const teamSessionsFor = (n) => /ryder/i.test(n || '')
 const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
 // FINGERPRINT_V263_TEAM_COLOURS — USA red; International (and Europe, for the Ryder Cup) blue
 const TEAM_COLOUR = { USA: '#c8102e', INT: '#1f4e9c' };
+// FINGERPRINT_V271_PUSH — VAPID public key (base64url) → bytes for pushManager.subscribe
+const b64ToU8 = (b64) => { const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(raw, c => c.charCodeAt(0)); };
 // FINGERPRINT_V257_MATCH_TEES — each match's tee time. Within a session the gap between matches is
 // fixed, so match n tees off at (session first tee) + n × gap. Spans are first→last tee in minutes,
 // from the official 2024 Presidents Cup times, which the published 2026 Medinah windows repeat
@@ -1302,6 +1305,9 @@ export default function App(){
   const [editCode,setEditCode]=useState('');
   const [showEditModal,setShowEditModal]=useState(null);
   const [showClaimModal,setShowClaimModal]=useState(null);
+  const [pushKey,setPushKey]=useState(null);              // FINGERPRINT_V271_PUSH
+  const [pushState,setPushState]=useState('unknown');     // unsupported | ios-browser | default | granted | on | denied
+  const [pushHide,setPushHide]=useState(false);
   const [picks,setPicks]=useState({1:[],2:[],3:[]});
   const [search,setSearch]=useState('');
   const [fieldSort,setFieldSort]=useState('leaderboard'); // 'leaderboard' or 'pairings'
@@ -1602,6 +1608,7 @@ export default function App(){
       if(d.purses){setDynamicPurses(d.purses); dynamicPursesRef.current=d.purses;}
       if(d.teamPoints){setTeamPoints(d.teamPoints); teamPointsRef.current=d.teamPoints;}
       if(d.teamSessions){setTeamSessions(d.teamSessions);}
+      if(d.pushKey!==undefined) setPushKey(d.pushKey||null);
       if(d.teamMatches){applyTeamMatches(d.teamMatches); setTeamPicksPublic(d.teamPicks||{}); setTeamPickCounts(d.teamPickCounts||{});}
       if(d.major&&THEMES[d.major]){
         const prevMajor = activeMajorRef.current;
@@ -3182,15 +3189,51 @@ export default function App(){
     }
   },[poolId]);
 
+  // FINGERPRINT_V271_PUSH — notifications. iPhones allow them only for the Home Screen app (opened from its
+  // icon), and only after a tap; Android/desktop browsers allow them straight from the site.
+  useEffect(()=>{
+    if(typeof window==='undefined') return;
+    const ios=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+    const standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true;
+    try{ if(localStorage.getItem('push_hide')==='1') setPushHide(true); }catch{}
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){
+      setPushState(ios&&!standalone?'ios-browser':'unsupported'); return;
+    }
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+    setPushState(Notification.permission==='granted'?'granted':Notification.permission==='denied'?'denied':'default');
+  },[]);
+  // once allowed and signed in: make sure this device is subscribed and tied to the entry
+  useEffect(()=>{
+    if(!(pushState==='granted'||pushState==='on')||!chatVerified||!chatName||!chatCode||!pushKey) return;
+    (async()=>{ try{
+      const reg=await navigator.serviceWorker.ready;
+      let sub=await reg.pushManager.getSubscription();
+      if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(pushKey)});
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'push-subscribe',name:chatName,code:chatCode,subscription:sub.toJSON()})});
+      const d=await r.json(); if(d.ok) setPushState('on');
+    }catch{} })();
+  },[pushState,chatVerified,chatName,chatCode,pushKey,poolId]);
+  const enablePush=async()=>{
+    try{
+      const perm=await Notification.requestPermission();      // first thing in the tap — iPhones require it
+      if(perm==='granted'){ setPushState('granted'); msg('Notifications on ✓'); }
+      else if(perm==='denied'){ setPushState('denied'); msg('Notifications are blocked — turn them on in Settings → Notifications'); }
+    }catch{ msg('Could not turn on notifications'); }
+  };
+  const hidePush=()=>{ setPushHide(true); try{ localStorage.setItem('push_hide','1'); }catch{} };
+
   // FINGERPRINT_V268_MAGIC_LINKS — arriving from an email button (?t=token): sign that entry straight in.
   // The token is removed from the address bar immediately, so it isn't left in history or screenshots.
   useEffect(()=>{
     if(typeof window==='undefined') return;
     const u=new URL(window.location.href);
-    const t=u.searchParams.get('t'); if(!t) return;
-    const openTab=u.searchParams.get('tab');
+    const t=u.searchParams.get('t'), openTab=u.searchParams.get('tab');
+    if(!t&&!openTab) return;
     u.searchParams.delete('t'); u.searchParams.delete('tab');
     window.history.replaceState({}, '', u.pathname + (u.searchParams.toString()?'?'+u.searchParams.toString():'') + u.hash);
+    if(openTab==='picks') setTab('Enter Pool');
+    if(!t) return;
     (async()=>{
       try{
         const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -3199,7 +3242,6 @@ export default function App(){
         if(d.ok){
           try{ localStorage.setItem(`chat_${poolId}_name`,d.name); localStorage.setItem(`chat_${poolId}_code`,d.code); }catch{}
           setChatName(d.name); setChatCode(d.code); setChatVerified(true);
-          if(openTab==='picks') setTab('Enter Pool');
           msg(`Signed in as ${d.name} ✓`);
         } else msg(d.error||'That sign-in link has expired — sign in with your name and code');
       }catch{}
@@ -4280,6 +4322,21 @@ export default function App(){
         </div>
       </header>
 
+      {/* FINGERPRINT_V271_PUSH — one tap to turn notifications on (team events, signed-in entries) */}
+      {isTeamPool&&chatVerified&&!pushHide&&(pushState==='default'&&pushKey
+        ? <div style={{display:'flex',alignItems:'center',gap:10,margin:'8px 10px',padding:'10px 12px',borderRadius:10,background:'#fff8e6',border:'1px solid #f0c060'}}>
+            <span style={{fontSize:20}}>🔔</span>
+            <div style={{flex:1,fontSize:13,lineHeight:1.35,color:'#3a4a2e'}}><b>Get notified</b> when pairings drop and before your picks lock.</div>
+            <button type="button" onClick={enablePush} style={{background:T.primary,color:'#fff',border:'none',borderRadius:7,padding:'8px 12px',fontWeight:700,fontSize:13,cursor:'pointer',whiteSpace:'nowrap'}}>Turn on</button>
+            <button type="button" onClick={hidePush} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
+          </div>
+        : pushState==='ios-browser'
+        ? <div style={{display:'flex',alignItems:'center',gap:10,margin:'8px 10px',padding:'10px 12px',borderRadius:10,background:'#f2f6fb',border:'1px solid #c9d6ea'}}>
+            <span style={{fontSize:20}}>📲</span>
+            <div style={{flex:1,fontSize:13,lineHeight:1.35,color:'#2a3a4e'}}>Want notifications? Tap <b>Share → Add to Home Screen</b>, then open the pool from the new icon.</div>
+            <button type="button" onClick={hidePush} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
+          </div>
+        : null)}
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
         {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
