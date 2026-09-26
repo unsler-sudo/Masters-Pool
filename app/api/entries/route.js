@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 export const dynamic = 'force-dynamic';
-// build: magic-links-v191-20260925-0400
+// build: match-locks-v192-20260926-1600
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -142,13 +142,54 @@ async function srvGetTeamPicks(poolId, ev) {
     return {};
   } catch { return {}; }
 }
-const srvSessionLocked = (sess) => !!(sess && sess.lockAt && Date.now() >= new Date(sess.lockAt).getTime());
-// Picks from sessions that haven't locked stay private — only revealed once they can't change.
+// FINGERPRINT_V192_MATCH_LOCKS — picks lock MATCH BY MATCH, not per session.
+// Each match locks at its own tee time, but never sooner than 15 minutes after its session was posted
+// (and never more than 15 minutes past its tee). Why: at the 2026 Presidents Cup DataGolf posted the Sat PM
+// pairings at 2:12 PM ET for a 2:15 lock — ~3 minutes to pick. Each session stores postedAt; each match
+// stores teeAt + lockAt (worked out here, on posting and on commissioner saves). sess.lockAt stays the
+// session's first tee. Tee spacing mirrors the page's (official 2024/2026 Presidents Cup times).
+const SRV_TEAM_SPANS = { presidents: { thu: 72, fri: 56, satam: 54, satpm: 42, sun: 137 } };
+const SRV_PICK_GRACE_MS = 15 * 60 * 1000;
+function srvMatchTeeMs(ev, sk, sv, idx) {
+  const base = new Date(sv?.lockAt).getTime();
+  if (!Number.isFinite(base)) return null;
+  if (idx <= 0) return base;
+  const span = /ryder/i.test(ev || '') ? null : SRV_TEAM_SPANS.presidents[sk];
+  const n = (sv?.matches || []).length;
+  return (!span || n < 2) ? base : base + Math.round(idx * span / (n - 1)) * 60000;
+}
+function srvApplyMatchLocks(ev, sk, sv) {
+  const posted = new Date(sv?.postedAt || 0).getTime();
+  (sv?.matches || []).forEach((m, i) => {
+    const tee = srvMatchTeeMs(ev, sk, sv, i);
+    if (!Number.isFinite(tee)) return;
+    const lock = posted > 0 ? Math.min(Math.max(tee, posted + SRV_PICK_GRACE_MS), tee + SRV_PICK_GRACE_MS) : tee;
+    m.teeAt = new Date(tee).toISOString();
+    m.lockAt = new Date(lock).toISOString();
+  });
+  return sv;
+}
+const srvMatchLockMs = (sess, m) => new Date(m?.lockAt || sess?.lockAt).getTime();
+const srvMatchLocked = (sess, m) => { const t = srvMatchLockMs(sess, m); return Number.isFinite(t) && Date.now() >= t; };
+// a session counts as LOCKED only once every one of its matches has locked
+const srvSessionLocked = (sess) => !!sess && ((sess.matches || []).length
+  ? sess.matches.every(m => srvMatchLocked(sess, m))
+  : !!(sess.lockAt && Date.now() >= new Date(sess.lockAt).getTime()));
+const srvNextOpenLockMs = (sess) => {
+  const t = (sess?.matches || []).map(m => srvMatchLockMs(sess, m)).filter(x => Number.isFinite(x) && x > Date.now());
+  return t.length ? Math.min(...t) : null;
+};
+// Picks stay private until THAT MATCH locks — revealed match by match.
 function srvLockedPicksOnly(picks, matches) {
   const out = {};
   for (const [name, bySess] of Object.entries(picks || {})) {
     for (const [sk, sel] of Object.entries(bySess || {})) {
-      if (srvSessionLocked(matches[sk])) { (out[name] = out[name] || {})[sk] = sel; }
+      const sess = matches[sk];
+      if (!sess) continue;
+      for (const [mid, v] of Object.entries(sel || {})) {
+        const m = (sess.matches || []).find(x => x.id === mid);
+        if (m && srvMatchLocked(sess, m)) ((out[name] = out[name] || {})[sk] = out[name][sk] || {})[mid] = v;
+      }
     }
   }
   return out;
@@ -220,7 +261,7 @@ async function srvResendBatch(emails) {
 // Used by the commissioner's manual save AND by the automatic poster, so both send the same email.
 async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
   let emailed = 0;
-  if (!sessNow || Date.now() >= new Date(sessNow.lockAt).getTime() || !process.env.RESEND_API_KEY) return 0;
+  if (!sessNow || srvSessionLocked(sessNow) || !process.env.RESEND_API_KEY) return 0;
   const notifKey = k(poolId, 'teamnotified');
   let notified = {};
   try { const r = await redis('GET', notifKey); if (r) notified = JSON.parse(r); } catch {}
@@ -232,7 +273,7 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
   const FMT = { fourball:'four-ball', foursomes:'foursomes', singles:'singles' };
   const label = (LABEL[sk] || sk).replace(/ singles$/, '') + (sessNow.format && !(sk === 'sun' && sessNow.format === 'singles') ? ` ${FMT[sessNow.format]}` : (sk === 'sun' ? ' singles' : ''));
   const other = /ryder/i.test(ev) ? 'Europe' : 'International';
-  const lockTxt = new Date(sessNow.lockAt).toLocaleString('en-US',
+  const lockTxt = new Date(srvNextOpenLockMs(sessNow) || sessNow.lockAt).toLocaleString('en-US',
     { timeZone:'America/New_York', weekday:'long', hour:'numeric', minute:'2-digit' }) + ' ET';
   const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
   const rows = sessNow.matches.map((m, i) =>
@@ -254,8 +295,7 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
       html: `
         <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#2a3a1e">
           <h2 style="margin:0 0 6px">${esc(label)} pairings are out</h2>
-          <p style="margin:0 0 14px">Hi ${esc(e.name)} — pick the winner of each match before picks
-            lock at <b>${esc(lockTxt)}</b>.</p>
+          <p style="margin:0 0 14px">Hi ${esc(e.name)} — pick the winner of each match. Each match locks at its tee time — the first at <b>${esc(lockTxt)}</b>.</p>
           <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:16px">
             <tr style="background:#f4f4ef"><td></td><td style="padding:6px 8px;font-weight:700">USA</td>
               <td></td><td style="padding:6px 8px;font-weight:700">${other}</td></tr>
@@ -275,6 +315,13 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
 // each session's text here. A session is posted only if EVERY guard passes — otherwise nothing is
 // posted and the commissioner is emailed. Lock times are the official first tees (UTC).
 // 2026 Presidents Cup, Medinah (CDT = UTC-5): Thu 11:35, Fri 1:05p, Sat 7:02a / 1:15p, Sun 11:02 CT.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// BUILT (v192 backend / v270 page): per-match locks + a late-pairings grace window — see
+// FINGERPRINT_V192_MATCH_LOCKS. Origin: 2026 Presidents Cup Sat PM, DataGolf posted the pairings at 2:12 PM ET
+// for a 2:15 lock. Each match now locks at its own tee, never sooner than 15 min after its session was posted
+// (capped at tee + 15); live score and win chance are hidden while a teed-off match is still open; picks are
+// revealed per match. Posting from Admin as soon as pairings are announced still gets players the most time.
+// ─────────────────────────────────────────────────────────────────────────────────────────────────────
 const SRV_TEAM_SCHEDULE = {
   'presidents cup_2026': {
     thu:   { lockAt: '2026-09-24T16:35:00Z', count: 5,  size: 2 },
@@ -476,8 +523,8 @@ async function srvSendPickReminders(pools, ev, year, all) {
   if (!process.env.RESEND_API_KEY) return 0;
   const now = Date.now(), WINDOW = 60 * 60 * 1000;
   const due = Object.entries(all || {}).filter(([, sv]) => {
-    const t = new Date(sv?.lockAt).getTime();
-    return Number.isFinite(t) && t > now && t - now <= WINDOW && (sv.matches || []).length;
+    const t = srvNextOpenLockMs(sv);
+    return t && t - now <= WINDOW && (sv.matches || []).length;
   });
   if (!due.length) return 0;
   const esc = (x) => String(x || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -495,12 +542,14 @@ async function srvSendPickReminders(pools, ev, year, all) {
       const tag = `${ev}_${year}_${sk}`.toLowerCase();
       const done = rem[tag] = rem[tag] || {};
       const ids = new Set(sv.matches.map(m => m.id)), total = ids.size;
-      const lockTxt = new Date(sv.lockAt).toLocaleString('en-US', { timeZone:'America/New_York', hour:'numeric', minute:'2-digit' }) + ' ET';
+      const lockTxt = new Date(srvNextOpenLockMs(sv) || sv.lockAt).toLocaleString('en-US', { timeZone:'America/New_York', hour:'numeric', minute:'2-digit' }) + ' ET';
+      const openIds = sv.matches.filter(m => !srvMatchLocked(sv, m)).map(m => m.id);
       const label = LABEL[sk] || sk;
       for (const e of entries) {
         if (!e.email || done[e.name]) continue;
-        const n = Object.keys((picks[e.name] || {})[sk] || {}).filter(id => ids.has(id)).length;
-        if (n >= total) continue;
+        const mine = (picks[e.name] || {})[sk] || {};
+        const n = Object.keys(mine).filter(id => ids.has(id)).length;
+        if (!openIds.some(id => !mine[id])) continue;      // nothing left for them to pick
         done[e.name] = new Date().toISOString();        // mark first — never double-send
         jobs.push({
             from: 'Tuna Golf Pool <noreply@tunagolfpool.com>', to: e.email,
@@ -2042,6 +2091,9 @@ export async function POST(request) {
       } catch (e) { return Response.json({ ok:false, error:'roster unavailable: ' + e.message }); }
 
       const all = await srvGetTeamMatches(ev);
+      // FINGERPRINT_V192_MATCH_LOCKS — give sessions posted before per-match locks their lock times
+      let lockFill = false;
+      for (const [sk0, sv0] of Object.entries(all)) if ((sv0.matches || []).some(m => !m.lockAt)) { srvApplyMatchLocks(ev, sk0, sv0); lockFill = true; }
       const sig = (ms) => JSON.stringify(ms.map(m => [...m.usa].sort().join('|') + '~' + [...m.intl].sort().join('|')));
       const taken = new Map(Object.entries(all).map(([sk, sv]) => [sig(sv.matches), sk]));
       const report = {}, posted = [];
@@ -2058,7 +2110,8 @@ export async function POST(request) {
       }
       for (const [sk, rule] of Object.entries(sched || {})) {
         if (all[sk]) { report[sk] = 'already posted'; continue; }
-        if (Date.now() >= new Date(rule.lockAt).getTime()) { report[sk] = 'past lock time'; continue; }
+        const lastTee = srvMatchTeeMs(ev, sk, { lockAt: rule.lockAt, matches: Array(rule.count).fill({}) }, rule.count - 1);
+        if (Date.now() >= lastTee + SRV_PICK_GRACE_MS) { report[sk] = 'past lock time'; continue; }
         const text = body.sessions?.[sk]?.text || '';
         if (!/MATCH\s*PREVIEW/i.test(text)) { report[sk] = 'pairings not out yet'; continue; }
         const { matches, ambiguous } = srvParseMatchText(text, roster);
@@ -2080,8 +2133,9 @@ export async function POST(request) {
              <p>Nothing was posted. Open Admin → Match Pick'em and paste this session in by hand.</p>`);
           continue;
         }
-        all[sk] = { lockAt: rule.lockAt, matches: matches.map((m, i) => ({ id: `m${i + 1}`, usa: m.usa, intl: m.intl, result: null })),
+        all[sk] = { lockAt: rule.lockAt, postedAt: new Date().toISOString(), matches: matches.map((m, i) => ({ id: `m${i + 1}`, usa: m.usa, intl: m.intl, result: null })),
                     ...(srvSessionFormat(body.sessions?.[sk]) ? { format: srvSessionFormat(body.sessions?.[sk]) } : {}) };
+        srvApplyMatchLocks(ev, sk, all[sk]);
         taken.set(sig(matches), sk);
         posted.push(sk);
         report[sk] = 'POSTED' + (ambiguous.length ? ` (check match ${ambiguous.join(', ')})` : '');
@@ -2179,7 +2233,7 @@ export async function POST(request) {
       // line may sit beside the match's block rather than inside it). Blocks go first because only they
       // carry flags (the leader's side); text fills anything blocks missed. A diagnostic per session
       // goes into the report, which the droplet logs.
-      let liveChanged = fmtChanged;
+      let liveChanged = fmtChanged || lockFill;
       const nowIso = new Date().toISOString();
       const diag = {};
       const FIN = /THRU\s*F(?=\s*(\d|HALVED|\s|$))/i;
@@ -2287,7 +2341,8 @@ export async function POST(request) {
         const prev = (all[sk]?.matches || []).find(x => x.id === m.id);
         if (prev && prev.result && prev.result === m.result && prev.finalScore) m.finalScore = prev.finalScore;
       });
-      if (clean.length) all[sk] = { lockAt: new Date(lockMs).toISOString(), matches: clean, ...(all[sk]?.format ? { format: all[sk].format } : {}) }; else delete all[sk];
+      if (clean.length) all[sk] = { lockAt: new Date(lockMs).toISOString(), postedAt: all[sk]?.postedAt || new Date().toISOString(), matches: clean, ...(all[sk]?.format ? { format: all[sk].format } : {}) }; else delete all[sk];
+      if (all[sk]) srvApplyMatchLocks(ev, sk, all[sk]);   // FINGERPRINT_V192_MATCH_LOCKS
       await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
 
       // FINGERPRINT_V175_PICKS_OPEN_EMAIL — shared with the auto-poster (see srvNotifyPicksOpen)
@@ -2309,9 +2364,12 @@ export async function POST(request) {
         const sess = matches[body.sessionKey];
         if (!sess) return Response.json({ error:'That session has no matches yet' }, { status:400 });
         if (srvSessionLocked(sess)) return Response.json({ error:'This session has locked — picks are final' }, { status:403 });
-        const ids = new Set(sess.matches.map(m => m.id)), cleanP = {};
+        // FINGERPRINT_V192_MATCH_LOCKS — only OPEN matches can change; a locked match keeps its saved pick
+        const openIds = new Set(sess.matches.filter(m => !srvMatchLocked(sess, m)).map(m => m.id));
+        const prev = (all[entry.name] || {})[body.sessionKey] || {}, cleanP = {};
+        for (const m of sess.matches) if (!openIds.has(m.id) && (prev[m.id] === 'USA' || prev[m.id] === 'INT')) cleanP[m.id] = prev[m.id];
         for (const [mid, v] of Object.entries(body.picks || {})) {
-          if (ids.has(mid) && (v === 'USA' || v === 'INT')) cleanP[mid] = v;
+          if (openIds.has(mid) && (v === 'USA' || v === 'INT')) cleanP[mid] = v;
         }
         all[entry.name] = { ...(all[entry.name] || {}), [body.sessionKey]: cleanP };
         await redis('SET', srvTeamPicksKey(poolId, ev, new Date().getFullYear()), JSON.stringify(all));
