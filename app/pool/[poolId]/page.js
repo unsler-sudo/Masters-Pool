@@ -1,5 +1,5 @@
 'use client';
-// build: magic-links-v268-20260925-0400
+// build: projected-standings-v269-20260926-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -3433,8 +3433,23 @@ export default function App(){
   // Only re-rank entries once field has earnings data, otherwise keep stable order
   // This eliminates the loading flicker where rankings briefly shift as data streams in
   const fieldHasEarnings = field.some(f => f.earnings > 0);
+  // FINGERPRINT_V269_PROJECTED — an entry's points IF every live match finished as it stands: +1 for backing
+  // the side that's up, +½ for a match that's all square. Standings sort by it (then by real points);
+  // with nothing in play it equals the real total. Live-match picks are already public (session locked).
+  const projE = (e) => {
+    let t = teamE(e);
+    if (!isTeamPool) return t;
+    const ep = teamPicksPublic[e.name] || {};
+    for (const [sk, sv] of Object.entries(teamMatches)) for (const m of (sv.matches||[])) {
+      if (m.result) continue;
+      const L = liveOf(m), pk = ep?.[sk]?.[m.id];
+      if (!L || !pk) continue;
+      if (L.margin === 0) t += 0.5; else if (L.leader && pk === L.leader) t += 1;
+    }
+    return t;
+  };
   const ranked = (fieldHasEarnings || isTeamPool)
-    ? [...entries].sort((a,b)=>teamE(b)-teamE(a))
+    ? [...entries].sort((a,b)=> isTeamPool ? ((projE(b)-projE(a)) || (teamE(b)-teamE(a))) : (teamE(b)-teamE(a)))
     : entries;
   const owners=n=>isTeamPool?[]:entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
   // FINGERPRINT_V166_MR_CHALK / FINGERPRINT_V168_ODDS_BASED
@@ -4393,7 +4408,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             // Winner-take-all (toggle or ≤4 entries) → [pot,0,0]. Else 1st/2nd/3rd split.
             const prizes = computePrizes(ranked.length, pot, fee);
             const prize = !showPrizes ? 0
-              : isTeamPool ? splitPrizesForTies(ranked.map(teamE), prizes)[i]
+              : isTeamPool ? splitPrizesForTies(ranked.map(projE), prizes)[i]
               : (i<3?prizes[i]:0);
             return(
               <div key={e.name} style={{background:'#fff',borderRadius:11,padding:'12px 14px',marginBottom:7,border:`1px solid ${T.cardBorder}`,animation:'fu .3s ease both',animationDelay:i*.04+'s'}}>
@@ -4437,7 +4452,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <button type="button" onClick={(ev)=>{ev.stopPropagation();setShowEditModal(e.name);}} style={{background:'transparent',border:`1px solid ${T.primary}30`,color:T.primary,padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>✏️ Edit</button>
                     :<button type="button" onClick={(ev)=>{ev.stopPropagation();setShowClaimModal(e.name);}} style={{background:'transparent',border:`1px solid #c9a84c80`,color:'#7a5500',padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>📧 Add email</button>
                   )}
-                  {!picksHidden&&<div style={{fontWeight:800,fontSize:17,color:T.primary}}>{fmtE(tot)}</div>}
+                  {!picksHidden&&<div style={{textAlign:'right'}}>
+                    <div style={{fontWeight:800,fontSize:17,color:T.primary}}>{fmtE(tot)}</div>
+                    {isTeamPool&&(()=>{const pr=projE(e); return pr!==tot
+                      ? <div style={{fontSize:10,fontWeight:700,color:'#9a6a00',whiteSpace:'nowrap'}}>↗ {fmtPts(pr).replace(/ pts?$/,'')} projected</div> : null;})()}
+                  </div>}
                 </div>
                 {/* FINGERPRINT_V245_MATCH_PICKEM — an entry's picks, revealed session by session as each locks */}
                 {isTeamPool&&!picksHidden&&(()=>{
