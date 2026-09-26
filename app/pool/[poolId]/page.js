@@ -1,5 +1,5 @@
 'use client';
-// build: notify-settings-v272-20260926-2100
+// build: unpaid-team-v273-20260926-2130
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -3624,6 +3624,13 @@ export default function App(){
   // FINGERPRINT_V193_R1_COMPLETE
   // R1 is done once every player still in the event has an R1 stroke count. Used to start nagging
   // unpaid entries — by then everyone has had a full round to settle up, and the pool is real.
+  // FINGERPRINT_V273_UNPAID_TEAM — Cup weeks have no stroke-play Round 1, so the Unpaid badge starts
+  // blinking once the FIRST session (earliest first tee) has a result for every match instead.
+  const firstSessionDone = (()=>{
+    const ss = Object.values(teamMatches||{}).filter(sv=>sv?.matches?.length && sv.lockAt)
+      .sort((a,b)=>new Date(a.lockAt)-new Date(b.lockAt));
+    return !!ss[0] && ss[0].matches.every(m=>m.result);
+  })();
   const roundOneComplete = field.length > 0 && field.every(p => {
     const isCut = /CUT|WD|DQ|MC/i.test(p.pos);
     return isCut || p.r1 != null;
@@ -4571,7 +4578,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       })()}
                       {/* FINGERPRINT_V193_UNPAID_BLINK — nag unpaid entries once R1 is in the books */}
                       {!paymentsHidden&&(()=>{
-                        const nag = !paid && roundOneComplete;
+                        const nag = !paid && (isTeamPool ? firstSessionDone : roundOneComplete);
                         return <span title={nag?'Still owes the pot':undefined} style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,
                           background:paid?'#e8f5e8':(nag?'#fdeaea':'#f5f5f5'),
                           color:paid?'#2d7a1e':(nag?'#c62828':'#aaa'),
