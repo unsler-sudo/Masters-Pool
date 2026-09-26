@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
 export const dynamic = 'force-dynamic';
-// build: push-notifications-v193-20260926-1800
+// build: notify-engine-v194-20260926-2100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -255,8 +255,9 @@ async function srvPushMany(poolId, items) {
   try { const r = await redis('GET', key); if (r) subs = JSON.parse(r); } catch {}
   let sent = 0, pruned = false;
   const jobs = [];
-  for (const { name, payload } of items) {
+  for (const { name, payload, type } of items) {
     for (const sub of (subs[name] || [])) {
+      if (type && !srvPushWants(sub, type)) continue;          // FINGERPRINT_V194 — this device opted out
       jobs.push(webpush.sendNotification(sub, JSON.stringify(payload), { TTL: 60 * 60 })
         .then(() => { sent++; })
         .catch(err => {
@@ -269,6 +270,174 @@ async function srvPushMany(poolId, items) {
   await Promise.all(jobs);
   if (pruned) await redis('SET', key, JSON.stringify(subs));
   return sent;
+}
+
+// FINGERPRINT_V194_NOTIFY_PREFS — what each device wants. Opt-ins default OFF; the rest default ON.
+const SRV_PUSH_DEFAULTS = { picksOpen: true, pickReminder: true, lockSoon: true, poolOpen: true, cut: true, recap: true,
+  final: true, leadChange: false, golferMoment: false, chatMention: false, newEntry: true, unpaid: true };
+const srvPushWants = (dev, type) => (dev?.prefs && typeof dev.prefs[type] === 'boolean') ? dev.prefs[type] : SRV_PUSH_DEFAULTS[type] !== false;
+const srvCleanPrefs = (p) => { const o = {}; for (const kk of Object.keys(SRV_PUSH_DEFAULTS)) if (typeof p?.[kk] === 'boolean') o[kk] = p[kk]; return o; };
+const srvPrefsView = (dev) => { const o = {}; for (const kk of Object.keys(SRV_PUSH_DEFAULTS)) o[kk] = srvPushWants(dev, kk); return o; };
+
+// FINGERPRINT_V194_NOTIFY_ENGINE — normal-week notifications, checked every 5 minutes (piggybacks on the
+// droplet's year-round status check). Only pools in the `pushpools` set are looked at, and each needs just
+// one MGET for meta + devices + state, so it's light on the free Redis tier. Per-event state lives in
+// pool:{id}:notifystate so each notice goes once.
+const SRV_MAJOR_LABEL = { masters: 'The Masters', pga: 'PGA Championship', usopen: 'U.S. Open', open: 'The Open', players: 'THE PLAYERS' };
+function srvTourTZ(lat, lng) {                       // same rules as the page's tournamentTimeZone
+  if (lat == null || lng == null) return 'America/New_York';
+  lat = Number(lat); lng = Number(lng);
+  if (lng > -30) { if (lat > 50 && lng < 2) return 'Europe/London'; if (lat > 40 && lng < 20) return 'Europe/Madrid'; return 'Europe/London'; }
+  if (lng < -100 && lng > -130) return (lat < 37 && lng > -118) ? 'America/Phoenix' : 'America/Los_Angeles';
+  if (lng <= -100 && lng >= -103) return 'America/Chicago';
+  if (lng < -100) return 'America/Denver';
+  if (lng < -87) return 'America/Chicago';
+  if (lng < -67) return 'America/New_York';
+  return lat < 20 ? 'America/Puerto_Rico' : 'America/New_York';
+}
+function srvLocalToUtcMs(str, tz) {                  // "YYYY-MM-DD HH:MM" in venue time → UTC ms
+  const m = String(str || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const naive = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  const f = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(naive);
+  const l = f.match(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2})/);
+  if (!l) return null;
+  const asLocal = Date.UTC(+l[3], +l[1] - 1, +l[2], +l[4] % 24, +l[5]);
+  return naive - (asLocal - naive);
+}
+const srvNormEv = (x) => String(x || '').toLowerCase().replace(/^the\s+/, '').replace(/\s+\d{4}$/, '').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+const srvEvMatch = (a, b) => { const x = srvNormEv(a), y = srvNormEv(b); return !!x && !!y && (x.includes(y) || y.includes(x)); };
+const srvBig = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M' : '$' + Math.round((n || 0) / 1000) + 'K';
+const srvOrd = (n) => n + (['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
+
+async function srvNotifyTick() {
+  if (!srvPushReady()) return { skipped: 'no VAPID keys' };
+  let pids = [];
+  try { pids = (await redis('SMEMBERS', 'pushpools')) || []; } catch {}
+  if (!pids.length) return { pools: 0 };
+  const cache = {};
+  const dg = async (path) => {
+    if (cache[path] !== undefined) return cache[path];
+    try {
+      const r = await fetch(`https://feeds.datagolf.com/${path}${path.includes('?') ? '&' : '?'}file_format=json&key=${process.env.DATAGOLF_API_KEY}`,
+        { cache: 'no-store', signal: AbortSignal.timeout(6000) });
+      cache[path] = r.ok ? await r.json() : null;
+    } catch { cache[path] = null; }
+    return cache[path];
+  };
+  const vals = await redis('MGET', ...pids.flatMap(p => [k(p, 'meta'), k(p, 'pushsubs'), k(p, 'notifystate')]));
+  const out = {};
+  for (let i = 0; i < pids.length; i++) {
+    try {
+      const meta = JSON.parse(vals[i * 3] || 'null'), subs = JSON.parse(vals[i * 3 + 1] || '{}'), st = JSON.parse(vals[i * 3 + 2] || '{}');
+      if (!meta || !Object.values(subs).some(v => (v || []).length)) continue;
+      out[pids[i]] = await srvNotifyPool(pids[i], meta, subs, st, dg);
+    } catch (e) { out[pids[i]] = 'error: ' + e.message; }
+  }
+  return out;
+}
+
+async function srvNotifyPool(pid, meta, subs, st, dg) {
+  const tourMode = srvIsTourMode(meta.major);
+  const evName = tourMode ? (meta.currentPgatourEvent || '') : (SRV_MAJOR_LABEL[meta.major] || '');
+  if (!evName || srvIsTeamEvent(evName)) return 'skip';               // Cup weeks have their own notices
+  const poolName = meta.poolName || 'Your pool';
+  const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${pid}`;
+  const evKey = `${meta.major}|${evName}`.toLowerCase();
+  const people = Object.keys(subs).filter(n => n !== '__admin__' && (subs[n] || []).length);
+  const items = [];
+  const push = (name, type, title, body, tag) => items.push({ name, type, payload: { title, body, url: poolUrl, tag: tag || `${type}-${evKey}` } });
+  let changed = false;
+  // 📢 a new event → the pool is open (not on the very first check, which just records where we are)
+  if (!st.evKey) { st = { evKey, ev: {} }; changed = true; }
+  else if (st.evKey !== evKey) {
+    st = { evKey, ev: {} }; changed = true;
+    people.forEach(n => push(n, 'poolOpen', `${evName} is open ⛳`, `${poolName} — get your picks in before the first tee.`));
+  }
+  const ev = st.ev = st.ev || {};
+  const entries = await getEntries(pid);
+  const entered = new Set(entries.map(e => e.name.toLowerCase()));
+  const tour = srvTour(meta.major), now = Date.now();
+  // ⏰ first tee (worked out once per event from DataGolf's tee times + the venue's time zone)
+  if (!ev.firstTee) {
+    const fu = await dg(`field-updates?tour=${tour}`);
+    if (fu && srvEvMatch(fu.event_name, evName)) {
+      const tees = (fu.field || []).flatMap(p => (p.teetimes || []).filter(t => +t.round_num === 1).map(t => String(t.teetime || '')))
+        .filter(x => /^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}/.test(x)).sort();
+      if (tees.length) {
+        const sch = await dg(`get-schedule?tour=${tour}`);
+        const sev = (sch?.schedule || []).find(x => srvEvMatch(x.event_name, evName));
+        const ms = srvLocalToUtcMs(tees[0], srvTourTZ(sev?.latitude, sev?.longitude));
+        if (ms) { ev.firstTee = ms; changed = true; }
+      }
+    }
+  }
+  if (ev.firstTee && !ev.lockSoon && now >= ev.firstTee - 60 * 60000 && now < ev.firstTee) {
+    ev.lockSoon = true; changed = true;
+    const t = new Date(ev.firstTee).toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' }) + ' ET';
+    people.filter(n => !entered.has(n.toLowerCase()))
+      .forEach(n => push(n, 'lockSoon', `⏰ ${poolName} locks at ${t}`, `You're not in yet for the ${evName} — make your picks before the first tee.`));
+    const payments = await getPayments(pid);
+    const unpaid = entries.filter(e => !payments[e.name]).length, pot = entries.length * (meta.entryFee || 0);
+    push('__admin__', 'unpaid', `${evName}: ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}${pot ? ` · $${pot} pot` : ''}`,
+      unpaid ? `${unpaid} still unpaid — the pool locks at ${t}.` : `Everyone's paid ✓ — the pool locks at ${t}.`);
+  }
+  // 🏁 live: round recaps, the cut, the final result, lead changes, golfer moments
+  if (entries.length && (!ev.firstTee || now >= ev.firstTee)) {
+    const ip = await dg(`preds/in-play?tour=${tour}&dead_heat=no&odds_format=percent`);
+    const players = ip?.data || ip?.players || [];
+    if (players.length && srvEvMatch(ip?.info?.event_name, evName)) {
+      const round = +(ip?.info?.current_round) || 0;
+      const active = players.filter(p => !/CUT|WD|DQ|MC/i.test(String(p.current_pos || '')));
+      const roundDone = round > 0 && active.length > 0 && active.every(p => String(p.thru).toUpperCase() === 'F' || +p.thru === 18);
+      const purse = meta?.purses?.[meta.major] || meta?.purses?.pgatour || (meta.major === 'dpworld' ? 3750000
+        : srvIsTourChampionship(evName) ? 40000000 : (srvIsSignature(evName.toLowerCase(), null) ? 20000000 : 9000000));
+      const byPick = srvEarningsByPick(entries, srvComputeEarnings(players, purse, evName.toLowerCase(), meta.major));
+      const table = entries.map(e => ({ name: e.name, picks: e.picks || [], total: (e.picks || []).reduce((sum, pk) => sum + (byPick[pk] || 0), 0) }))
+        .sort((a, b) => b.total - a.total);
+      const leader = table[0];
+      const placeOf = (row) => 1 + table.filter(x => x.total > row.total).length;
+      if (roundDone && !ev['r' + round]) {
+        ev['r' + round] = true; changed = true;
+        const hasCut = players.some(p => /CUT|MC/i.test(String(p.current_pos || '')));
+        for (const n of people) {
+          const row = table.find(x => x.name.toLowerCase() === n.toLowerCase());
+          if (!row) continue;
+          const pl = placeOf(row);
+          const standing = pl === 1 ? `You lead the pool with ${srvBig(row.total)}` : `You're ${srvOrd(pl)} with ${srvBig(row.total)} — ${leader.name} leads with ${srvBig(leader.total)}`;
+          if (round >= 4) push(n, 'final', pl === 1 ? `🏆 You won the ${evName} pool!` : `🏁 Final: ${leader.name} wins the pool`,
+            pl === 1 ? `${srvBig(row.total)} in earnings — congratulations!` : `You finished ${srvOrd(pl)} with ${srvBig(row.total)}.`);
+          else if (round === 2 && hasCut) push(n, 'cut', `✂️ The cut's in — ${row.picks.filter(pk => (byPick[pk] || 0) > 0).length} of ${row.picks.length} made it`, `${standing}.`);
+          else push(n, 'recap', `🏁 After Round ${round}: you're ${srvOrd(pl)}`, `${standing}.`);
+        }
+      }
+      // 🔥 Sunday lead changes (opt-in), at most one an hour
+      if (round === 4 && !roundDone && leader && leader.total > 0) {
+        if (ev.leader && ev.leader !== leader.name && now - (ev.leaderAt || 0) >= 60 * 60000) {
+          people.forEach(n => push(n, 'leadChange', `🔥 ${leader.name} takes the lead`, `${srvBig(leader.total)} in the ${evName} pool.`, `lead-${evKey}`));
+          ev.leaderAt = now;
+        }
+        if (ev.leader !== leader.name) { ev.leader = leader.name; changed = true; }
+      }
+      // ⛳ one of your golfers takes the outright lead (opt-in), rounds 3–4, once per golfer per round
+      if (round >= 3 && !roundDone) {
+        ev.gm = ev.gm || {};
+        for (const g of players.filter(p => String(p.current_pos || '') === '1')) {
+          const key = `${round}:${srvNormalizeName(g.player_name)}`;
+          if (ev.gm[key]) continue;
+          ev.gm[key] = true; changed = true;
+          const vars = new Set(srvNameVariants(g.player_name));
+          const disp = String(g.player_name || '').includes(',') ? g.player_name.split(',').reverse().map(x => x.trim()).join(' ') : g.player_name;
+          for (const row of table) if (row.picks.some(pk => vars.has(srvNormalizeName(pk))))
+            push(row.name, 'golferMoment', `⛳ ${disp} leads the ${evName}`, `One of your picks is out in front in Round ${round}.`, `gm-${key}`);
+        }
+      }
+    }
+  }
+  let sent = 0;
+  if (items.length) sent = await srvPushMany(pid, items);
+  if (changed) await redis('SET', k(pid, 'notifystate'), JSON.stringify(st));
+  return { event: evName, queued: items.length, sent };
 }
 
 // FINGERPRINT_V190_BATCH — send many emails as Resend BATCH requests (up to 100 per request, counted as
@@ -352,7 +521,7 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
     await srvPushMany(poolId, entries.map(e => ({ name: e.name, payload: {
       title: `${label} pairings are out ⛳`,
       body: `Make your picks — the first match locks at ${first}.`,
-      url: `${poolUrl}?tab=picks`, tag: `open-${tag}` } })));
+      url: `${poolUrl}?tab=picks`, tag: `open-${tag}` }, type: 'picksOpen' })));
   } catch (e) { console.log('[push] picks-open failed:', e.message); }
   return emailed;
 }
@@ -600,7 +769,7 @@ async function srvSendPickReminders(pools, ev, year, all) {
         pushes.push({ name: e.name, payload: {
           title: `⏰ ${label} locks soon`,
           body: `You've picked ${n} of ${total} — the next match locks at ${lockTxt}.`,
-          url: `${poolUrl}?tab=picks`, tag: `rem-${tag}` } });
+          url: `${poolUrl}?tab=picks`, tag: `rem-${tag}` }, type: 'pickReminder' });
         jobs.push({
             from: 'Tuna Golf Pool <noreply@tunagolfpool.com>', to: e.email,
             subject: `⏰ ${ev}: ${label} locks at ${lockTxt} — you've picked ${n} of ${total}`,
@@ -1472,6 +1641,14 @@ export async function POST(request) {
         ts: Date.now(),
       });
       await saveEntries(poolId, entries);
+      // FINGERPRINT_V194 — commissioner alert: new entry
+      try {
+        const pm = await getPoolMeta(poolId), pot = entries.length * (pm?.entryFee || 0);
+        await srvPushMany(poolId, [{ name: '__admin__', type: 'newEntry', payload: {
+          title: `➕ ${name.trim()} joined ${pm?.poolName || 'your pool'}`,
+          body: `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}${pot ? ` · $${pot} pot` : ''}`,
+          url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`, tag: `entry-${poolId}` } }]);
+      } catch {}
       // FINGERPRINT_V141_ROSTER — remember this player for future-pool invites
       await upsertRoster(poolId, name.trim(), email.trim().toLowerCase(), editCode);
       if (process.env.RESEND_API_KEY) {
@@ -1728,6 +1905,16 @@ export async function POST(request) {
       while (messages.length > 100) messages.shift();
       // Store with 30-day TTL (auto-clear between tournaments)
       await redis('SETEX', k(poolId, 'chat'), 2592000, JSON.stringify(messages));
+      // FINGERPRINT_V194 — chat mention: anyone whose entry name appears in the message (opt-in)
+      try {
+        const low = cleaned.toLowerCase();
+        const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const hits = (await getEntries(poolId)).filter(e => e.name.length >= 3 && e.name.toLowerCase() !== entry.name.toLowerCase()
+          && new RegExp(`(^|[^a-z0-9])@?${esc(e.name.toLowerCase())}($|[^a-z0-9])`).test(low));
+        if (hits.length) await srvPushMany(poolId, hits.map(e => ({ name: e.name, type: 'chatMention', payload: {
+          title: `💬 ${entry.name} mentioned you`, body: cleaned.slice(0, 120),
+          url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`, tag: `chat-${poolId}` } })));
+      } catch {}
       return Response.json({ ok:true, messages });
     }
 
@@ -2111,13 +2298,52 @@ export async function POST(request) {
       const key = k(poolId, 'pushsubs');
       let subs = {};
       try { const r = await redis('GET', key); if (r) subs = JSON.parse(r); } catch {}
-      // a device belongs to one entry at a time (e.g. after "Switch" on a shared phone)
-      for (const n of Object.keys(subs)) subs[n] = (subs[n] || []).filter(x => x.endpoint !== sub.endpoint);
-      if (body.action === 'push-subscribe')
-        subs[entry.name] = [{ endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } },
-                            ...(subs[entry.name] || [])].slice(0, 5);
+      // a device belongs to one entry at a time (e.g. after "Switch" on a shared phone) — but keeps its settings
+      let prevPrefs = null;
+      for (const n of Object.keys(subs)) {
+        if (n === '__admin__') continue;
+        const hit = (subs[n] || []).find(x => x.endpoint === sub.endpoint);
+        if (hit?.prefs) prevPrefs = hit.prefs;
+        subs[n] = (subs[n] || []).filter(x => x.endpoint !== sub.endpoint);
+      }
+      const dev = { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, prefs: prevPrefs || {} };
+      if (body.action === 'push-subscribe') subs[entry.name] = [dev, ...(subs[entry.name] || [])].slice(0, 5);
       await redis('SET', key, JSON.stringify(subs));
-      return Response.json({ ok:true, on: body.action === 'push-subscribe' });
+      if (body.action === 'push-subscribe') { try { await redis('SADD', 'pushpools', poolId); } catch {} }   // FINGERPRINT_V194
+      return Response.json({ ok:true, on: body.action === 'push-subscribe', prefs: srvPrefsView(dev) });
+    }
+
+    // FINGERPRINT_V194_NOTIFY_PREFS — change this device's notification choices
+    if (body.action === 'push-prefs') {
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e => e.name.toLowerCase() === String(body.name || '').toLowerCase()
+        && e.editCode?.toUpperCase() === String(body.code || '').toUpperCase());
+      if (!entry) return Response.json({ error:'Sign in with your entry name and code' }, { status:401 });
+      const key = k(poolId, 'pushsubs');
+      let subs = {};
+      try { const r = await redis('GET', key); if (r) subs = JSON.parse(r); } catch {}
+      const dev = (subs[entry.name] || []).find(x => x.endpoint === body.endpoint);
+      if (!dev) return Response.json({ error:'Turn notifications on for this device first' }, { status:404 });
+      dev.prefs = { ...(dev.prefs || {}), ...srvCleanPrefs(body.prefs) };
+      await redis('SET', key, JSON.stringify(subs));
+      return Response.json({ ok:true, prefs: srvPrefsView(dev) });
+    }
+
+    // FINGERPRINT_V194_NOTIFY_PREFS — commissioner alerts on this device (new entries, unpaid count)
+    if (body.action === 'push-admin') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const sub = body.subscription || {};
+      if (!/^https:\/\//.test(sub.endpoint || '') || !sub.keys?.p256dh || !sub.keys?.auth)
+        return Response.json({ error:'Invalid subscription' }, { status:400 });
+      const key = k(poolId, 'pushsubs');
+      let subs = {};
+      try { const r = await redis('GET', key); if (r) subs = JSON.parse(r); } catch {}
+      const list = (subs.__admin__ || []).filter(x => x.endpoint !== sub.endpoint);
+      if (body.on !== false) list.unshift({ endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, prefs: {} });
+      subs.__admin__ = list.slice(0, 5);
+      await redis('SET', key, JSON.stringify(subs));
+      if (body.on !== false) { try { await redis('SADD', 'pushpools', poolId); } catch {} }
+      return Response.json({ ok:true, on: body.on !== false });
     }
 
     // FINGERPRINT_V191_MAGIC_LINKS — sign in from an email link
@@ -2138,7 +2364,10 @@ export async function POST(request) {
         return Response.json({ error:'Unauthorized' }, { status:401 });
       const pools = await srvTeamEventPools();
       const ev = pools[0]?.meta?.currentPgatourEvent || null;
-      return Response.json({ ok:true, active: pools.length > 0, event: ev, pools: pools.length,
+      // FINGERPRINT_V194_NOTIFY_ENGINE — normal-week notifications ride on this 5-minute check
+      let notify = null;
+      try { notify = await Promise.race([srvNotifyTick(), new Promise(r => setTimeout(() => r('timeout'), 9000))]); } catch (e) { notify = 'error'; }
+      return Response.json({ ok:true, active: pools.length > 0, event: ev, pools: pools.length, notify,
         scheduled: !!(ev && srvTeamScheduleFor(ev, new Date().getFullYear())) });
     }
 
