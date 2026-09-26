@@ -1,5 +1,5 @@
 'use client';
-// build: projected-standings-v269-20260926-1500
+// build: match-locks-v270-20260926-1600
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -469,6 +469,8 @@ const sessionFormat = (evName, sk, sv) => {
 };
 const TEAM_SESSION_SPANS = { presidents: { thu: 72, fri: 56, satam: 54, satpm: 42, sun: 137 } };
 const matchTeeMs = (evName, sk, sv, idx) => {
+  const stored = sv?.matches?.[idx]?.teeAt ? new Date(sv.matches[idx].teeAt).getTime() : NaN;
+  if (Number.isFinite(stored)) return stored;
   if (!sv?.lockAt || idx < 0) return null;
   const base = new Date(sv.lockAt).getTime();
   if (!Number.isFinite(base)) return null;
@@ -485,7 +487,20 @@ const fmtTee = (ms, withDay) => new Date(ms).toLocaleString([], withDay
 // Team events are a match pick'em: entries pick USA or the other side in every match, session by
 // session. Correct = 1; a halved match = ½ to anyone who picked it. Each session locks at its first
 // tee (the server enforces it). Unlocked picks never leave the server, so nobody can copy.
-const isSessLocked = (s) => !!(s && s.lockAt && Date.now() >= new Date(s.lockAt).getTime());
+// FINGERPRINT_V270_MATCH_LOCKS — picks lock MATCH BY MATCH (server stores each match's teeAt + lockAt,
+// with a 15-minute window after late-posted pairings). A session counts as locked once EVERY match has.
+const isMatchLocked = (s, m) => { const t = new Date(m?.lockAt || s?.lockAt).getTime(); return Number.isFinite(t) && Date.now() >= t; };
+const isSessLocked = (s) => !!s && ((s.matches || []).length ? s.matches.every(m => isMatchLocked(s, m))
+  : !!(s.lockAt && Date.now() >= new Date(s.lockAt).getTime()));
+const sessStarted = (s) => !!(s && s.lockAt && Date.now() >= new Date(s.lockAt).getTime());   // first tee has passed
+const sessAnyLocked = (s) => !!s && (s.matches || []).some(m => isMatchLocked(s, m));
+const nextOpenLockMs = (s) => {
+  const t = (s?.matches || []).map(m => new Date(m.lockAt || s.lockAt).getTime()).filter(x => Number.isFinite(x) && x > Date.now());
+  return t.length ? Math.min(...t) : null;
+};
+// teed off but still open for picks (late-pairings grace): the app hides its live score and win chance
+const inGrace = (m) => { if (!m?.teeAt || !m?.lockAt) return false; const n = Date.now();
+  return n >= new Date(m.teeAt).getTime() && n < new Date(m.lockAt).getTime(); };
 const scoreTeamPicks = (ep, matches) => {
   let t = 0;
   for (const [sk, sess] of Object.entries(matches || {}))
@@ -1446,7 +1461,7 @@ export default function App(){
   const teamOf = (pl) => (pl?.country === 'USA') ? 'USA' : 'INT';
   // FINGERPRINT_V254_LIVE_STATUS — "🇺🇸 2 UP · thru 14" / "All square · thru 9" for a match in play.
   // Hidden if the reading is over 30 minutes old (e.g. the scraper stopped), so it never shows stale.
-  const liveOf = (m) => { const L = m?.live; return (!L || m.result || !L.at || Date.now() - new Date(L.at).getTime() > 30*60*1000) ? null : L; };
+  const liveOf = (m) => { const L = m?.live; return (!L || m.result || inGrace(m) || !L.at || Date.now() - new Date(L.at).getTime() > 30*60*1000) ? null : L; };
   const liveText = (m) => {
     const L = liveOf(m);
     if (!L) return null;
@@ -1455,7 +1470,7 @@ export default function App(){
   };
   // FINGERPRINT_V260_MATCH_PROB — DataGolf's win probability for an unfinished match; hidden if the
   // reading is over 30 minutes old so a stalled scraper never leaves stale odds on screen
-  const probOf = (m) => { const P = m?.prob; if (!P || m.result || !P.at || Date.now() - new Date(P.at).getTime() > 30*60*1000) return null; return P; };
+  const probOf = (m) => { const P = m?.prob; if (!P || m.result || inGrace(m) || !P.at || Date.now() - new Date(P.at).getTime() > 30*60*1000) return null; return P; };
   const pctR = (x) => `${Math.round(+x || 0)}%`;
   const surnames = (arr) => (arr||[]).filter(Boolean).map(n=>flip(n).split(' ').slice(-1)[0]).join(' / ');   // FINGERPRINT_V245
   const teamLabel = (t) => t === 'USA' ? '🇺🇸 USA' : (/ryder/i.test(tcEventName) ? '🇪🇺 Europe' : '🌏 International');
@@ -4180,7 +4195,7 @@ export default function App(){
                     } else {
                       const tee = matchTeeMs(tcEventName, sk, sv, sv.matches.indexOf(m));
                       if (tee && Date.now() < tee) { txt = `Tees off ${fmtTee(tee, true)}`; bg='#f2f4f0'; fg='#6b7c5e'; }
-                      else if (isSessLocked(sv)) { txt = liveText(m) || 'In progress'; bg='#fff4e0'; fg='#9a6a00'; }
+                      else if (sessStarted(sv)) { txt = liveText(m) || 'In progress'; bg='#fff4e0'; fg='#9a6a00'; }
                       else { txt = `Starts ${fmtTee(new Date(sv.lockAt).getTime(), true)}`; bg='#f2f4f0'; fg='#6b7c5e'; }
                     }
                     return <div key={sk} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:'1px solid #f0f0ea',fontSize:12}}>
@@ -4431,8 +4446,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         const [sk,lb]=next, sv=teamMatches[sk], total=sv.matches.length;
                         const n=teamPickCounts?.[e.name]?.[sk] ?? 0;
                         if(n>=total) return null;
-                        const urgent = new Date(sv.lockAt).getTime()-Date.now() <= 2*60*60*1000;
-                        return <span title={`${lb} picks lock ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`}
+                        const nextLk = nextOpenLockMs(sv) || new Date(sv.lockAt).getTime();
+                        const urgent = nextLk-Date.now() <= 2*60*60*1000;
+                        return <span title={`Next ${lb} match locks ${new Date(nextLk).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})}`}
                           style={{fontSize:10,fontWeight:800,padding:'1px 7px',borderRadius:10,marginRight:4,background:'#fff4e0',color:'#9a5a00',
                             border:'1px solid #f0c060',whiteSpace:'nowrap',animation:urgent?'glow 1.1s ease-in-out infinite':'none'}}>⏳ {lb} {n}/{total}</span>;
                       })()}
@@ -4461,7 +4477,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 {/* FINGERPRINT_V245_MATCH_PICKEM — an entry's picks, revealed session by session as each locks */}
                 {isTeamPool&&!picksHidden&&(()=>{
                   const ep=teamPicksPublic[e.name]||{};
-                  const rows=teamSessionsFor(tcEventName).filter(([sk])=>isSessLocked(teamMatches[sk])&&ep[sk]);
+                  const rows=teamSessionsFor(tcEventName).filter(([sk])=>sessAnyLocked(teamMatches[sk])&&ep[sk]);
                   if(!rows.length) return <div style={{fontSize:11,color:'#8a9580',marginTop:8}}>Picks appear as each session locks.</div>;
                   const iF=teamLabel('INT').split(' ')[0];
                   if(!op) return <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:8}}>{rows.map(([sk,lb])=>{
@@ -4471,7 +4487,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   return <div style={{marginTop:8,borderTop:'1px solid #eee8dc',paddingTop:8}}>{rows.map(([sk,lb])=>
                     <div key={sk} style={{marginBottom:8}}>
                       <div style={{fontSize:10,fontWeight:700,color:T.primary,letterSpacing:.5,marginBottom:3}}>{lb.toUpperCase()}</div>
-                      {teamMatches[sk].matches.map(m=>{const pk=ep[sk]?.[m.id];
+                      {teamMatches[sk].matches.filter(m=>isMatchLocked(teamMatches[sk],m)).map(m=>{const pk=ep[sk]?.[m.id];
                         const mark=!m.result?'':m.result==='H'?(pk?'½':''):(pk===m.result?'✓':(pk?'✗':''));
                         return <div key={m.id} style={{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'2px 0'}}>
                           <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{surnames(m.usa)} v {surnames(m.intl)}</span>
@@ -4596,16 +4612,16 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 ? <p style={{fontSize:13,color:'#8a9580',textAlign:'center',padding:'14px 0'}}>{label} pairings haven't been posted yet — check back once they're announced. You'll pick each match here, then save with your <b>entry name</b> and the <b>code from your email</b>.</p>
                 : <>
                   <div style={{fontSize:12,fontWeight:700,marginBottom:8,color:sLocked?'#a33':T.primary}}>
-                    {sLocked?'🔒 Locked — picks are final':`Locks ${new Date(sv.lockAt).toLocaleString([], {weekday:'short',hour:'numeric',minute:'2-digit'})} · ${picked} of ${sv.matches.length} picked`}
+                    {sLocked?'🔒 Locked — picks are final':`Each match locks at its tee · next ${fmtTee(nextOpenLockMs(sv)||new Date(sv.lockAt).getTime(), true)} · ${picked} of ${sv.matches.length} picked`}
                   </div>
                   {(()=>{const f=sessionFormat(tcEventName,active,sv); if(!f) return null; const I=FORMAT_INFO[f];
                     return <div style={{fontSize:12,color:'#6b7c5e',margin:'-4px 0 10px',lineHeight:1.4}}><b style={{color:T.primary}}>{I.name}</b> · {I.desc}</div>;})()}
                   {sv.matches.map((m,mi)=>{
-                    const pk=mine[m.id];
+                    const pk=mine[m.id], mLk=isMatchLocked(sv,m);
                     const side=(v,names,flagE)=>{
                       const on=pk===v, won=m.result===v;
-                      return <button type="button" disabled={sLocked} onClick={()=>setPick(m.id,v)} style={{flex:1,padding:'10px 8px',borderRadius:8,
-                        cursor:sLocked?'default':'pointer',textAlign:'center',fontSize:13,fontWeight:700,lineHeight:1.3,
+                      return <button type="button" disabled={mLk} onClick={()=>setPick(m.id,v)} style={{flex:1,padding:'10px 8px',borderRadius:8,
+                        cursor:mLk?'default':'pointer',opacity:mLk&&!on&&!won?.75:1,textAlign:'center',fontSize:13,fontWeight:700,lineHeight:1.3,
                         border:`2px solid ${on?T.primary:(won?'#1a7a3a':'#e2e2dc')}`,background:on?T.primary:'#fff',color:on?'#fff':'#3a4a2e'}}>
                         <div style={{fontSize:16}}>{flagE}</div>{surnames(names)}{won&&<div style={{fontSize:10,marginTop:2,color:on?'#fff':'#1a7a3a'}}>WON</div>}
                       {!won&&probOf(m)&&<div style={{fontSize:10,marginTop:2,fontWeight:600,color:on?'rgba(255,255,255,.85)':'#8a9580'}}>{pctR(v==='USA'?probOf(m).usa:probOf(m).intl)} to win</div>}
@@ -4614,7 +4630,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     const mark = !m.result||!pk ? '' : m.result==='H' ? '½ pt' : (pk===m.result ? '✓ 1 pt' : '✗');
                     return <div key={m.id} style={{marginBottom:10}}>
                       <div style={{display:'flex',fontSize:10,fontWeight:700,color:'#8a9580',marginBottom:4,letterSpacing:.4}}>
-                        <span style={{flex:1}}>MATCH {mi+1}{m.result==='H'?' · HALVED':(liveText(m)?` · ${liveText(m).toUpperCase()}`:(()=>{const tee=matchTeeMs(tcEventName,active,sv,mi);return tee&&Date.now()<tee?` · ${fmtTee(tee)}`:'';})())}</span><span>{mark}</span>
+                        <span style={{flex:1}}>MATCH {mi+1}{m.result==='H'?' · HALVED':(liveText(m)?` · ${liveText(m).toUpperCase()}`:(()=>{const tee=matchTeeMs(tcEventName,active,sv,mi); if(tee&&Date.now()<tee) return ` · ${fmtTee(tee)}`; if(!mLk) return ` · PICKS CLOSE ${fmtTee(new Date(m.lockAt||sv.lockAt).getTime())}`; return m.result?'':' · 🔒';})())}</span><span>{mark}</span>
                       </div>
                       <div style={{display:'flex',gap:6,alignItems:'stretch'}}>
                         {side('USA',m.usa,'🇺🇸')}
@@ -4812,7 +4828,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:9}}>
               {sessions.map(([sk,lb])=>{const x=teamMatches[sk], on=sk===active;
-                const st=!x?'TBA':!isSessLocked(x)?'upcoming':x.matches.every(m=>m.result)?'final':'live';
+                const st=!x?'TBA':!sessStarted(x)?'upcoming':x.matches.every(m=>m.result)?'final':'live';
                 return <button key={sk} type="button" onClick={()=>setMvTab(sk)} style={{flex:'1 1 0',minWidth:58,padding:'7px 3px',borderRadius:7,cursor:'pointer',
                   fontSize:11,fontWeight:700,border:`1.5px solid ${on?T.primary:'#ddd'}`,background:on?T.primary:'#fff',color:on?'#fff':'#3a4a2e'}}>
                   {lb}<div style={{fontSize:9,fontWeight:600,opacity:.85}}>{st==='live'?'● live':st}</div></button>;})}
@@ -4826,11 +4842,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               const my = chatVerified ? (myTeamPicks[active]||{})[m.id] : null;
               const status = m.result==='USA' ? `🇺🇸 USA wins${m.finalScore?' '+m.finalScore:''}` : m.result==='INT' ? `${iFlag} ${iName} wins${m.finalScore?' '+m.finalScore:''}` : m.result==='H' ? 'Halved'
                 : (()=>{ const tee = matchTeeMs(tcEventName, active, sv, mi);
-                    if (tee && Date.now() < tee) return `Tees off ${fmtTee(tee, !sLocked)}`;
-                    // FINGERPRINT_V262_LEAD_BADGE — the margin sits on the leading side; header stays neutral
+                    if (tee && Date.now() < tee) return `Tees off ${fmtTee(tee, !sessStarted(sv))}`;
+                    // FINGERPRINT_V270 — teed off but still open (late pairings): no live score, just when picks close
+                    if (inGrace(m)) return `● Picks close ${fmtTee(new Date(m.lockAt).getTime())}`;
+                    const started = tee ? true : sessStarted(sv);
                     const L = liveOf(m);
-                    if (sLocked && L) return L.margin && L.leader ? `● Live · thru ${L.thru}` : `● ${liveText(m)}`;
-                    if (sLocked) return '● In progress';
+                    if (started && L) return L.margin && L.leader ? `● Live · thru ${L.thru}` : `● ${liveText(m)}`;
+                    if (started) return '● In progress';
                     return `Starts ${fmtTee(new Date(sv.lockAt).getTime(), true)}`; })();
               const sideStyle = (side) => ({flex:1,minWidth:0,display:'flex',alignItems:'center',gap:7,padding:'8px 9px',borderRadius:8,
                 background: m.result===side ? `${TEAM_COLOUR[side]}14` : m.result==='H' ? '#f7f2dc' : '#fafaf7',
@@ -4863,7 +4881,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <span style={{fontSize:10,color:'#8a9580'}}>win chance · halve {pctR(pr.halve)}</span>
                     <span style={{flex:1,textAlign:'right',fontWeight:700}}>{pctR(pr.intl)} {iFlag}</span>
                   </div>;})()}
-                {sLocked&&(nU+nI)>0&&<div style={{marginTop:8}}>
+                {isMatchLocked(sv,m)&&(nU+nI)>0&&<div style={{marginTop:8}}>
                   <div style={{display:'flex',height:6,borderRadius:3,overflow:'hidden',background:'#eee'}}>
                     <div style={{width:`${nU/(nU+nI)*100}%`,background:'#2a4d8f'}}/><div style={{width:`${nI/(nU+nI)*100}%`,background:'#b5892c'}}/>
                   </div>
