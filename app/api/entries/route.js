@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
+import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
 export const dynamic = 'force-dynamic';
-// build: match-locks-v192-20260926-1600
+// build: push-notifications-v193-20260926-1800
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -234,6 +235,42 @@ function srvMagicVerify(poolId, token, entries) {
   return entry;
 }
 
+// FINGERPRINT_V193_PUSH — phone/desktop notifications (Web Push). Each device that turns notifications on
+// is stored against its entry in pool:{id}:pushsubs = { entryName: [subscription, …] } (max 5 devices each).
+// Sent at the same moments as the emails. Dead subscriptions (404/410) are pruned automatically.
+// Needs VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY (+ optional VAPID_SUBJECT) in Vercel; without them this is a no-op.
+function srvPushReady() {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return false;
+  try {
+    webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:noreply@tunagolfpool.com',
+      process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+    return true;
+  } catch (e) { console.log('[push] bad VAPID keys:', e.message); return false; }
+}
+// items: [{ name, payload }] — each goes to every device that entry has turned notifications on for
+async function srvPushMany(poolId, items) {
+  if (!items.length || !srvPushReady()) return 0;
+  const key = k(poolId, 'pushsubs');
+  let subs = {};
+  try { const r = await redis('GET', key); if (r) subs = JSON.parse(r); } catch {}
+  let sent = 0, pruned = false;
+  const jobs = [];
+  for (const { name, payload } of items) {
+    for (const sub of (subs[name] || [])) {
+      jobs.push(webpush.sendNotification(sub, JSON.stringify(payload), { TTL: 60 * 60 })
+        .then(() => { sent++; })
+        .catch(err => {
+          if (err?.statusCode === 404 || err?.statusCode === 410) {
+            subs[name] = (subs[name] || []).filter(x => x.endpoint !== sub.endpoint); pruned = true;
+          } else console.log('[push] send failed:', err?.statusCode || err?.message);
+        }));
+    }
+  }
+  await Promise.all(jobs);
+  if (pruned) await redis('SET', key, JSON.stringify(subs));
+  return sent;
+}
+
 // FINGERPRINT_V190_BATCH — send many emails as Resend BATCH requests (up to 100 per request, counted as
 // ONE request against the 5-per-second limit). Returns how many were accepted.
 async function srvResendBatch(emails) {
@@ -308,6 +345,15 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
         </div>`,
 }));
   emailed = await srvResendBatch(emails);
+  // FINGERPRINT_V193_PUSH — and a notification to every entry that has them turned on
+  try {
+    const first = new Date(srvNextOpenLockMs(sessNow) || sessNow.lockAt).toLocaleString('en-US',
+      { timeZone:'America/New_York', hour:'numeric', minute:'2-digit' }) + ' ET';
+    await srvPushMany(poolId, entries.map(e => ({ name: e.name, payload: {
+      title: `${label} pairings are out ⛳`,
+      body: `Make your picks — the first match locks at ${first}.`,
+      url: `${poolUrl}?tab=picks`, tag: `open-${tag}` } })));
+  } catch (e) { console.log('[push] picks-open failed:', e.message); }
   return emailed;
 }
 // FINGERPRINT_V176_TEAM_AUTOSYNC
@@ -537,7 +583,7 @@ async function srvSendPickReminders(pools, ev, year, all) {
     try { const r = await redis('GET', remKey); if (r) rem = JSON.parse(r); } catch {}
     const [entries, picks] = await Promise.all([getEntries(pl.poolId), srvGetTeamPicks(pl.poolId, ev)]);
     const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${pl.poolId}`;
-    const jobs = [];
+    const jobs = [], pushes = [];
     for (const [sk, sv] of due) {
       const tag = `${ev}_${year}_${sk}`.toLowerCase();
       const done = rem[tag] = rem[tag] || {};
@@ -551,6 +597,10 @@ async function srvSendPickReminders(pools, ev, year, all) {
         const n = Object.keys(mine).filter(id => ids.has(id)).length;
         if (!openIds.some(id => !mine[id])) continue;      // nothing left for them to pick
         done[e.name] = new Date().toISOString();        // mark first — never double-send
+        pushes.push({ name: e.name, payload: {
+          title: `⏰ ${label} locks soon`,
+          body: `You've picked ${n} of ${total} — the next match locks at ${lockTxt}.`,
+          url: `${poolUrl}?tab=picks`, tag: `rem-${tag}` } });
         jobs.push({
             from: 'Tuna Golf Pool <noreply@tunagolfpool.com>', to: e.email,
             subject: `⏰ ${ev}: ${label} locks at ${lockTxt} — you've picked ${n} of ${total}`,
@@ -565,6 +615,7 @@ async function srvSendPickReminders(pools, ev, year, all) {
     }
     await redis('SET', remKey, JSON.stringify(rem));
     sent += await srvResendBatch(jobs);
+    try { await srvPushMany(pl.poolId, pushes); } catch (e) { console.log('[push] reminders failed:', e.message); }
   }
   return sent;
 }
@@ -1370,7 +1421,8 @@ export async function GET(request) {
         }
       }
     }
-    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses, teamMatches, teamPicks, teamPickCounts });
+    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses, teamMatches, teamPicks, teamPickCounts,
+      pushKey: process.env.VAPID_PUBLIC_KEY || null });   // FINGERPRINT_V193_PUSH (public by design)
   } catch (err) {
     return Response.json({ entries:[], locked:false, picksHidden:true, paymentsHidden:false, payments:{}, major:'pga', error:err.message });
   }
@@ -2047,6 +2099,27 @@ export async function POST(request) {
     // Saves the official per-player match points for the pool's current team event. Stored once
     // per event, so every pool on the Presidents/Ryder Cup reads the same numbers. Values are
     // clamped to 0–5 in half-point steps (5 sessions max, ½ for a halved match).
+    // FINGERPRINT_V193_PUSH — a signed-in entry turns notifications on/off for this device
+    if (body.action === 'push-subscribe' || body.action === 'push-unsubscribe') {
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e => e.name.toLowerCase() === String(body.name || '').toLowerCase()
+        && e.editCode?.toUpperCase() === String(body.code || '').toUpperCase());
+      if (!entry) return Response.json({ error:'Sign in with your entry name and code' }, { status:401 });
+      const sub = body.subscription || {};
+      if (!/^https:\/\//.test(sub.endpoint || '') || !sub.keys?.p256dh || !sub.keys?.auth)
+        return Response.json({ error:'Invalid subscription' }, { status:400 });
+      const key = k(poolId, 'pushsubs');
+      let subs = {};
+      try { const r = await redis('GET', key); if (r) subs = JSON.parse(r); } catch {}
+      // a device belongs to one entry at a time (e.g. after "Switch" on a shared phone)
+      for (const n of Object.keys(subs)) subs[n] = (subs[n] || []).filter(x => x.endpoint !== sub.endpoint);
+      if (body.action === 'push-subscribe')
+        subs[entry.name] = [{ endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } },
+                            ...(subs[entry.name] || [])].slice(0, 5);
+      await redis('SET', key, JSON.stringify(subs));
+      return Response.json({ ok:true, on: body.action === 'push-subscribe' });
+    }
+
     // FINGERPRINT_V191_MAGIC_LINKS — sign in from an email link
     if (body.action === 'magic-signin') {
       const entry = srvMagicVerify(poolId, body.token, await getEntries(poolId));
