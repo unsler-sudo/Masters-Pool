@@ -1,5 +1,5 @@
 'use client';
-// build: push-notifications-v271-20260926-1800
+// build: notify-settings-v272-20260926-2100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1308,6 +1308,10 @@ export default function App(){
   const [pushKey,setPushKey]=useState(null);              // FINGERPRINT_V271_PUSH
   const [pushState,setPushState]=useState('unknown');     // unsupported | ios-browser | default | granted | on | denied
   const [pushHide,setPushHide]=useState(false);
+  const [notifPrefs,setNotifPrefs]=useState(null);         // FINGERPRINT_V272 — this device's choices
+  const [pushEndpoint,setPushEndpoint]=useState(null);
+  const [showNotif,setShowNotif]=useState(false);
+  const [adminPush,setAdminPush]=useState(false);
   const [picks,setPicks]=useState({1:[],2:[],3:[]});
   const [search,setSearch]=useState('');
   const [fieldSort,setFieldSort]=useState('leaderboard'); // 'leaderboard' or 'pairings'
@@ -3211,9 +3215,32 @@ export default function App(){
       if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(pushKey)});
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({poolId,action:'push-subscribe',name:chatName,code:chatCode,subscription:sub.toJSON()})});
-      const d=await r.json(); if(d.ok) setPushState('on');
+      const d=await r.json(); if(d.ok){ setPushState('on'); setPushEndpoint(sub.endpoint); if(d.prefs) setNotifPrefs(d.prefs); }
     }catch{} })();
   },[pushState,chatVerified,chatName,chatCode,pushKey,poolId]);
+  // FINGERPRINT_V272_NOTIFY_SETTINGS — change one notification type for this device
+  const setNotifPref=async(key,val)=>{
+    setNotifPrefs(p=>({...(p||{}),[key]:val}));
+    try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'push-prefs',name:chatName,code:chatCode,endpoint:pushEndpoint,prefs:{[key]:val}})});
+      const d=await r.json(); if(d.ok&&d.prefs) setNotifPrefs(d.prefs); else if(d.error) msg(d.error);
+    }catch{ msg('Could not save — check connection'); }
+  };
+  // commissioner alerts on this device (new entries, unpaid count before the lock)
+  const toggleAdminPush=async(on)=>{
+    try{
+      if(on){ const perm=await Notification.requestPermission(); if(perm!=='granted') return msg('Allow notifications first'); }
+      const reg=await navigator.serviceWorker.ready;
+      let sub=await reg.pushManager.getSubscription();
+      if(!sub&&on) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(pushKey)});
+      if(!sub) return;
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'push-admin',password:adminPw,subscription:sub.toJSON(),on})});
+      const d=await r.json(); if(d.error) return msg(d.error);
+      setAdminPush(on); msg(on?'Commissioner alerts on for this device ✓':'Commissioner alerts off');
+    }catch{ msg('Could not change commissioner alerts'); }
+  };
   const enablePush=async()=>{
     try{
       const perm=await Notification.requestPermission();      // first thing in the tap — iPhones require it
@@ -4323,10 +4350,10 @@ export default function App(){
       </header>
 
       {/* FINGERPRINT_V271_PUSH — one tap to turn notifications on (team events, signed-in entries) */}
-      {isTeamPool&&chatVerified&&!pushHide&&(pushState==='default'&&pushKey
+      {chatVerified&&!pushHide&&(pushState==='default'&&pushKey
         ? <div style={{display:'flex',alignItems:'center',gap:10,margin:'8px 10px',padding:'10px 12px',borderRadius:10,background:'#fff8e6',border:'1px solid #f0c060'}}>
             <span style={{fontSize:20}}>🔔</span>
-            <div style={{flex:1,fontSize:13,lineHeight:1.35,color:'#3a4a2e'}}><b>Get notified</b> when pairings drop and before your picks lock.</div>
+            <div style={{flex:1,fontSize:13,lineHeight:1.35,color:'#3a4a2e'}}><b>Get notified</b> — lock reminders, round recaps, the cut and results. You choose which.</div>
             <button type="button" onClick={enablePush} style={{background:T.primary,color:'#fff',border:'none',borderRadius:7,padding:'8px 12px',fontWeight:700,fontSize:13,cursor:'pointer',whiteSpace:'nowrap'}}>Turn on</button>
             <button type="button" onClick={hidePush} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
           </div>
@@ -4340,7 +4367,40 @@ export default function App(){
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
         {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
+      {pushState==='on'&&<button type="button" onClick={()=>setShowNotif(true)} aria-label="Notification settings" title="Notification settings"
+          style={{flex:'0 0 auto',padding:'0 12px',background:'transparent',border:'none',fontSize:17,cursor:'pointer'}}>🔔</button>}
       </nav>
+      {/* FINGERPRINT_V272_NOTIFY_SETTINGS — per-device choices */}
+      {showNotif&&(()=>{
+        const P=notifPrefs||{};
+        const groups=[
+          ['Your pool',[['lockSoon','⏰ Pool locks in an hour — if you’re not in yet'],['poolOpen','📢 A new pool is open'],
+            ['cut','✂️ Cut report'],['recap','🏁 Round recaps'],['final','🏆 Final result']]],
+          ['Presidents Cup & Ryder Cup',[['picksOpen','Pairings are out'],['pickReminder','Picks closing soon (if you haven’t finished)']]],
+          ['Live action — can be frequent',[['leadChange','🔥 Sunday lead changes (max 1 an hour)'],['golferMoment','⛳ One of your golfers takes the lead']]],
+          ['Chat',[['chatMention','💬 Someone mentions your name']]],
+        ];
+        return <div onClick={()=>setShowNotif(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:160,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,maxHeight:'85vh',overflowY:'auto',borderRadius:'16px 16px 0 0',padding:'16px 16px 24px'}}>
+            <div style={{display:'flex',alignItems:'center',marginBottom:4}}>
+              <div style={{flex:1,fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary}}>🔔 Notifications</div>
+              <button type="button" onClick={()=>setShowNotif(false)} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
+            </div>
+            <div style={{fontSize:12,color:'#8a9580',marginBottom:10}}>For {chatName} on this device.</div>
+            {!notifPrefs&&<div style={{fontSize:13,color:'#8a9580',padding:'12px 0'}}>Loading…</div>}
+            {notifPrefs&&groups.map(([g,rows])=><div key={g} style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase',margin:'6px 0 4px'}}>{g}</div>
+              {rows.map(([key,label])=><label key={key} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 2px',borderBottom:'1px solid #f0f0ea',cursor:'pointer'}}>
+                <span style={{flex:1,fontSize:14,color:'#2a3a1e'}}>{label}</span>
+                <span onClick={(e)=>{e.preventDefault();setNotifPref(key,!P[key]);}} role="switch" aria-checked={!!P[key]}
+                  style={{width:44,height:26,borderRadius:13,background:P[key]?T.primary:'#d6d6cf',position:'relative',transition:'background .15s',flexShrink:0}}>
+                  <span style={{position:'absolute',top:3,left:P[key]?21:3,width:20,height:20,borderRadius:'50%',background:'#fff',boxShadow:'0 1px 2px rgba(0,0,0,.25)',transition:'left .15s'}}/>
+                </span>
+              </label>)}
+            </div>)}
+          </div>
+        </div>;
+      })()}
       {lastUp&&!picksHidden&&<div style={{padding:'4px 14px',background:T.navActive,borderBottom:`1px solid ${T.cardBorder}`,textAlign:'center'}}><span style={{fontSize:10,color:'#8a9580'}}>Scores update automatically · Last: {lastUp}</span></div>}
       {justActivated&&<div style={{background:'#d1fae5',padding:'10px 16px',fontSize:13,color:'#065f46',textAlign:'center',fontWeight:600}}>🎉 Your pool is live! Share this link with your friends to start entering picks.</div>}
       {status&&<div style={{background:'#fef3cd',padding:'8px 16px',fontSize:12,color:'#856404',textAlign:'center'}}>{status}</div>}
@@ -5719,6 +5779,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </div>
               </div>;
             })()}
+            {/* FINGERPRINT_V272_NOTIFY_SETTINGS — commissioner alerts on this device */}
+            {pushKey&&(pushState==='default'||pushState==='granted'||pushState==='on')&&<div style={sec}>
+              <h3 style={stl}>🔔 Commissioner alerts</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>On this device: a notification when someone joins, and an entries / unpaid summary an hour before the pool locks.</p>
+              <button type="button" onClick={()=>toggleAdminPush(!adminPush)} style={{...pri,background:adminPush?'#fff':T.primary,color:adminPush?T.primary:'#fff',border:`1.5px solid ${T.primary}`}}>
+                {adminPush?'Turn off on this device':'Turn on for this device'}</button>
+            </div>}
             {/* FINGERPRINT_V218_DPWORLD_MODE — three-way pool mode selector */}
             <div style={sec}><h3 style={stl}>🏌️ Pool Mode</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Choose what this pool follows. Tour modes track whichever event that tour is playing this week; Majors follows the major schedule. <b>Switching resets current entries.</b></p>
