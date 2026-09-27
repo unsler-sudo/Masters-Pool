@@ -1,5 +1,5 @@
 'use client';
-// build: unpaid-team-v273-20260926-2130
+// build: stale-signin-v274-20260927-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -3190,6 +3190,24 @@ export default function App(){
       setChatName(savedName);
       setChatCode(savedCode);
       setChatVerified(true);
+      // FINGERPRINT_V274_STALE_SIGNIN — check the remembered sign-in with the server. Each week's entry gets a
+      // NEW code, so a device remembering last week's "Stack" looked signed in while every request used a dead
+      // code (no picks loaded, chat and notifications refused). Only a definite rejection signs out — a
+      // network blip never does.
+      (async()=>{
+        try{
+          const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({poolId,action:'chat-verify',name:savedName,code:savedCode})});
+          if(r.status===404){
+            try{ localStorage.removeItem(`chat_${poolId}_name`); localStorage.removeItem(`chat_${poolId}_code`); }catch{}
+            setChatVerified(false); setChatCode('');
+            msg(`Please sign in again, ${savedName} — each week's entry has a new code (it's in your email)`);
+          } else if(r.ok){
+            const d=await r.json().catch(()=>null);
+            if(d?.verifiedName&&d.verifiedName!==savedName){ setChatName(d.verifiedName); try{ localStorage.setItem(`chat_${poolId}_name`,d.verifiedName); }catch{} }
+          }
+        }catch{}
+      })();
     }
   },[poolId]);
 
