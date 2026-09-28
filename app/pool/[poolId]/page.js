@@ -1,5 +1,5 @@
 'use client';
-// build: stale-signin-v274-20260927-1000
+// build: youre-in-v275-20260927-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1302,6 +1302,7 @@ export default function App(){
   const [entryName,setEntryName]=useState('');
   const [entryEmail,setEntryEmail]=useState('');
   const [editMode,setEditMode]=useState(false);
+  const [addAnother,setAddAnother]=useState(false);        // FINGERPRINT_V275 — deliberately making a 2nd entry
   const [editCode,setEditCode]=useState('');
   const [showEditModal,setShowEditModal]=useState(null);
   const [showClaimModal,setShowClaimModal]=useState(null);
@@ -3053,7 +3054,7 @@ export default function App(){
       setEntryName('');setEntryEmail('');setPicks({1:[],2:[],3:[]});setSearch('');
       setEditMode(false);setEditCode('');
       if(isTeamPool){ setChatName(entryName.trim()); msg("You're in! Check your email for your code, then sign in below to pick 📧"); }
-      else { msg(editMode?'Picks updated!':'Entry submitted! Check email for edit code 📧'); setTab('Standings'); }
+      else { msg(editMode?'Picks updated!':'Entry submitted! Check email for edit code 📧'); setAddAnother(false); setTab('Standings'); }
     }catch(e){msg('Error submitting — check connection');}
     setSubmitting(false);
   };
@@ -3642,6 +3643,10 @@ export default function App(){
   // FINGERPRINT_V193_R1_COMPLETE
   // R1 is done once every player still in the event has an R1 stroke count. Used to start nagging
   // unpaid entries — by then everyone has had a full round to settle up, and the pool is real.
+  // FINGERPRINT_V275_YOURE_IN — normal weeks: if the signed-in entry is already in this week's pool, the
+  // Enter Pool tab shows their entry (picks, paid status, Edit) instead of a blank form that invites duplicates.
+  const myEntry = (!isTeamPool && chatVerified && chatName) ? entries.find(e => e.name.toLowerCase() === chatName.toLowerCase()) : null;
+  const showYoureIn = !!myEntry && !editMode && !addAnother && poolMeta?.paid !== false;
   // FINGERPRINT_V273_UNPAID_TEAM — Cup weeks have no stroke-play Round 1, so the Unpaid badge starts
   // blinking once the FIRST session (earliest first tee) has a result for every match instead.
   const firstSessionDone = (()=>{
@@ -4817,7 +4822,33 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
           </>;
         })()}
-        {tab==='Enter Pool'&&!isTeamPool&&(locked
+        {tab==='Enter Pool'&&!isTeamPool&&showYoureIn&&(()=>{
+          const byTier = TIERS.map(t=>({t, names:(myEntry.picks||[]).filter(n=>field.find(f=>f.name===n)?.tier===t.id)}));
+          const unmatched = (myEntry.picks||[]).filter(n=>!field.find(f=>f.name===n));
+          const paid = !!payments[myEntry.name];
+          return <div style={sec}>
+            <div style={{textAlign:'center',padding:'6px 0 12px'}}>
+              <div style={{fontSize:34,lineHeight:1}}>✅</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800,color:T.primary,marginTop:6}}>You're in, {myEntry.name}</div>
+              {!paymentsHidden&&<div style={{fontSize:12,marginTop:4,fontWeight:700,color:paid?'#2d7a1e':'#c62828'}}>{paid?'Paid ✓':'Not paid yet'}</div>}
+            </div>
+            {byTier.map(({t,names})=><div key={t.id} style={{marginBottom:9}}>
+              <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:t.color,textTransform:'uppercase',marginBottom:4}}>{t.label}</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                {names.length?names.map(n=><span key={n} style={{fontSize:12,padding:'3px 9px',borderRadius:12,background:`${t.color}14`,color:'#2a3a1e',fontWeight:600}}>{flip(n)}</span>)
+                  :<span style={{fontSize:12,color:'#aaa'}}>—</span>}
+              </div>
+            </div>)}
+            {unmatched.length>0&&<div style={{fontSize:11,color:'#8a9580',marginBottom:8}}>Also: {unmatched.map(flip).join(', ')} (not in the current field)</div>}
+            {!locked
+              ? <button type="button" onClick={()=>startEdit(myEntry.name, chatCode)} style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:6}}>✏️ Edit my picks</button>
+              : <div style={{textAlign:'center',fontSize:13,color:'#6b7c5e',marginTop:8}}>🔒 Picks are locked — good luck!</div>}
+            {!locked&&<div style={{textAlign:'center',marginTop:10}}>
+              <button type="button" onClick={()=>setAddAnother(true)} style={{background:'none',border:'none',color:T.primary,fontSize:12,textDecoration:'underline',cursor:'pointer'}}>+ Add another entry</button>
+            </div>}
+          </div>;
+        })()}
+        {tab==='Enter Pool'&&!isTeamPool&&!showYoureIn&&(locked
           ? poolMeta?.paid===false
             ?<div style={bx}>
               <div style={{fontSize:44,marginBottom:10}}>💳</div>
