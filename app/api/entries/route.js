@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
 export const dynamic = 'force-dynamic';
-// build: notify-engine-v194-20260926-2100
+// build: cut-round-v195-20260927-1300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -400,6 +400,10 @@ async function srvNotifyPool(pid, meta, subs, st, dg) {
       if (roundDone && !ev['r' + round]) {
         ev['r' + round] = true; changed = true;
         const hasCut = players.some(p => /CUT|MC/i.test(String(p.current_pos || '')));
+        // FINGERPRINT_V195_CUT_ROUND — the cut report goes after whichever round the cut actually happens:
+        // Round 2 normally, Round 3 at the Dunhill Links (54-hole cut). No-cut events just get recaps.
+        const cutNow = hasCut && !ev.cutSent && round < 4;
+        if (cutNow) ev.cutSent = true;
         for (const n of people) {
           const row = table.find(x => x.name.toLowerCase() === n.toLowerCase());
           if (!row) continue;
@@ -407,7 +411,7 @@ async function srvNotifyPool(pid, meta, subs, st, dg) {
           const standing = pl === 1 ? `You lead the pool with ${srvBig(row.total)}` : `You're ${srvOrd(pl)} with ${srvBig(row.total)} — ${leader.name} leads with ${srvBig(leader.total)}`;
           if (round >= 4) push(n, 'final', pl === 1 ? `🏆 You won the ${evName} pool!` : `🏁 Final: ${leader.name} wins the pool`,
             pl === 1 ? `${srvBig(row.total)} in earnings — congratulations!` : `You finished ${srvOrd(pl)} with ${srvBig(row.total)}.`);
-          else if (round === 2 && hasCut) push(n, 'cut', `✂️ The cut's in — ${row.picks.filter(pk => (byPick[pk] || 0) > 0).length} of ${row.picks.length} made it`, `${standing}.`);
+          else if (cutNow) push(n, 'cut', `✂️ The cut's in — ${row.picks.filter(pk => (byPick[pk] || 0) > 0).length} of ${row.picks.length} made it`, `${standing}.`);
           else push(n, 'recap', `🏁 After Round ${round}: you're ${srvOrd(pl)}`, `${standing}.`);
         }
       }
