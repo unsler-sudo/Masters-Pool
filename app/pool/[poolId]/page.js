@@ -1,5 +1,5 @@
 'use client';
-// build: multi-course-v276-20260927-1200
+// build: tee-order-courses-v277-20260927-1230
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -3759,7 +3759,6 @@ export default function App(){
           // For R1/R2: standard tee time order (everyone usually starts hole 1)
           const round = tournamentRound;
           const at = pairTeeFor(a), bt = pairTeeFor(b);
-          if (multiCourse && (at.course || '') !== (bt.course || '')) return String(at.course || '~').localeCompare(String(bt.course || '~'));
           if (round >= 3) {
             const ah = at.startHole || 1;
             const bh = bt.startHole || 1;
@@ -3771,6 +3770,7 @@ export default function App(){
             if (ta !== tb) {
               return ah === 10 ? ta - tb : tb - ta;
             }
+            if (multiCourse && (at.course || '') !== (bt.course || '')) return String(at.course || '~').localeCompare(String(bt.course || '~'));   // FINGERPRINT_V277 — same tee time: by course
             const pa=parsePos(a.pos),pb=parsePos(b.pos);
             if(pa&&pb)return pa-pb;
             return (a.rank??999)-(b.rank??999);
@@ -3783,6 +3783,7 @@ export default function App(){
           const ah = at.startHole || 1;
           const bh = bt.startHole || 1;
           if (ah !== bh) return ah - bh;
+          if (multiCourse && (at.course || '') !== (bt.course || '')) return String(at.course || '~').localeCompare(String(bt.course || '~'));   // FINGERPRINT_V277 — same tee time: by course
           const pa=parsePos(a.pos),pb=parsePos(b.pos);
           if(pa&&pb)return pa-pb;
           return (a.rank??999)-(b.rank??999);
@@ -5241,12 +5242,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               && (i === 0 || isNewPairingGroup);
             const showTeeTime = dispTeeTime && !isActivelyPlaying && !isCut && !teeRoundAlreadyPlayed && !justFinishedRound;
             return(<React.Fragment key={p.name}>
-              {fieldSort==='pairings' && multiCourse && !isCut && myPair.course && (i===0 || (prevPair.course||'') !== myPair.course) &&
-                <div style={{padding:'9px 10px 6px',fontSize:12,fontWeight:800,color:T.primary,background:'#fff',borderTop:i?`2px solid ${T.primary}30`:'none'}}>
-                  ⛳ {pairCourses.get(myPair.course) || myPair.course} <span style={{fontSize:10,fontWeight:700,color:'#8a9580',marginLeft:4}}>{myPair.course}</span>
-                </div>}
               {isPairingGroupStart && myPairTime && <div style={{display:'flex',padding:'4px 10px',background:`${T.primary}10`,fontSize:10,fontWeight:700,color:T.primary,letterSpacing:.5,borderTop:i===0?'none':`2px solid ${T.primary}`,borderBottom:`1px solid ${T.primary}30`}}>
-                <span>⏰ {myPairTime}{myStartHole !== 1 ? ` · Hole ${myStartHole}` : ''}{multiCourse && myPair.course ? ` · ${myPair.course}` : ''}</span>
+                <span>⏰ {myPairTime}{myStartHole !== 1 ? ` · Hole ${myStartHole}` : ''}{multiCourse && myPair.course ? ` · ${pairCourses.get(myPair.course) || myPair.course} (${myPair.course})` : ''}</span>
               </div>}
               <div onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',borderTop:(fieldSort!=='pairings' && (isNewPairingGroup||isCutTransition))?`2px solid ${T.primary}`:(isCutTransition?`2px solid ${T.primary}`:'none'),background:isCut&&isLive?'#fafafa':favorites.has(p.name)?'#fff8d6':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&isLive?.6:1,borderLeft:favorites.has(p.name)?`3px solid #d4a017`:'3px solid transparent'}}>
                 {!dupIndexCol&&<span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&isLive?'#999':T.primary,fontSize:12}}>{(isLive && !isPreTournament)?(isCut?(/WD/i.test(p.pos)?'🚑':/DQ/i.test(p.pos)?'🚫':'✂️'):p.pos):(i+1)}</span>}
