@@ -1,5 +1,5 @@
 'use client';
-// build: youre-in-v275-20260927-1100
+// build: multi-course-v276-20260927-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -443,6 +443,9 @@ const teamSessionsFor = (n) => /ryder/i.test(n || '')
 const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
 // FINGERPRINT_V263_TEAM_COLOURS — USA red; International (and Europe, for the Ryder Cup) blue
 const TEAM_COLOUR = { USA: '#c8102e', INT: '#1f4e9c' };
+// FINGERPRINT_V276_MULTI_COURSE — names for course codes on multi-course events (Dunhill Links, etc.)
+const COURSE_NAMES = { SA: 'Old Course, St Andrews', CN: 'Carnoustie', KB: 'Kingsbarns' };
+const teeCourseOf = (t) => { const c = t?.course_code || t?.course || t?.course_name; return c != null && c !== '' ? String(c) : null; };
 // FINGERPRINT_V271_PUSH — VAPID public key (base64url) → bytes for pushManager.subscribe
 const b64ToU8 = (b64) => { const pad = '='.repeat((4 - b64.length % 4) % 4);
   const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(raw, c => c.charCodeAt(0)); };
@@ -1920,6 +1923,7 @@ export default function App(){
                   teeTime: userDate ? formatTeeTimeForUser(userDate) : t.teetime,
                   startHole: t.start_hole,
                   roundNum: t.round_num,
+                  course: teeCourseOf(t), courseName: t.course_name || null,   // FINGERPRINT_V276
                 };
               });
               // For the IN-PLAY GATE, always look at R1 specifically — R1 is event start and never moves.
@@ -2315,7 +2319,7 @@ export default function App(){
               const teeTime = userDate ? formatTeeTimeForUser(userDate) : nextRound.teetime;
               const startHole = nextRound.start_hole;
               const roundNum = nextRound.round_num;
-              const data = { teeTime, startHole, roundNum };
+              const data = { teeTime, startHole, roundNum, course: teeCourseOf(nextRound), courseName: nextRound.course_name || null };
               // FINGERPRINT_V146_TEE_NAMEMATCH
               // Index under multiple key formats so compound surnames (e.g. "Dumont De Chassart",
               // "Arni Sveinsson") match regardless of how pre-tournament vs field-updates split the
@@ -3625,14 +3629,18 @@ export default function App(){
     // tee for — i.e. the most recently played round (R3) — NOT R1. p.teeTime is always R1, so
     // the old fallback wrongly showed Thursday's times once R3 was done and R4 wasn't out.
     if (ar) {
-      if (ar[tournamentRound]) return { teeTime: ar[tournamentRound].teeTime, startHole: ar[tournamentRound].startHole };
+      if (ar[tournamentRound]) return { teeTime: ar[tournamentRound].teeTime, startHole: ar[tournamentRound].startHole, course: ar[tournamentRound].course || null, courseName: ar[tournamentRound].courseName || null };
       const avail = Object.keys(ar).map(Number).sort((a,b)=>b-a); // highest round first
       for (const rn of avail) {
-        if (ar[rn]?.teeTime) return { teeTime: ar[rn].teeTime, startHole: ar[rn].startHole };
+        if (ar[rn]?.teeTime) return { teeTime: ar[rn].teeTime, startHole: ar[rn].startHole, course: ar[rn].course || null, courseName: ar[rn].courseName || null };
       }
     }
-    return { teeTime: p.pairingTeeTime || p.teeTime, startHole: p.pairingStartHole || p.startHole || 1 };
+    return { teeTime: p.pairingTeeTime || p.teeTime, startHole: p.pairingStartHole || p.startHole || 1, course: null, courseName: null };
   };
+  // FINGERPRINT_V276_MULTI_COURSE — only when this round's tee times name more than one course
+  const pairCourses = new Map();
+  field.forEach(p => { const pt = pairTeeFor(p); if (pt.course && !pairCourses.has(pt.course)) pairCourses.set(pt.course, pt.courseName || COURSE_NAMES[pt.course] || pt.course); });
+  const multiCourse = pairCourses.size > 1;
   // Only consider this major "active" if it's actually within its tournament window
   const isActiveMajor = pastTeeTime || isTourMode(activeMajor);
   // Detect if the tournament is fully complete: everyone has R4 score OR is cut
@@ -3751,6 +3759,7 @@ export default function App(){
           // For R1/R2: standard tee time order (everyone usually starts hole 1)
           const round = tournamentRound;
           const at = pairTeeFor(a), bt = pairTeeFor(b);
+          if (multiCourse && (at.course || '') !== (bt.course || '')) return String(at.course || '~').localeCompare(String(bt.course || '~'));
           if (round >= 3) {
             const ah = at.startHole || 1;
             const bh = bt.startHole || 1;
@@ -5222,7 +5231,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               && i > 0
               && !isCut
               && !/CUT|WD|DQ|MC/i.test(prev?.pos||'')
-              && (prevPairTime !== myPairTime || prevStartHole !== myStartHole);
+              && (prevPairTime !== myPairTime || prevStartHole !== myStartHole || (multiCourse && (prevPair.course||'') !== (myPair.course||'')));
             const isCutTransition = fieldSort === 'pairings'
               && i > 0
               && isCut
@@ -5232,8 +5241,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               && (i === 0 || isNewPairingGroup);
             const showTeeTime = dispTeeTime && !isActivelyPlaying && !isCut && !teeRoundAlreadyPlayed && !justFinishedRound;
             return(<React.Fragment key={p.name}>
+              {fieldSort==='pairings' && multiCourse && !isCut && myPair.course && (i===0 || (prevPair.course||'') !== myPair.course) &&
+                <div style={{padding:'9px 10px 6px',fontSize:12,fontWeight:800,color:T.primary,background:'#fff',borderTop:i?`2px solid ${T.primary}30`:'none'}}>
+                  ⛳ {pairCourses.get(myPair.course) || myPair.course} <span style={{fontSize:10,fontWeight:700,color:'#8a9580',marginLeft:4}}>{myPair.course}</span>
+                </div>}
               {isPairingGroupStart && myPairTime && <div style={{display:'flex',padding:'4px 10px',background:`${T.primary}10`,fontSize:10,fontWeight:700,color:T.primary,letterSpacing:.5,borderTop:i===0?'none':`2px solid ${T.primary}`,borderBottom:`1px solid ${T.primary}30`}}>
-                <span>⏰ {myPairTime}{myStartHole !== 1 ? ` · Hole ${myStartHole}` : ''}</span>
+                <span>⏰ {myPairTime}{myStartHole !== 1 ? ` · Hole ${myStartHole}` : ''}{multiCourse && myPair.course ? ` · ${myPair.course}` : ''}</span>
               </div>}
               <div onClick={()=>setSelectedPlayer(p)} style={{display:'flex',padding:'7px 10px',alignItems:'center',fontSize:12,borderBottom:'1px solid #eee8dc',borderTop:(fieldSort!=='pairings' && (isNewPairingGroup||isCutTransition))?`2px solid ${T.primary}`:(isCutTransition?`2px solid ${T.primary}`:'none'),background:isCut&&isLive?'#fafafa':favorites.has(p.name)?'#fff8d6':ow.length&&!picksHidden?T.rowHl:i%2===0?'#fff':T.stripeBg,cursor:'pointer',opacity:isCut&&isLive?.6:1,borderLeft:favorites.has(p.name)?`3px solid #d4a017`:'3px solid transparent'}}>
                 {!dupIndexCol&&<span style={{width:40,textAlign:'center',fontWeight:700,color:isCut&&isLive?'#999':T.primary,fontSize:12}}>{(isLive && !isPreTournament)?(isCut?(/WD/i.test(p.pos)?'🚑':/DQ/i.test(p.pos)?'🚫':'✂️'):p.pos):(i+1)}</span>}
