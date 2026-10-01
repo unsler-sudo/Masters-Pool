@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
 export const dynamic = 'force-dynamic';
-// build: headshots-v196-20260927-1400
+// build: headshots-cache-v197-20261001-1810
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1511,7 +1511,10 @@ export async function GET(request) {
   if (url.searchParams.get('headshots') === '1') {
     let map = {};
     try { const r = await redis('GET', 'headshots:map'); if (r) map = JSON.parse(r); } catch {}
-    return Response.json({ map }, { headers: { 'Cache-Control': 'public, s-maxage=3600, max-age=600' } });
+    // FINGERPRINT_V197 — never cache an empty list (an hour-long cached {} hid the first 200 photos);
+    // a real list is cached briefly so new photos appear within ~10 minutes
+    const has = Object.keys(map).length > 0;
+    return Response.json({ map }, { headers: { 'Cache-Control': has ? 'public, s-maxage=600, max-age=300' : 'no-store' } });
   }
 
   // Diagnostic mode: report what the rotation logic sees without running it
