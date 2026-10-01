@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
 export const dynamic = 'force-dynamic';
-// build: cut-round-v195-20260927-1300
+// build: headshots-v196-20260927-1400
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1505,6 +1505,14 @@ export async function GET(request) {
   const url = new URL(request.url);
   const poolId = url.searchParams.get('poolId') || 'default';
   const diagnose = url.searchParams.get('diagnose') === '1';
+
+  // FINGERPRINT_V196_HEADSHOTS — photo IDs collected by the droplet (dg_id → DataGolf headshot id).
+  // The page merges these after its built-in list, so new players get photos without a code change.
+  if (url.searchParams.get('headshots') === '1') {
+    let map = {};
+    try { const r = await redis('GET', 'headshots:map'); if (r) map = JSON.parse(r); } catch {}
+    return Response.json({ map }, { headers: { 'Cache-Control': 'public, s-maxage=3600, max-age=600' } });
+  }
 
   // Diagnostic mode: report what the rotation logic sees without running it
   if (diagnose) {
