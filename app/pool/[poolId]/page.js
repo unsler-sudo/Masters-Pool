@@ -1,5 +1,5 @@
 'use client';
-// build: tee-order-courses-v277-20260927-1230
+// build: headshots-v278-20260927-1400
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -409,8 +409,10 @@ const DG_HEADSHOT_CDN = (id) => `https://datagolf.com/static/players/headshot_${
 // The map itself lives in its own module (it's data, not logic) so it can be regenerated and
 // swapped wholesale without touching this file. Missing module or missing player → flag only.
 const PLAYER_HEADSHOTS = HEADSHOT_MAP;
+// FINGERPRINT_V278_HEADSHOTS — photos the droplet finds for players not in the built-in list
+const DYN_HEADSHOTS = {};
 const headshotFor = (p) => {
-  const v = p && p.dgId != null ? PLAYER_HEADSHOTS[p.dgId] : null;
+  const v = p && p.dgId != null ? (PLAYER_HEADSHOTS[p.dgId] ?? DYN_HEADSHOTS[p.dgId]) : null;
   if (v == null) return null;
   return typeof v === 'number' ? DG_HEADSHOT_CDN(v) : v;
 };
@@ -1305,7 +1307,8 @@ export default function App(){
   const [entryName,setEntryName]=useState('');
   const [entryEmail,setEntryEmail]=useState('');
   const [editMode,setEditMode]=useState(false);
-  const [addAnother,setAddAnother]=useState(false);        // FINGERPRINT_V275 — deliberately making a 2nd entry
+  const [addAnother,setAddAnother]=useState(false);
+  const [hsTick,setHsTick]=useState(0);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
   const [editCode,setEditCode]=useState('');
   const [showEditModal,setShowEditModal]=useState(null);
   const [showClaimModal,setShowClaimModal]=useState(null);
@@ -3185,6 +3188,15 @@ export default function App(){
 
   const [reactionPickerFor,setReactionPickerFor]=useState(null);
   const [customEmojiFor,setCustomEmojiFor]=useState(null);
+
+  // FINGERPRINT_V278_HEADSHOTS — load the droplet-collected photo list once per visit
+  useEffect(()=>{
+    fetch('/api/entries?headshots=1').then(r=>r.json()).then(d=>{
+      const m=d?.map||{}; let n=0;
+      for(const [id,h] of Object.entries(m)) if(PLAYER_HEADSHOTS[id]==null&&h){ DYN_HEADSHOTS[id]=h; n++; }
+      if(n) setHsTick(x=>x+1);
+    }).catch(()=>{});
+  },[]);
 
   // Restore chat verification from localStorage
   useEffect(()=>{
