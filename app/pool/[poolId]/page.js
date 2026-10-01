@@ -1,5 +1,5 @@
 'use client';
-// build: headshots-v278-20260927-1400
+// build: scorecard-course-v279-20260927-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -447,6 +447,12 @@ const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
 const TEAM_COLOUR = { USA: '#c8102e', INT: '#1f4e9c' };
 // FINGERPRINT_V276_MULTI_COURSE — names for course codes on multi-course events (Dunhill Links, etc.)
 const COURSE_NAMES = { SA: 'Old Course, St Andrews', CN: 'Carnoustie', KB: 'Kingsbarns' };
+// FINGERPRINT_V279_SCORECARD_COURSE — a golfer's course for round n, shown only if his rounds used 2+ courses
+const roundCourseOf = (p, n) => {
+  const all = new Set([1, 2, 3, 4].map(r => p?.allRoundsTees?.[r]?.course).filter(Boolean));
+  const t = p?.allRoundsTees?.[n];
+  return all.size > 1 && t?.course ? { code: t.course, name: t.courseName || COURSE_NAMES[t.course] || t.course } : null;
+};
 const teeCourseOf = (t) => { const c = t?.course_code || t?.course || t?.course_name; return c != null && c !== '' ? String(c) : null; };
 // FINGERPRINT_V271_PUSH — VAPID public key (base64url) → bytes for pushManager.subscribe
 const b64ToU8 = (b64) => { const pad = '='.repeat((4 - b64.length % 4) % 4);
@@ -4245,7 +4251,7 @@ export default function App(){
                       const col=done?(r.val<0?'#1a6b1a':r.val===0?'#000':'#b02020'):'#ccc';
                       return(<button key={r.label} type="button" onClick={()=>clickable&&fetchHoleScores(p.name,r.num)} disabled={!clickable||holeData.loading}
                         style={{flex:1,textAlign:'center',background:active?T.primary:done?'#f5f5f5':clickable?'#fafafa':'#fafafa',borderRadius:12,padding:'10px 4px',border:`2px solid ${active?T.primary:done?col+'44':clickable?'#ccc':'#eee'}`,cursor:clickable?'pointer':'default',transition:'all .15s'}}>
-                        <div style={{fontSize:10,color:active?'#fff99a':'#888',fontWeight:600,marginBottom:4}}>{r.label}</div>
+                        <div style={{fontSize:10,color:active?'#fff99a':'#888',fontWeight:600,marginBottom:4}}>{r.label}{roundCourseOf(p,r.num)?` · ${roundCourseOf(p,r.num).code}`:''}</div>
                         {done?<div style={{fontSize:22,fontWeight:800,color:active?'#fff':col}}>{r.raw}</div>:isInProgress?(() => {
                           const liveCol = p.today && p.today.startsWith('-') ? '#1a6b1a' : p.today === 'E' ? '#555' : p.today ? '#b02020' : '#666';
                           return <div style={{fontSize:22,fontWeight:800,color:active?'#fff':liveCol}}>{p.today||'E'}</div>;
@@ -4266,6 +4272,8 @@ export default function App(){
                       {s.label&&<div style={{fontSize:9}}>{s.label}</div>}
                     </div>);};
                   return(<div style={{marginTop:14,marginBottom:4}}>
+                    {roundCourseOf(p,holeData.round)&&<div style={{textAlign:'center',fontSize:12,fontWeight:700,color:T.primary,marginBottom:8}}>
+                      ⛳ Round {holeData.round} · {roundCourseOf(p,holeData.round).name}</div>}
                     <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:1,marginBottom:8}}>HOLE BY HOLE — ROUND {holeData.round}</div>
                     <div style={{display:'flex',gap:5,marginBottom:10,flexWrap:'wrap'}}>
                       {[{l:'Eagle',bg:'#1565c0',t:'#fff',r:true},{l:'Birdie',bg:'#f9a825',t:'#3e2000',r:true},{l:'Par',bg:'#eee',t:'#555'},{l:'Bogey',bg:'#ffcdd2',t:'#c62828'},{l:'Double+',bg:'#e53935',t:'#fff'}].map(x=>(
