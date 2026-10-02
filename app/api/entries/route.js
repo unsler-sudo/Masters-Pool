@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
 export const dynamic = 'force-dynamic';
-// build: headshots-cache-v197-20261001-1810
+// build: privacy-v198-20261002-1000
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -270,6 +270,27 @@ async function srvPushMany(poolId, items) {
   await Promise.all(jobs);
   if (pruned) await redis('SET', key, JSON.stringify(subs));
   return sent;
+}
+
+// FINGERPRINT_V198_PRIVACY — what visitors may see. Every entries list sent to a browser goes through
+// srvPublicEntries (no emails, no edit codes; a masked email hint instead; NO picks while picks are hidden),
+// and pool settings go through srvPublicMeta (no admin password, no join code). Checks of codes, the join
+// code and the admin password all happen here on the server, never in the browser.
+const srvMaskEmail = (em) => { const x = String(em || ''), at = x.indexOf('@'); return at > 0 ? x[0] + '***' + x.slice(at) : ''; };
+function srvPublicEntries(list, hidePicks = false) {
+  return (list || []).map(e => {
+    const { editCode, email, ...rest } = e || {};
+    const out = { ...rest, hasEmail: !!email, emailHint: srvMaskEmail(email) };
+    if (hidePicks) out.picks = [];
+    return out;
+  });
+}
+function srvPublicMeta(m) {
+  if (!m) return m;
+  const o = { ...m };
+  delete o.adminPassword; delete o.joinCode;
+  for (const kk of Object.keys(o)) if (/password|secret|token|api_?key/i.test(kk)) delete o[kk];
+  return o;
 }
 
 // FINGERPRINT_V194_NOTIFY_PREFS — what each device wants. Opt-ins default OFF; the rest default ON.
@@ -1605,7 +1626,7 @@ export async function GET(request) {
         }
       }
     }
-    return Response.json({ entries, locked, picksHidden, paymentsHidden, payments, major, meta, purses, teamMatches, teamPicks, teamPickCounts,
+    return Response.json({ entries: srvPublicEntries(entries, picksHidden), locked, picksHidden, paymentsHidden, payments, major, meta: srvPublicMeta(meta), purses, teamMatches, teamPicks, teamPickCounts,
       pushKey: process.env.VAPID_PUBLIC_KEY || null });   // FINGERPRINT_V193_PUSH (public by design)
   } catch (err) {
     return Response.json({ entries:[], locked:false, picksHidden:true, paymentsHidden:false, payments:{}, major:'pga', error:err.message });
@@ -1629,12 +1650,35 @@ export async function POST(request) {
 
     if (body.action === 'verify-admin') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
-      return Response.json({ ok:true });
+      const am = await getPoolMeta(poolId);
+      return Response.json({ ok:true, joinCode: am?.joinCode || '' });   // FINGERPRINT_V198 — Admin only
+    }
+
+    // FINGERPRINT_V198_PRIVACY — your own picks (read-only, works after lock), for when picks are hidden
+    if (body.action === 'my-entry') {
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e => e.name.toLowerCase() === String(body.name || '').toLowerCase()
+        && e.editCode?.toUpperCase() === String(body.code || '').toUpperCase());
+      if (!entry) return Response.json({ error:'Invalid name or code' }, { status:404 });
+      return Response.json({ ok:true, name: entry.name, picks: entry.picks || [] });
+    }
+
+    // FINGERPRINT_V198_PRIVACY — the join code is checked here, not in the browser
+    if (body.action === 'check-join-code') {
+      const jm = await getPoolMeta(poolId);
+      if (!jm?.joinCodeRequired || !jm?.joinCode) return Response.json({ ok:true });
+      if (String(body.code || '').trim().toUpperCase() === String(jm.joinCode).toUpperCase()) return Response.json({ ok:true });
+      return Response.json({ error:'Incorrect join code — check with your pool commissioner.' }, { status:403 });
     }
 
     if (body.action === 'submit') {
       const locked = await getLocked(poolId);
       if (locked) return Response.json({ error:'Entries are locked!' }, { status:403 });
+      {
+        const jm = await getPoolMeta(poolId);
+        if (jm?.joinCodeRequired && jm?.joinCode && String(body.joinCode || '').trim().toUpperCase() !== String(jm.joinCode).toUpperCase())
+          return Response.json({ error:'This pool needs its join code — enter it to continue.', needJoinCode:true }, { status:403 });
+      }
       const { name, picks, email } = body;
       if (!name?.trim()) return Response.json({ error:'Name required' }, { status:400 });
       if (!email?.trim()) return Response.json({ error:'Email required' }, { status:400 });
@@ -1704,7 +1748,7 @@ export async function POST(request) {
       // FINGERPRINT_V174_JOIN_CODE — on a match pick'em (reqPicks 0) the new entrant gets THEIR OWN
       // code back so they can save picks immediately instead of waiting on the email. Normal weeks
       // are unchanged (no extra field).
-      return Response.json({ ok:true, entries, codeSent:true, ...(reqPicks === 0 ? { editCode } : {}) });
+      return Response.json({ ok:true, entries: srvPublicEntries(entries, await getPicksHidden(poolId)), codeSent:true, ...(reqPicks === 0 ? { editCode } : {}) });
     }
 
     if (body.action === 'edit-entry') {
@@ -1737,18 +1781,26 @@ export async function POST(request) {
       entries[idx].picks = picks;
       entries[idx].ts = Date.now();
       await saveEntries(poolId, entries);
-      return Response.json({ ok:true, entries });
+      return Response.json({ ok:true, entries: srvPublicEntries(entries, await getPicksHidden(poolId)) });
     }
 
     if (body.action === 'resend-code') {
       const { name, email } = body;
-      if (!name?.trim() || !email?.trim()) return Response.json({ error:'Name and email required' }, { status:400 });
+      if (!name?.trim()) return Response.json({ error:'Name required' }, { status:400 });
       const entries = await getEntries(poolId);
+      // FINGERPRINT_V198_PRIVACY — the code always goes to the email ON FILE, so the page no longer needs to
+      // know anyone's address (a typed email, if given, must still match). Max once per 2 minutes per entry.
       const entry = entries.find(e =>
         e.name.toLowerCase() === name.trim().toLowerCase() &&
-        e.email?.toLowerCase() === email.trim().toLowerCase()
+        (!email?.trim() || e.email?.toLowerCase() === email.trim().toLowerCase())
       );
-      if (!entry) return Response.json({ error:'No entry found with that name and email' }, { status:404 });
+      if (!entry) return Response.json({ error:'No entry found with that name' + (email?.trim() ? ' and email' : '') }, { status:404 });
+      if (!entry.email) return Response.json({ error:'That entry has no email on file — ask your commissioner' }, { status:400 });
+      {
+        const rk = k(poolId, `resend:${entry.name.toLowerCase()}`);
+        if (await redis('GET', rk)) return Response.json({ error:`A code was just sent to ${srvMaskEmail(entry.email)} — check your inbox (or wait 2 minutes)` }, { status:429 });
+        await redis('SETEX', rk, 120, '1');
+      }
 
       if (process.env.RESEND_API_KEY) {
         const meta = await getPoolMeta(poolId);
@@ -1837,7 +1889,7 @@ export async function POST(request) {
       const filtered = entries.filter(e=>e.name.toLowerCase()!==body.name?.toLowerCase());
       if (filtered.length===entries.length) return Response.json({ error:'Entry not found' }, { status:404 });
       await saveEntries(poolId, filtered);
-      return Response.json({ ok:true, entries:filtered });
+      return Response.json({ ok:true, entries: srvPublicEntries(filtered, await getPicksHidden(poolId)) });
     }
 
     // ─── CHAT ───────────────────────────────────────────────────────────
@@ -3052,7 +3104,7 @@ export async function POST(request) {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const entries = await getEntries(poolId);
       await saveEntries(poolId, entries.filter(e=>e.name!==body.name));
-      return Response.json({ ok:true, entries:entries.filter(e=>e.name!==body.name) });
+      return Response.json({ ok:true, entries: srvPublicEntries(entries.filter(e=>e.name!==body.name), await getPicksHidden(poolId)) });
     }
 
     if (body.action==='mark-paid'||body.action==='mark-unpaid') {
