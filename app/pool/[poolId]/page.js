@@ -1,5 +1,5 @@
 'use client';
-// build: scorecard-course-v279-20260927-1500
+// build: privacy-v280-20261002-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1272,18 +1272,23 @@ export default function App(){
     }
   }, [poolId]);
 
+  // FINGERPRINT_V280_PRIVACY — the server checks the join code (it's no longer sent to browsers); once it
+  // passes, the code is remembered so it can go along with the entry, which the server now requires.
   const handleJoinCodeSubmit = async () => {
     setJoinCodeError('');
-    const res = await fetch('/api/entries?poolId=' + poolId);
-    const d = await res.json();
-    const correct = d.meta?.joinCode?.toUpperCase();
-    if (!correct || joinCodeEntry.toUpperCase().trim() === correct) {
-      localStorage.setItem(`jc_${poolId}`, 'true');
-      setJoinCodePassed(true);
-    } else {
-      setJoinCodeError('Incorrect join code — check with your pool commissioner.');
-    }
+    const code = joinCodeEntry.toUpperCase().trim();
+    try {
+      const r = await fetch('/api/entries', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ poolId, action:'check-join-code', code }) });
+      const d = await r.json();
+      if (d.ok) {
+        try { localStorage.setItem(`jc_${poolId}`, 'true'); localStorage.setItem(`jc_${poolId}_code`, code); } catch {}
+        setJoinCodePassed(true);
+      } else setJoinCodeError(d.error || 'Incorrect join code — check with your pool commissioner.');
+    } catch { setJoinCodeError('Could not check the code — check your connection.'); }
   };
+  const storedJoinCode = () => { try { return localStorage.getItem(`jc_${poolId}_code`) || joinCodeEntry || ''; } catch { return joinCodeEntry || ''; } };
+  const resetJoinGate = () => { try { localStorage.removeItem(`jc_${poolId}`); localStorage.removeItem(`jc_${poolId}_code`); } catch {} setJoinCodePassed(false); };
 
   const [tab,setTab]=useState('Standings');
   const [activeMajor,setActiveMajor]=useState('pga');
@@ -1314,6 +1319,7 @@ export default function App(){
   const [entryEmail,setEntryEmail]=useState('');
   const [editMode,setEditMode]=useState(false);
   const [addAnother,setAddAnother]=useState(false);
+  const [ownPicks,setOwnPicks]=useState(null);            // FINGERPRINT_V280 — your picks while picks are hidden
   const [hsTick,setHsTick]=useState(0);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
   const [editCode,setEditCode]=useState('');
   const [showEditModal,setShowEditModal]=useState(null);
@@ -3059,10 +3065,10 @@ export default function App(){
     try{
       const body=editMode
         ?{poolId,action:'update-entry',name:entryName.trim(),code:editCode,picks:isTeamPool?[]:allPicks}
-        :{poolId,action:'submit',name:entryName.trim(),email:entryEmail.trim(),picks:isTeamPool?[]:allPicks};
+        :{poolId,action:'submit',name:entryName.trim(),email:entryEmail.trim(),picks:isTeamPool?[]:allPicks,joinCode:storedJoinCode()};
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json();
-      if(d.error){msg(d.error);setSubmitting(false);return;}
+      if(d.error){if(d.needJoinCode)resetJoinGate();msg(d.error);setSubmitting(false);return;}
       if(d.entries)setEntries(d.entries);
       setEntryName('');setEntryEmail('');setPicks({1:[],2:[],3:[]});setSearch('');
       setEditMode(false);setEditCode('');
@@ -3673,6 +3679,15 @@ export default function App(){
   // Enter Pool tab shows their entry (picks, paid status, Edit) instead of a blank form that invites duplicates.
   const myEntry = (!isTeamPool && chatVerified && chatName) ? entries.find(e => e.name.toLowerCase() === chatName.toLowerCase()) : null;
   const showYoureIn = !!myEntry && !editMode && !addAnother && poolMeta?.paid !== false;
+  // FINGERPRINT_V280_PRIVACY — while picks are hidden the server sends nobody's picks, so fetch your own with your code
+  useEffect(()=>{
+    if(!showYoureIn||!picksHidden||!chatCode){ return; }
+    (async()=>{ try{
+      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'my-entry',name:myEntry.name,code:chatCode})});
+      const d=await r.json(); if(Array.isArray(d?.picks)) setOwnPicks(d.picks);
+    }catch{} })();
+  },[showYoureIn,picksHidden,chatCode,myEntry?.name,poolId]);
   // FINGERPRINT_V273_UNPAID_TEAM — Cup weeks have no stroke-play Round 1, so the Unpaid badge starts
   // blinking once the FIRST session (earliest first tee) has a result for every match instead.
   const firstSessionDone = (()=>{
@@ -4032,7 +4047,7 @@ export default function App(){
               </div>
               <input id="editCodeInput" autoFocus style={{...inp,textAlign:'center',letterSpacing:6,fontSize:20,fontWeight:700,textTransform:'uppercase',width:'100%',marginBottom:10}} placeholder="XXXXXX" maxLength={6} onKeyDown={e=>e.key==='Enter'&&handleSubmit()}/>
               <button type="button" onClick={handleSubmit} style={{...pri,width:'100%',padding:12,borderRadius:9,marginBottom:8}}>Unlock Picks →</button>
-              {entryToEdit?.email&&<button type="button" onClick={()=>{resendCode(showEditModal,entryToEdit.email);setShowEditModal(null);}} style={{background:'transparent',border:'none',color:T.primary,fontSize:12,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline'}}>Resend code to {entryToEdit.email}</button>}
+              {entryToEdit?.hasEmail&&<button type="button" onClick={()=>{resendCode(showEditModal);setShowEditModal(null);}} style={{background:'transparent',border:'none',color:T.primary,fontSize:12,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline'}}>Resend code to {entryToEdit.emailHint}</button>}
               <button type="button" onClick={()=>setShowEditModal(null)} style={{background:'transparent',border:'none',color:'#888',fontSize:12,width:'100%',padding:8,cursor:'pointer'}}>Cancel</button>
             </div>
           </div>
@@ -4641,7 +4656,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     </div>
                     <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Picks locked in':'Tap to '+(op?'collapse':'expand')}</div>
                   </div>
-                  {!locked&&(e.email?
+                  {!locked&&(e.hasEmail?
                     <button type="button" onClick={(ev)=>{ev.stopPropagation();setShowEditModal(e.name);}} style={{background:'transparent',border:`1px solid ${T.primary}30`,color:T.primary,padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>✏️ Edit</button>
                     :<button type="button" onClick={(ev)=>{ev.stopPropagation();setShowClaimModal(e.name);}} style={{background:'transparent',border:`1px solid #c9a84c80`,color:'#7a5500',padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>📧 Add email</button>
                   )}
@@ -4728,9 +4743,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             setSubmitting(true);
             try{
               const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({poolId,action:'submit',name:nm,email:em,picks:[]})});
+                body:JSON.stringify({poolId,action:'submit',name:nm,email:em,picks:[],joinCode:storedJoinCode()})});
               const d=await r.json();
-              if(d.error){ setSubmitting(false); return msg(d.error); }
+              if(d.error){ if(d.needJoinCode) resetJoinGate(); setSubmitting(false); return msg(d.error); }
               if(d.entries) setEntries(d.entries);
               setEntryName(''); setEntryEmail('');
               if(!d.editCode){ setChatName(nm); setSubmitting(false); return msg("You're in! Check your email for your code to save picks 📧"); }
@@ -4853,8 +4868,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           </>;
         })()}
         {tab==='Enter Pool'&&!isTeamPool&&showYoureIn&&(()=>{
-          const byTier = TIERS.map(t=>({t, names:(myEntry.picks||[]).filter(n=>field.find(f=>f.name===n)?.tier===t.id)}));
-          const unmatched = (myEntry.picks||[]).filter(n=>!field.find(f=>f.name===n));
+          const mine = (picksHidden ? ownPicks : myEntry.picks) || [];
+          const byTier = TIERS.map(t=>({t, names:mine.filter(n=>field.find(f=>f.name===n)?.tier===t.id)}));
+          const unmatched = mine.filter(n=>!field.find(f=>f.name===n));
           const paid = !!payments[myEntry.name];
           return <div style={sec}>
             <div style={{textAlign:'center',padding:'6px 0 12px'}}>
@@ -5367,10 +5383,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               </button>
               {chatName&&(()=>{
                 const entry=entries.find(e=>e.name===chatName);
-                if(entry?.email){
-                  return <button type="button" onClick={()=>{resendCode(chatName,entry.email);}}
+                if(entry?.hasEmail){
+                  return <button type="button" onClick={()=>{resendCode(chatName);}}
                     style={{background:'transparent',border:'none',color:T.primary,fontSize:11,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline',marginTop:4}}>
-                    Lost your code? Resend to {entry.email}
+                    Lost your code? Resend to {entry.emailHint}
                   </button>;
                 }
                 return <button type="button" onClick={()=>setShowClaimModal(chatName)}
@@ -5741,13 +5757,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               <input style={inp} type="password" placeholder="Password" value={adminPw} onChange={e=>{setAdminPw(e.target.value);setAdminAuthError('');}} onKeyDown={async e=>{
                 if(e.key==='Enter'){
                   const d=await adminAction('verify-admin',{});
-                  if(d?.ok)setAdminOk(true);
+                  if(d?.ok){setAdminOk(true);setPoolMeta(prev=>({...(prev||{}),joinCode:d.joinCode||''}));}
                   else setAdminAuthError('Wrong password');
                 }
               }}/>
               <button type="button" style={{...pri,padding:'10px 24px',minWidth:80}} onClick={async()=>{
                 const d=await adminAction('verify-admin',{});
-                if(d?.ok)setAdminOk(true);
+                if(d?.ok){setAdminOk(true);setPoolMeta(prev=>({...(prev||{}),joinCode:d.joinCode||''}));}
                 else setAdminAuthError('Wrong password');
               }}>Enter</button>
             </div>
