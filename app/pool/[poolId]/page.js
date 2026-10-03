@@ -1,5 +1,5 @@
 'use client';
-// build: admin-alerts-state-v290-20261003-1000
+// build: stay-signed-in-v291-20261003-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3238,7 +3238,8 @@ export default function App(){
           if(r.status===404){
             try{ localStorage.removeItem(`chat_${poolId}_name`); localStorage.removeItem(`chat_${poolId}_code`); }catch{}
             setChatVerified(false); setChatCode('');
-            msg(`Please sign in again, ${savedName} — each week's entry has a new code (it's in your email)`);
+            let hasAcct=false; try{ hasAcct=!!localStorage.getItem('tgp_auth'); }catch{}
+            if(!hasAcct) msg(`Please sign in again, ${savedName} — each week's entry has a new code (it's in your email)`);
           } else if(r.ok){
             const d=await r.json().catch(()=>null);
             if(d?.verifiedName&&d.verifiedName!==savedName){ setChatName(d.verifiedName); try{ localStorage.setItem(`chat_${poolId}_name`,d.verifiedName); }catch{} }
@@ -3253,7 +3254,7 @@ export default function App(){
   // for chat, Cup picks, notifications and editing exactly as before — the player just never sees a code.
   const authPost=async(body)=>{ const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); return r.json(); };
   const applySession=(token,user)=>{ try{ localStorage.setItem('tgp_auth',token); }catch{} setAcctToken(token); setAcct(user); };
-  const signOutLocal=()=>{ try{ localStorage.removeItem('tgp_auth'); }catch{} setAcctToken(null); setAcct(null); setAcctEntries([]); setMyPools([]);
+  const signOutLocal=()=>{ try{ localStorage.removeItem('tgp_auth'); }catch{} authPost({action:'signout'}).catch(()=>{}); setAcctToken(null); setAcct(null); setAcctEntries([]); setMyPools([]);
     if(ownerAdmin){ setOwnerAdmin(false); setAdminOk(false); setAdminPw(''); } };
   const adoptEntry=(name,code)=>{ setChatName(name); setChatCode(code); setChatVerified(true);
     try{ localStorage.setItem(`chat_${poolId}_name`,name); localStorage.setItem(`chat_${poolId}_code`,code); }catch{} };
@@ -3262,12 +3263,13 @@ export default function App(){
   useEffect(()=>{
     let t=null; try{ t=localStorage.getItem('tgp_auth'); }catch{}
     fetch('/api/auth').then(r=>r.json()).then(p=>setProviders(p||{})).catch(()=>{});
-    if(!t) return;
+    // FINGERPRINT_V291_PERSIST — always ask: the secure cookie restores a sign-in Safari forgot, and each
+    // visit renews it for another year
     (async()=>{ try{
-      const d=await authPost({action:'me',auth:t});
-      if(d.ok){ setAcctToken(t); setAcct(d.user); }
-      else if(d.signedOut){ try{ localStorage.removeItem('tgp_auth'); }catch{} }
-    }catch{ setAcctToken(t); } })();
+      const d=await authPost({action:'me',...(t?{auth:t}:{})});
+      if(d.ok&&d.token){ try{ localStorage.setItem('tgp_auth',d.token); }catch{} setAcctToken(d.token); setAcct(d.user); }
+      else if(d.signedOut&&t){ try{ localStorage.removeItem('tgp_auth'); }catch{} }
+    }catch{ if(t) setAcctToken(t); } })();
   },[]);
   useEffect(()=>{
     if(!acctToken||!poolId) return;
