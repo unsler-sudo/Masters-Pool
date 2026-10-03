@@ -1,5 +1,5 @@
 'use client';
-// build: privacy-v280-20261002-1000
+// build: late-entries-v281-20261002-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import { useParams, useSearchParams } from 'next/navigation';
@@ -1578,6 +1578,8 @@ export default function App(){
   const isLive = pastTeeTime || isTourMode(activeMajor); // pgatour mode always shows live data
   const locked = serverLocked || pastTeeTime;
   const picksHidden = serverPicksHidden && !pastTeeTime;
+  // FINGERPRINT_V281_LATE_ENTRIES — commissioner lets NEW entries in after the first tee (edits stay locked)
+  const lateOK = !!poolMeta?.allowLateEntries && !isTeamPool;
 
   // FINGERPRINT_V184_COUNTDOWN_REAL_TEE
   // The countdown must count to the SAME instant that actually locks entries (effectiveTeeStart =
@@ -3384,8 +3386,8 @@ export default function App(){
 
   // Auto-redirect away from Enter Pool tab when tournament starts (tab gets hidden)
   useEffect(()=>{
-    if(pastTeeTime&&tab==='Enter Pool'&&!isTeamPool)setTab('Standings');
-  },[pastTeeTime,tab]);
+    if(pastTeeTime&&tab==='Enter Pool'&&!isTeamPool&&!lateOK)setTab('Standings');
+  },[pastTeeTime,tab,lateOK]);
 
   // Auto-load past results when History tab opened
   // FINGERPRINT_V86_AUTOLOADHISTORY
@@ -4441,7 +4443,7 @@ export default function App(){
         : null)}
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
-        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
+        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
       {pushState==='on'&&<button type="button" onClick={()=>setShowNotif(true)} aria-label="Notification settings" title="Notification settings"
           style={{flex:'0 0 auto',padding:'0 12px',background:'transparent',border:'none',fontSize:17,cursor:'pointer'}}>🔔</button>}
       </nav>
@@ -4889,12 +4891,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             {!locked
               ? <button type="button" onClick={()=>startEdit(myEntry.name, chatCode)} style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:6}}>✏️ Edit my picks</button>
               : <div style={{textAlign:'center',fontSize:13,color:'#6b7c5e',marginTop:8}}>🔒 Picks are locked — good luck!</div>}
-            {!locked&&<div style={{textAlign:'center',marginTop:10}}>
+            {(!locked||lateOK)&&<div style={{textAlign:'center',marginTop:10}}>
               <button type="button" onClick={()=>setAddAnother(true)} style={{background:'none',border:'none',color:T.primary,fontSize:12,textDecoration:'underline',cursor:'pointer'}}>+ Add another entry</button>
             </div>}
           </div>;
         })()}
-        {tab==='Enter Pool'&&!isTeamPool&&!showYoureIn&&(locked
+        {tab==='Enter Pool'&&!isTeamPool&&!showYoureIn&&((locked&&!(lateOK&&!editMode))
           ? poolMeta?.paid===false
             ?<div style={bx}>
               <div style={{fontSize:44,marginBottom:10}}>💳</div>
@@ -4912,6 +4914,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             :<div style={bx}><div style={{fontSize:44,marginBottom:10}}>🔒</div><p style={{color:'#6b7c5e',fontWeight:700,marginBottom:6}}>Entries locked</p><p style={{color:'#8a9580',fontSize:13}}>The pool is currently closed. Check back soon — entries reopen once odds are available.</p></div>
           :<>
+            {pastTeeTime&&lateOK&&!editMode&&<div style={{background:'#fff7e6',border:'1px solid #f5c14a',borderRadius:9,padding:'8px 12px',marginBottom:10,fontSize:12,color:'#7a5500',lineHeight:1.45}}>⏰ <b>Late entry</b> — the tournament has started. Your commissioner is allowing late entries; once you submit, your picks are locked.</div>}
             {countdown&&<div style={{background:T.accentLight,padding:'8px 14px',borderRadius:9,marginBottom:10,fontSize:12,color:T.accent,textAlign:'center',border:`1px solid ${T.accent}30`}}>⏱ {countdown}</div>}
             {editMode&&<div style={{background:'#fff7e6',border:'1px solid #f5c14a',borderRadius:9,padding:'8px 12px',marginBottom:10,fontSize:12,color:'#7a5500',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <span>✏️ Editing <b>{entryName}</b>'s picks</span>
@@ -5881,6 +5884,23 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </div>
               </div>;
             })()}
+            {/* FINGERPRINT_V281_LATE_ENTRIES — allow new entries after the first tee */}
+            {!isTeamPool&&<div style={sec}>
+              <h3 style={stl}>⏰ Late entries</h3>
+              <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+                <span style={{flex:1,fontSize:13,color:'#2a3a1e',lineHeight:1.45}}>Allow new entries after the first tee
+                  <span style={{display:'block',fontSize:11,color:'#8a9580',marginTop:2}}>For someone who missed the deadline. Late entrants can see live scores and everyone's picks when they choose, and existing entries still can't change their picks.</span></span>
+                <span role="switch" aria-checked={!!poolMeta?.allowLateEntries} onClick={async(e)=>{e.preventDefault();
+                    const on=!poolMeta?.allowLateEntries;
+                    const d=await adminAction('set-late-entries',{on});
+                    if(d?.ok){setPoolMeta(prev=>({...(prev||{}),allowLateEntries:d.allowLateEntries}));msg(on?'Late entries allowed':'Late entries off');}
+                    else if(d?.error) msg(d.error);
+                  }}
+                  style={{width:44,height:26,borderRadius:13,background:poolMeta?.allowLateEntries?T.primary:'#d6d6cf',position:'relative',transition:'background .15s',flexShrink:0}}>
+                  <span style={{position:'absolute',top:3,left:poolMeta?.allowLateEntries?21:3,width:20,height:20,borderRadius:'50%',background:'#fff',boxShadow:'0 1px 2px rgba(0,0,0,.25)',transition:'left .15s'}}/>
+                </span>
+              </label>
+            </div>}
             {/* FINGERPRINT_V272_NOTIFY_SETTINGS — commissioner alerts on this device */}
             {pushKey&&(pushState==='default'||pushState==='granted'||pushState==='on')&&<div style={sec}>
               <h3 style={stl}>🔔 Commissioner alerts</h3>
