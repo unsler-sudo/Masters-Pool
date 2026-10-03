@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: season-accounts-v206-20261002-2130
+// build: season-rollover-v207-20261002-2200
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -3319,7 +3319,8 @@ export async function POST(request) {
       } catch {}
       const raws = keys.length ? await redis('MGET', ...keys) : [];
       const all = raws.map(r => { try { return r ? JSON.parse(r) : null; } catch { return null; } }).filter(a => a && raceOf(a));
-      const years = [...new Set(all.map(a => +a.year).filter(Boolean))].sort((a, b) => b - a);
+      // FINGERPRINT_V207 — always offer the current season too, so last season stays reachable on Jan 1
+      const years = [...new Set([new Date().getFullYear(), year, ...all.map(a => +a.year).filter(Boolean)])].sort((a, b) => b - a);
       const weeks = all.filter(a => +a.year === year);
       const norm = (e) => String(e || '').trim().toLowerCase();
       const emails = [...new Set(weeks.flatMap(a => (a.entries || []).filter(e => !e.uid && e.email).map(e => norm(e.email))))];
@@ -3363,12 +3364,12 @@ export async function POST(request) {
         // FINGERPRINT_V206 — only players with an account are listed (their earlier weeks count, matched by email)
         out[rk] = { events: r.events, rows: Object.values(r.rows).filter(x => x.uid).map(x => ({ ...x, winnings: Math.round(x.winnings * 100) / 100, golfer: Math.round(x.golfer) }))
           .sort((x, y) => y.winnings - x.winnings || y.wins - x.wins || (x.best ?? 99) - (y.best ?? 99) || y.events - x.events) };
-      return Response.json({ ok: true, year, years: years.length ? years : [year], races: out });
+      return Response.json({ ok: true, year, years, races: out });
     }
 
     if (body.action==='get-archives-public') {
       const MAJORS = ['players','masters','pga','usopen','open'];
-      const years  = [2025,2026,2027,2028];
+      const years  = Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2024 + i);   // FINGERPRINT_V207 — 2024 → next year, forever
       const MAJOR_ORDER = { players: 0, masters: 1, pga: 2, usopen: 3, open: 4 };
       const archives = [];
       // Major archives: archive:{major}_{year}
@@ -3466,7 +3467,7 @@ export async function POST(request) {
     if (body.action==='get-archives') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const MAJORS = ['players','masters','pga','usopen','open'];
-      const years  = [2025,2026,2027,2028];
+      const years  = Array.from({ length: new Date().getFullYear() - 2022 }, (_, i) => 2024 + i);   // FINGERPRINT_V207 — 2024 → next year, forever
       // Tee times for chronological sort within each year
       // Players (March) < Masters (April) < PGA (May) < US Open (June) < Open (July)
       const MAJOR_ORDER = { players: 0, masters: 1, pga: 2, usopen: 3, open: 4 };
