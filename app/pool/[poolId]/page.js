@@ -1,5 +1,5 @@
 'use client';
-// build: season-rollover-v289-20261002-2200
+// build: admin-alerts-state-v290-20261003-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3394,6 +3394,20 @@ export default function App(){
     }catch{ msg('Could not turn on notifications'); }
   };
   const hidePush=()=>{ setPushHide(true); try{ localStorage.setItem('push_hide','1'); }catch{} };
+  // FINGERPRINT_V290 — when Admin opens, ask whether this device already gets commissioner alerts
+  useEffect(()=>{
+    if(tab!=='Admin'||!adminOk||!adminPw||typeof navigator==='undefined'||!('serviceWorker' in navigator)) return;
+    let gone=false;
+    (async()=>{ try{
+      const reg=await navigator.serviceWorker.getRegistration();
+      const sub=reg?await reg.pushManager.getSubscription():null;
+      if(!sub){ if(!gone) setAdminPush(false); return; }
+      const d=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'push-admin-status',password:adminPw,endpoint:sub.endpoint})}).then(r=>r.json());
+      if(!gone&&d?.ok) setAdminPush(!!d.on);
+    }catch{} })();
+    return ()=>{ gone=true; };
+  },[tab,adminOk,adminPw,poolId]);
 
   // FINGERPRINT_V268_MAGIC_LINKS — arriving from an email button (?t=token): sign that entry straight in.
   // The token is removed from the address bar immediately, so it isn't left in history or screenshots.
