@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: owners-v204-20261002-1900
+// build: season-golfer-v205-20261002-2000
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -3341,11 +3341,11 @@ export async function POST(request) {
         const split = tieSplit ? (() => { const out = ranked.map(() => 0); for (let i = 0; i < ranked.length;) { let j = i; while (j + 1 < ranked.length && Math.abs(ranked[j + 1].total - ranked[i].total) < 1e-9) j++; let p = 0; for (let q = i; q <= j; q++) p += (prizes[q] || 0); for (let q = i; q <= j; q++) out[q] = p / (j - i + 1); i = j + 1; } return out; })() : null;
         const race = races[raceOf(a)];
         race.events++;
-        const seenThisWeek = new Set();
+        const seenThisWeek = new Set(), bestGolf = {};       // FINGERPRINT_V205 — golfer $: best entry per person per week
         ranked.forEach((x, i) => {
           const em = norm(x.e.email), uid = x.e.uid || uidByEmail[em] || null;
           const key = uid ? 'u:' + uid : em ? 'e:' + em : 'n:' + String(x.e.name || '').toLowerCase();
-          const row = race.rows[key] = race.rows[key] || { name: '', uid, winnings: 0, events: 0, entries: 0, wins: 0, cashes: 0, best: null };
+          const row = race.rows[key] = race.rows[key] || { name: '', uid, winnings: 0, golfer: 0, events: 0, entries: 0, wins: 0, cashes: 0, best: null };
           row.name = uid && acctName[uid] ? acctName[uid] : x.e.name;
           const won = tieSplit ? (split[i] || 0) : (i < 3 ? (prizes[i] || 0) : 0);
           const place = 1 + ranked.filter(r => r.total > x.total).length;
@@ -3354,11 +3354,13 @@ export async function POST(request) {
           if (place === 1 && x.total > 0) row.wins++;
           if (won > 0) row.cashes++;
           row.best = row.best == null ? place : Math.min(row.best, place);
+          if (!tieSplit) bestGolf[key] = Math.max(bestGolf[key] || 0, x.total);   // money weeks only (Cup weeks are points)
         });
+        for (const [key, v] of Object.entries(bestGolf)) race.rows[key].golfer += v;
       }
       const out = {};
       for (const [rk, r] of Object.entries(races))
-        out[rk] = { events: r.events, rows: Object.values(r.rows).map(x => ({ ...x, winnings: Math.round(x.winnings * 100) / 100 }))
+        out[rk] = { events: r.events, rows: Object.values(r.rows).map(x => ({ ...x, winnings: Math.round(x.winnings * 100) / 100, golfer: Math.round(x.golfer) }))
           .sort((x, y) => y.winnings - x.winnings || y.wins - x.wins || (x.best ?? 99) - (y.best ?? 99) || y.events - x.events) };
       return Response.json({ ok: true, year, years: years.length ? years : [year], races: out });
     }
