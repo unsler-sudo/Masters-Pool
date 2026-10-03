@@ -1,7 +1,8 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
+import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 export const dynamic = 'force-dynamic';
-// build: late-entries-v200-20261002-1200
+// build: venue-tz-v201-20261002-1300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -349,16 +350,11 @@ const srvPrefsView = (dev) => { const o = {}; for (const kk of Object.keys(SRV_P
 // one MGET for meta + devices + state, so it's light on the free Redis tier. Per-event state lives in
 // pool:{id}:notifystate so each notice goes once.
 const SRV_MAJOR_LABEL = { masters: 'The Masters', pga: 'PGA Championship', usopen: 'U.S. Open', open: 'The Open', players: 'THE PLAYERS' };
-function srvTourTZ(lat, lng) {                       // same rules as the page's tournamentTimeZone
-  if (lat == null || lng == null) return 'America/New_York';
-  lat = Number(lat); lng = Number(lng);
-  if (lng > -30) { if (lat > 50 && lng < 2) return 'Europe/London'; if (lat > 40 && lng < 20) return 'Europe/Madrid'; return 'Europe/London'; }
-  if (lng < -100 && lng > -130) return (lat < 37 && lng > -118) ? 'America/Phoenix' : 'America/Los_Angeles';
-  if (lng <= -100 && lng >= -103) return 'America/Chicago';
-  if (lng < -100) return 'America/Denver';
-  if (lng < -87) return 'America/Chicago';
-  if (lng < -67) return 'America/New_York';
-  return lat < 20 ? 'America/Puerto_Rico' : 'America/New_York';
+function srvTourTZ(lat, lng) {                       // FINGERPRINT_V201_TZ — exact zone (same as the page)
+  if (lat == null || lng == null || lat === '' || lng === '') return 'America/New_York';
+  const la = Number(lat), lo = Number(lng);
+  if (!Number.isFinite(la) || !Number.isFinite(lo)) return 'America/New_York';
+  try { return tzlookup(la, lo); } catch { return 'America/New_York'; }
 }
 function srvLocalToUtcMs(str, tz) {                  // "YYYY-MM-DD HH:MM" in venue time → UTC ms
   const m = String(str || '').match(/^(\d{4})-(\d{2})-(\d{2}) (\d{1,2}):(\d{2})/);
