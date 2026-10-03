@@ -1,4 +1,5 @@
 export const dynamic = 'force-dynamic';
+import { verifyToken, addUserPool } from '../auth/lib';   // FINGERPRINT_ACCOUNTS_OWNER
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -82,12 +83,15 @@ async function sendConfirmationEmail(meta, poolId) {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { poolName, commissionerName, commissionerEmail, adminPassword, major, bypassCode } = body;
+    const { poolName, adminPassword, major, bypassCode } = body;
+    // FINGERPRINT_ACCOUNTS_OWNER — creating a pool needs an account; the commissioner IS that account.
+    // The admin password is now an optional backup (e.g. for a co-commissioner).
+    const acct = await verifyToken(body.auth);
+    if (!acct) return Response.json({ error:'Sign in or create an account to make a pool', needAccount:true }, { status:401 });
+    const commissionerName = acct.name, commissionerEmail = acct.email;
 
     if (!poolName?.trim())          return Response.json({ error:'Pool name required' }, { status:400 });
-    if (!commissionerName?.trim())  return Response.json({ error:'Your name required' }, { status:400 });
-    if (!commissionerEmail?.trim()) return Response.json({ error:'Your email required' }, { status:400 });
-    if (!adminPassword?.trim())     return Response.json({ error:'Admin password required' }, { status:400 });
+    if (adminPassword && String(adminPassword).trim().length < 6) return Response.json({ error:'A backup admin password needs at least 6 characters (or leave it blank)' }, { status:400 });
     if (!major)                     return Response.json({ error:'Major required' }, { status:400 });
 
     // Generate unique pool ID (retry if collision)
@@ -110,7 +114,8 @@ export async function POST(request) {
       poolName:          poolName.trim(),
       commissionerName:  commissionerName.trim(),
       commissionerEmail: commissionerEmail.trim().toLowerCase(),
-      adminPassword:     adminPassword.trim(),
+      ...(adminPassword?.trim() ? { adminPassword: adminPassword.trim() } : {}),
+      ownerUid:          acct.uid,
       major,
       paid:              false,
       active:            false,
@@ -126,6 +131,7 @@ export async function POST(request) {
     await redis('SET', `pool:${poolId}:picks_hidden`, 'true');
     // Add to pools index
     await redis('SADD', 'pools:index', poolId);
+    await addUserPool(acct.uid, poolId);
 
     // ── Promo code — free pool for a specific major (with expiration) ───────
     if (bypassCode && PROMO_CODES[bypassCode.toUpperCase()]) {
