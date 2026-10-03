@@ -1,5 +1,5 @@
 'use client';
-// build: season-accounts-v288-20261002-2130
+// build: season-rollover-v289-20261002-2200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -5784,7 +5784,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               </div>
               {(seasonData.years||[]).length>1&&<div style={{textAlign:'right',marginBottom:8}}>
                 <select value={seasonYear} onChange={e=>setSeasonYear(+e.target.value)} style={{fontSize:13,padding:'4px 8px',borderRadius:6,border:'1px solid #d6d6cf'}}>
-                  {seasonData.years.map(y=><option key={y} value={y}>{y} season</option>)}</select></div>}
+                  {seasonData.years.map(y=><option key={y} value={y}>{y} season{y<new Date().getFullYear()?' (final)':''}</option>)}</select></div>}
               {R.rows.length===0
                 ? <div style={bx}><div style={{fontSize:40,marginBottom:8}}>🏆</div><p style={{color:'#8a9580',margin:0}}>{R0.events?`No one with an account has played ${RACES.find(x=>x[0]===race)[1]} events in ${seasonYear} yet.`:`No finished ${RACES.find(x=>x[0]===race)[1]} events in ${seasonYear} yet.`}</p></div>
                 : <div style={{background:'#fff',borderRadius:12,border:`1px solid ${T.cardBorder}`,overflow:'hidden'}}>
