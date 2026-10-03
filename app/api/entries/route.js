@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
 export const dynamic = 'force-dynamic';
-// build: privacy-v198-20261002-1000
+// build: hide-until-tee-v199-20261002-1100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -291,6 +291,43 @@ function srvPublicMeta(m) {
   delete o.adminPassword; delete o.joinCode;
   for (const kk of Object.keys(o)) if (/password|secret|token|api_?key/i.test(kk)) delete o[kk];
   return o;
+}
+
+// FINGERPRINT_V199_HIDE_UNTIL_TEE — "Hide picks" means hidden UNTIL THE FIRST TEE (the page has always
+// applied that part). The stored flag stays on all week, so the server must check the first tee too, or
+// picks vanish mid-tournament (v198 did exactly that — nothing was deleted, just not sent).
+// First tee = earliest Round 1 tee time from DataGolf + the venue's time zone, worked out once per event
+// and cached for 10 days (only ever computed for pools with Hide picks on and entries not yet locked).
+async function srvFirstTeeMs(meta) {
+  const evName = srvIsTourMode(meta?.major) ? (meta?.currentPgatourEvent || '') : (SRV_MAJOR_LABEL[meta?.major] || '');
+  if (!evName) return null;
+  const tour = srvTour(meta.major);
+  const key = `firsttee:${tour}:${srvNormEv(evName).replace(/\s/g, '')}`;
+  try { const c = await redis('GET', key); if (c) return +c; } catch {}
+  try { if (await redis('GET', key + ':miss')) return null; } catch {}     // asked DataGolf <10 min ago, not out yet
+  const miss = async () => { try { await redis('SETEX', key + ':miss', 600, '1'); } catch {} return null; };
+  try {
+    const dk = process.env.DATAGOLF_API_KEY;
+    const fu = await fetch(`https://feeds.datagolf.com/field-updates?tour=${tour}&file_format=json&key=${dk}`, { cache: 'no-store', signal: AbortSignal.timeout(5000) }).then(r => r.json());
+    if (!srvEvMatch(fu?.event_name, evName)) return await miss();
+    const tees = (fu.field || []).flatMap(p => (p.teetimes || []).filter(t => +t.round_num === 1).map(t => String(t.teetime || '')))
+      .filter(x => /^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}/.test(x)).sort();
+    if (!tees.length) return await miss();
+    const sch = await fetch(`https://feeds.datagolf.com/get-schedule?tour=${tour}&file_format=json&key=${dk}`, { cache: 'no-store', signal: AbortSignal.timeout(5000) }).then(r => r.json());
+    const sev = (sch?.schedule || []).find(x => srvEvMatch(x.event_name, evName));
+    const ms = srvLocalToUtcMs(tees[0], srvTourTZ(sev?.latitude, sev?.longitude));
+    if (ms) await redis('SETEX', key, 10 * 86400, String(ms));
+    return ms;
+  } catch { return null; }
+}
+// Should picks be withheld from visitors right now?
+async function srvHidePicksNow(poolId, picksHidden, locked, meta) {
+  if (picksHidden === undefined) picksHidden = await getPicksHidden(poolId);
+  if (!picksHidden) return false;
+  if (locked === undefined) locked = await getLocked(poolId);
+  if (locked) return false;
+  const t = await srvFirstTeeMs(meta || await getPoolMeta(poolId));
+  return !(t && Date.now() >= t);
 }
 
 // FINGERPRINT_V194_NOTIFY_PREFS — what each device wants. Opt-ins default OFF; the rest default ON.
@@ -1626,7 +1663,7 @@ export async function GET(request) {
         }
       }
     }
-    return Response.json({ entries: srvPublicEntries(entries, picksHidden), locked, picksHidden, paymentsHidden, payments, major, meta: srvPublicMeta(meta), purses, teamMatches, teamPicks, teamPickCounts,
+    return Response.json({ entries: srvPublicEntries(entries, await srvHidePicksNow(poolId, picksHidden, locked, meta)), locked, picksHidden, paymentsHidden, payments, major, meta: srvPublicMeta(meta), purses, teamMatches, teamPicks, teamPickCounts,
       pushKey: process.env.VAPID_PUBLIC_KEY || null });   // FINGERPRINT_V193_PUSH (public by design)
   } catch (err) {
     return Response.json({ entries:[], locked:false, picksHidden:true, paymentsHidden:false, payments:{}, major:'pga', error:err.message });
@@ -1748,7 +1785,7 @@ export async function POST(request) {
       // FINGERPRINT_V174_JOIN_CODE — on a match pick'em (reqPicks 0) the new entrant gets THEIR OWN
       // code back so they can save picks immediately instead of waiting on the email. Normal weeks
       // are unchanged (no extra field).
-      return Response.json({ ok:true, entries: srvPublicEntries(entries, await getPicksHidden(poolId)), codeSent:true, ...(reqPicks === 0 ? { editCode } : {}) });
+      return Response.json({ ok:true, entries: srvPublicEntries(entries, await srvHidePicksNow(poolId)), codeSent:true, ...(reqPicks === 0 ? { editCode } : {}) });
     }
 
     if (body.action === 'edit-entry') {
@@ -1781,7 +1818,7 @@ export async function POST(request) {
       entries[idx].picks = picks;
       entries[idx].ts = Date.now();
       await saveEntries(poolId, entries);
-      return Response.json({ ok:true, entries: srvPublicEntries(entries, await getPicksHidden(poolId)) });
+      return Response.json({ ok:true, entries: srvPublicEntries(entries, await srvHidePicksNow(poolId)) });
     }
 
     if (body.action === 'resend-code') {
@@ -1889,7 +1926,7 @@ export async function POST(request) {
       const filtered = entries.filter(e=>e.name.toLowerCase()!==body.name?.toLowerCase());
       if (filtered.length===entries.length) return Response.json({ error:'Entry not found' }, { status:404 });
       await saveEntries(poolId, filtered);
-      return Response.json({ ok:true, entries: srvPublicEntries(filtered, await getPicksHidden(poolId)) });
+      return Response.json({ ok:true, entries: srvPublicEntries(filtered, await srvHidePicksNow(poolId)) });
     }
 
     // ─── CHAT ───────────────────────────────────────────────────────────
@@ -3104,7 +3141,7 @@ export async function POST(request) {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const entries = await getEntries(poolId);
       await saveEntries(poolId, entries.filter(e=>e.name!==body.name));
-      return Response.json({ ok:true, entries: srvPublicEntries(entries.filter(e=>e.name!==body.name), await getPicksHidden(poolId)) });
+      return Response.json({ ok:true, entries: srvPublicEntries(entries.filter(e=>e.name!==body.name), await srvHidePicksNow(poolId)) });
     }
 
     if (body.action==='mark-paid'||body.action==='mark-unpaid') {
