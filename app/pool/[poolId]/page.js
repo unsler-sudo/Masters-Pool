@@ -1,5 +1,5 @@
 'use client';
-// build: venue-tz-v282-20261002-1300
+// build: owners-v285-20261002-1900
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1308,7 +1308,19 @@ export default function App(){
   const [editMode,setEditMode]=useState(false);
   const [addAnother,setAddAnother]=useState(false);
   const [ownPicks,setOwnPicks]=useState(null);            // FINGERPRINT_V280 — your picks while picks are hidden
-  const [hsTick,setHsTick]=useState(0);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
+  const [hsTick,setHsTick]=useState(0);
+  // FINGERPRINT_V283_ACCOUNTS — signed-in account (token kept on this device for 90 days)
+  const [acctToken,setAcctToken]=useState(null);
+  const [acct,setAcct]=useState(null);
+  const [acctEntries,setAcctEntries]=useState([]);
+  const [showAcct,setShowAcct]=useState(false);
+  const [acctMode,setAcctMode]=useState('signin');        // signin | signup | forgot | reset
+  const [acctForm,setAcctForm]=useState({name:'',email:'',phone:'',password:'',current:'',code:''});
+  const [acctBusy,setAcctBusy]=useState(false);
+  const [acctErr,setAcctErr]=useState('');
+  const [providers,setProviders]=useState({google:false,apple:false});
+  const [ownerAdmin,setOwnerAdmin]=useState(false);       // FINGERPRINT_V285_OWNER — Admin via your account
+  const [myPools,setMyPools]=useState([]);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
   const [editCode,setEditCode]=useState('');
   const [showEditModal,setShowEditModal]=useState(null);
   const [showClaimModal,setShowClaimModal]=useState(null);
@@ -1411,7 +1423,11 @@ export default function App(){
   const [expandedYears,setExpandedYears]=useState({}); // History year accordion — newest open by default
   const [historyLoaded,setHistoryLoaded]=useState(false);
   // FINGERPRINT_V181_SCHEDULE — History tab has two sub-views: past Results and the season Schedule
-  const [historyView,setHistoryView]=useState('results'); // 'results' | 'schedule'
+  const [historyView,setHistoryView]=useState('results'); // 'results' | 'schedule' | 'season'
+  // FINGERPRINT_V284_SEASON — season-long prize-money standings (Majors · PGA Tour · DP World)
+  const [seasonData,setSeasonData]=useState(null);
+  const [seasonYear,setSeasonYear]=useState(new Date().getFullYear());
+  const [seasonRace,setSeasonRace]=useState(null);
   const [schedule,setSchedule]=useState(null);
   const [scheduleLoaded,setScheduleLoaded]=useState(false);
   const [chatMessages,setChatMessages]=useState([]);
@@ -3047,23 +3063,24 @@ export default function App(){
   const submit=async()=>{
     if(!entryName.trim())return msg('Enter your name!');
     if(!editMode){
-      if(!entryEmail.trim())return msg('Enter your email!');
-      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entryEmail.trim()))return msg('Invalid email format');
+      if(!acct&&!editMode&&!entryEmail.trim())return msg('Enter your email!');
+      if(!acct&&!editMode&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entryEmail.trim()))return msg('Invalid email format');
     }
     if(!isTeamPool)for(const t of TIERS)if(picks[t.id].length!==t.picks)return msg(`Pick ${t.picks} from ${t.name}`);
     setSubmitting(true);
     try{
       const body=editMode
         ?{poolId,action:'update-entry',name:entryName.trim(),code:editCode,picks:isTeamPool?[]:allPicks}
-        :{poolId,action:'submit',name:entryName.trim(),email:entryEmail.trim(),picks:isTeamPool?[]:allPicks,joinCode:storedJoinCode()};
+        :{poolId,action:'submit',name:entryName.trim(),email:entryEmail.trim(),picks:isTeamPool?[]:allPicks,joinCode:storedJoinCode(),auth:acctToken};
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const d=await r.json();
-      if(d.error){if(d.needJoinCode)resetJoinGate();msg(d.error);setSubmitting(false);return;}
+      if(d.error){if(d.needJoinCode)resetJoinGate();if(d.needAccount)openAcct('signup');msg(d.error);setSubmitting(false);return;}
       if(d.entries)setEntries(d.entries);
       setEntryName('');setEntryEmail('');setPicks({1:[],2:[],3:[]});setSearch('');
       setEditMode(false);setEditCode('');
       if(isTeamPool){ setChatName(entryName.trim()); msg("You're in! Check your email for your code, then sign in below to pick 📧"); }
-      else { msg(editMode?'Picks updated!':'Entry submitted! Check email for edit code 📧'); setAddAnother(false); setTab('Standings'); }
+      else { if(!editMode&&d.editCode&&d.name){ adoptEntry(d.name,d.editCode); setAcctEntries(x=>[...x.filter(e=>e.name!==d.name),{name:d.name,code:d.editCode}]); }
+        msg(editMode?'Picks updated!':(acct?"You're in! ✓":'Entry submitted! Check email for edit code 📧')); setAddAnother(false); setTab('Standings'); }
     }catch(e){msg('Error submitting — check connection');}
     setSubmitting(false);
   };
@@ -3229,6 +3246,96 @@ export default function App(){
       })();
     }
   },[poolId]);
+
+  // FINGERPRINT_V283_ACCOUNTS — accounts replace edit codes. When signed in, the server hands this device the
+  // codes for the player's OWN entries in this pool (linking any made with their email), and the page uses them
+  // for chat, Cup picks, notifications and editing exactly as before — the player just never sees a code.
+  const authPost=async(body)=>{ const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); return r.json(); };
+  const applySession=(token,user)=>{ try{ localStorage.setItem('tgp_auth',token); }catch{} setAcctToken(token); setAcct(user); };
+  const signOutLocal=()=>{ try{ localStorage.removeItem('tgp_auth'); }catch{} setAcctToken(null); setAcct(null); setAcctEntries([]); setMyPools([]);
+    if(ownerAdmin){ setOwnerAdmin(false); setAdminOk(false); setAdminPw(''); } };
+  const adoptEntry=(name,code)=>{ setChatName(name); setChatCode(code); setChatVerified(true);
+    try{ localStorage.setItem(`chat_${poolId}_name`,name); localStorage.setItem(`chat_${poolId}_code`,code); }catch{} };
+  const openAcct=(mode)=>{ if(mode) setAcctMode(mode); setAcctErr('');
+    setAcctForm(f=>({...f,name:acct?.name||f.name,phone:acct?.phone||f.phone,password:'',current:'',code:''})); setShowAcct(true); };
+  useEffect(()=>{
+    let t=null; try{ t=localStorage.getItem('tgp_auth'); }catch{}
+    fetch('/api/auth').then(r=>r.json()).then(p=>setProviders(p||{})).catch(()=>{});
+    if(!t) return;
+    (async()=>{ try{
+      const d=await authPost({action:'me',auth:t});
+      if(d.ok){ setAcctToken(t); setAcct(d.user); }
+      else if(d.signedOut){ try{ localStorage.removeItem('tgp_auth'); }catch{} }
+    }catch{ setAcctToken(t); } })();
+  },[]);
+  useEffect(()=>{
+    if(!acctToken||!poolId) return;
+    (async()=>{ try{
+      const d=await authPost({action:'account-pool',auth:acctToken,poolId});
+      if(d.signedOut){ signOutLocal(); return; }
+      if(Array.isArray(d.entries)){
+        setAcctEntries(d.entries);
+        if(d.entries.length){
+          let saved=null; try{ saved=localStorage.getItem(`chat_${poolId}_name`); }catch{}
+          const pick=d.entries.find(e=>e.name===saved)||d.entries[0];
+          adoptEntry(pick.name,pick.code);
+        }
+      }
+      // FINGERPRINT_V285_OWNER — you run this pool: Admin opens with your account, no password
+      if(d.owner){
+        const pw='acct:'+acctToken;
+        const v=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'verify-admin',password:pw})}).then(r=>r.json()).catch(()=>null);
+        if(v?.ok){ setAdminPw(pw); setAdminOk(true); setOwnerAdmin(true); setPoolMeta(prev=>({...(prev||{}),joinCode:v.joinCode||''})); }
+      }
+    }catch{} })();
+  },[acctToken,poolId]);
+  useEffect(()=>{
+    if(!showAcct||!acctToken) return;
+    authPost({action:'my-pools',auth:acctToken}).then(d=>{ if(d?.ok) setMyPools(d.pools||[]); }).catch(()=>{});
+  },[showAcct,acctToken]);
+  const acctCall=async(body)=>{ setAcctBusy(true); setAcctErr('');
+    try{ const d=await authPost(body); if(d.error) setAcctErr(d.error); return d; }
+    catch{ setAcctErr('Connection problem — try again'); return {}; }
+    finally{ setAcctBusy(false); } };
+  const doSignin=async()=>{ const d=await acctCall({action:'login',email:acctForm.email,password:acctForm.password});
+    if(d.ok){ applySession(d.token,d.user); setShowAcct(!!d.user.needsPhone); msg(`Signed in as ${d.user.name} ✓`); } };
+  const doSignup=async()=>{ const d=await acctCall({action:'signup',name:acctForm.name,email:acctForm.email,phone:acctForm.phone,password:acctForm.password});
+    if(d.ok){ applySession(d.token,d.user); setShowAcct(false); msg(`Welcome, ${d.user.name}! ✓`); } else if(d.exists) setAcctMode('signin'); };
+  const doForgot=async()=>{ const d=await acctCall({action:'reset-request',email:acctForm.email});
+    if(d.ok){ setAcctMode('reset'); msg('If that email has an account, a code is on its way'); } };
+  const doReset=async()=>{ const d=await acctCall({action:'reset-confirm',email:acctForm.email,code:acctForm.code,password:acctForm.password});
+    if(d.ok){ applySession(d.token,d.user); setShowAcct(false); msg('Password reset ✓'); } };
+  const doProfile=async()=>{ const d=await acctCall({action:'update-profile',auth:acctToken,name:acctForm.name,phone:acctForm.phone});
+    if(d.ok){ setAcct(d.user); msg('Saved ✓'); } };
+  const doPassword=async()=>{ const d=await acctCall({action:'change-password',auth:acctToken,current:acctForm.current,password:acctForm.password});
+    if(d.ok){ applySession(d.token,d.user); setAcctForm(f=>({...f,current:'',password:''})); msg('Password updated — other devices signed out'); } };
+  const doSignoutAll=async()=>{ await acctCall({action:'signout-all',auth:acctToken}); signOutLocal(); setShowAcct(false); msg('Signed out on every device'); };
+  // Google/Apple: open the sign-in in a new tab (opened inside the tap, so it isn't blocked), then poll for the hand-off
+  const startOAuth=async(provider)=>{
+    const w=window.open('','_blank');
+    const d=await acctCall({action:'oauth-start',provider});
+    if(!d.ok){ try{ w&&w.close(); }catch{} return; }
+    if(w) w.location.href=d.url; else { window.location.href=d.url; return; }
+    const until=Date.now()+10*60000; setAcctBusy(true);
+    const tick=async()=>{
+      if(Date.now()>until){ setAcctBusy(false); return setAcctErr('Sign-in timed out — try again'); }
+      try{
+        const r=await authPost({action:'oauth-poll',loginId:d.loginId});
+        if(r.ok){ setAcctBusy(false); applySession(r.token,r.user); setShowAcct(!!r.user.needsPhone); msg(`Signed in as ${r.user.name} ✓`); return; }
+        if(r.expired){ setAcctBusy(false); return setAcctErr('Sign-in expired — try again'); }
+      }catch{}
+      setTimeout(tick,2000);
+    };
+    setTimeout(tick,2000);
+  };
+
+  useEffect(()=>{
+    if(tab!=='History'||historyView!=='season') return;
+    let gone=false;
+    fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'season',year:seasonYear})})
+      .then(r=>r.json()).then(d=>{ if(!gone&&d?.ok) setSeasonData(d); }).catch(()=>{});
+    return ()=>{ gone=true; };
+  },[tab,historyView,seasonYear,poolId]);
 
   // FINGERPRINT_V271_PUSH — notifications. iPhones allow them only for the Home Screen app (opened from its
   // icon), and only after a tap; Android/desktop browsers allow them straight from the site.
@@ -4414,6 +4521,12 @@ export default function App(){
         </div>
       </header>
 
+      {/* FINGERPRINT_V283_ACCOUNTS — Google/Apple sign-ups don't supply a cell number */}
+      {acct?.needsPhone&&!showAcct&&<div style={{display:'flex',alignItems:'center',gap:10,margin:'8px 10px',padding:'10px 12px',borderRadius:10,background:'#fff8e6',border:'1px solid #f0c060'}}>
+        <span style={{fontSize:20}}>📱</span>
+        <div style={{flex:1,fontSize:13,lineHeight:1.35,color:'#3a4a2e'}}>Add your cell number to finish setting up your account.</div>
+        <button type="button" onClick={()=>openAcct()} style={{background:T.primary,color:'#fff',border:'none',borderRadius:7,padding:'8px 12px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Add</button>
+      </div>}
       {/* FINGERPRINT_V271_PUSH — one tap to turn notifications on (team events, signed-in entries) */}
       {chatVerified&&!pushHide&&(pushState==='default'&&pushKey
         ? <div style={{display:'flex',alignItems:'center',gap:10,margin:'8px 10px',padding:'10px 12px',borderRadius:10,background:'#fff8e6',border:'1px solid #f0c060'}}>
@@ -4432,9 +4545,99 @@ export default function App(){
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
         {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
-      {pushState==='on'&&<button type="button" onClick={()=>setShowNotif(true)} aria-label="Notification settings" title="Notification settings"
+      <button type="button" onClick={()=>openAcct(acct?null:'signin')} aria-label="Account" title={acct?`Signed in as ${acct.name}`:'Sign in'}
+          style={{flex:'0 0 auto',padding:'0 10px',background:'transparent',border:'none',fontSize:17,cursor:'pointer',position:'relative'}}>👤
+          {acct&&<span style={{position:'absolute',top:'50%',right:6,marginTop:-11,width:7,height:7,borderRadius:'50%',background:acct.needsPhone?'#e0a000':'#2d9a3e'}}/>}</button>
+        {pushState==='on'&&<button type="button" onClick={()=>setShowNotif(true)} aria-label="Notification settings" title="Notification settings"
           style={{flex:'0 0 auto',padding:'0 12px',background:'transparent',border:'none',fontSize:17,cursor:'pointer'}}>🔔</button>}
       </nav>
+      {/* FINGERPRINT_V283_ACCOUNTS — the Account panel */}
+      {showAcct&&(()=>{
+        const F=acctForm, set=(key)=>(e)=>setAcctForm(f=>({...f,[key]:e.target.value}));
+        const field=(key,ph,type='text',ac)=><input key={key} style={{...inp,marginBottom:8,width:'100%',boxSizing:'border-box'}} type={type} autoComplete={ac} placeholder={ph} value={F[key]||''} onChange={set(key)}/>;
+        const btn=(label,fn,primary=true)=><button type="button" disabled={acctBusy} onClick={fn}
+          style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:4,opacity:acctBusy?.6:1,...(primary?{}:{background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`})}}>{label}</button>;
+        const link=(label,fn)=><button type="button" onClick={fn} style={{background:'none',border:'none',color:T.primary,fontSize:13,textDecoration:'underline',cursor:'pointer',padding:4}}>{label}</button>;
+        const h=(t)=><div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase',margin:'14px 0 6px'}}>{t}</div>;
+        const social=(p,label,bg,fg)=><button key={p} type="button" disabled={acctBusy} onClick={()=>startOAuth(p)}
+          style={{width:'100%',padding:12,borderRadius:9,border:'1px solid #d6d6cf',background:bg,color:fg,fontSize:15,fontWeight:700,marginBottom:8,cursor:'pointer',opacity:acctBusy?.6:1}}>{label}</button>;
+        return <div onClick={()=>setShowAcct(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:170,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto',borderRadius:'16px 16px 0 0',padding:'16px 16px 28px',boxSizing:'border-box'}}>
+            <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
+              <div style={{flex:1,fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:800,color:T.primary}}>
+                {acct?'👤 Your account':acctMode==='signup'?'Create your account':acctMode==='forgot'||acctMode==='reset'?'Reset your password':'Sign in'}</div>
+              <button type="button" onClick={()=>setShowAcct(false)} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
+            </div>
+            {acctErr&&<div style={{background:'#fdecea',color:'#b3261e',borderRadius:8,padding:'8px 10px',fontSize:13,marginBottom:10}}>{acctErr}</div>}
+            {acct ? <>
+              <div style={{fontSize:14,color:'#2a3a1e'}}>Signed in as <b>{acct.name}</b></div>
+              <div style={{fontSize:12,color:'#8a9580',marginBottom:4}}>{acct.email}{acct.google?' · Google':''}{acct.apple?' · Apple':''}</div>
+              {acct.needsPhone&&<div style={{background:'#fff8e6',border:'1px solid #f0c060',borderRadius:8,padding:'8px 10px',fontSize:13,color:'#7a5500',margin:'8px 0'}}>📱 Add your cell number to finish setting up.</div>}
+              {h('Your details')}
+              {field('name','Your name','text','name')}
+              {field('phone','Cell number','tel','tel')}
+              {btn('Save',doProfile)}
+              {acctEntries.length>0&&<>{h('Your entries in this pool')}
+                {acctEntries.map(e=><label key={e.name} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderBottom:'1px solid #f0f0ea',cursor:'pointer'}}>
+                  <input type="radio" checked={chatName===e.name} onChange={()=>{adoptEntry(e.name,e.code);msg(`Now using ${e.name}`);}}/>
+                  <span style={{flex:1,fontSize:14}}>{e.name}</span>{chatName===e.name&&<span style={{fontSize:11,color:'#2d7a1e',fontWeight:700}}>IN USE</span>}
+                </label>)}</>}
+              {myPools.length>0&&<>{h('My pools')}
+                {myPools.map(pl=><a key={pl.poolId} href={`/pool/${pl.poolId}`} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 2px',borderBottom:'1px solid #f0f0ea',textDecoration:'none',color:'#2a3a1e'}}>
+                  <span style={{flex:1,minWidth:0}}>
+                    <span style={{display:'block',fontSize:14,fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{pl.name}</span>
+                    {pl.event&&<span style={{display:'block',fontSize:11,color:'#8a9580'}}>{pl.event}</span>}
+                  </span>
+                  {pl.owner&&<span style={{fontSize:10,fontWeight:800,color:'#7a5500',background:'#fff3d6',borderRadius:10,padding:'2px 8px'}}>COMMISSIONER</span>}
+                  {pl.poolId===poolId?<span style={{fontSize:10,fontWeight:800,color:T.primary}}>HERE</span>:<span style={{color:'#bbb'}}>›</span>}
+                </a>)}</>}
+              {h(acct.hasPassword?'Change password':'Set a password')}
+              {acct.hasPassword&&field('current','Current password','password','current-password')}
+              {field('password','New password (8+ characters)','password','new-password')}
+              {btn(acct.hasPassword?'Change password':'Set password',doPassword,false)}
+              {h('Sign out')}
+              {btn('Sign out on this device',()=>{signOutLocal();setShowAcct(false);msg('Signed out');},false)}
+              <div style={{textAlign:'center',marginTop:6}}>{link('Sign out on every device',doSignoutAll)}</div>
+            </> : <>
+              {(acctMode==='signin'||acctMode==='signup')&&(providers.apple||providers.google)&&<>
+                {providers.apple&&social('apple',' Continue with Apple','#000','#fff')}
+                {providers.google&&social('google','Continue with Google','#fff','#2a3a1e')}
+                <div style={{textAlign:'center',fontSize:12,color:'#aaa',margin:'6px 0 10px'}}>or with email</div>
+              </>}
+              {acctMode==='signin'&&<>
+                {field('email','Email','email','email')}
+                {field('password','Password','password','current-password')}
+                {btn('Sign in',doSignin)}
+                <div style={{display:'flex',justifyContent:'space-between',marginTop:8}}>
+                  {link('Forgot password?',()=>{setAcctErr('');setAcctMode('forgot');})}
+                  {link('Create an account',()=>{setAcctErr('');setAcctMode('signup');})}
+                </div>
+              </>}
+              {acctMode==='signup'&&<>
+                {field('name','Your name','text','name')}
+                {field('email','Email','email','email')}
+                {field('phone','Cell number','tel','tel')}
+                {field('password','Password (8+ characters)','password','new-password')}
+                {btn('Create account',doSignup)}
+                <div style={{textAlign:'center',marginTop:8}}>{link('I already have an account — sign in',()=>{setAcctErr('');setAcctMode('signin');})}</div>
+              </>}
+              {acctMode==='forgot'&&<>
+                <p style={{fontSize:13,color:'#6b7c5e',marginTop:0}}>We'll email you a 6-digit code.</p>
+                {field('email','Email','email','email')}
+                {btn('Send code',doForgot)}
+                <div style={{textAlign:'center',marginTop:8}}>{link('Back to sign in',()=>{setAcctErr('');setAcctMode('signin');})}</div>
+              </>}
+              {acctMode==='reset'&&<>
+                <p style={{fontSize:13,color:'#6b7c5e',marginTop:0}}>Enter the code we emailed to {F.email}, and a new password.</p>
+                {field('code','6-digit code','text','one-time-code')}
+                {field('password','New password (8+ characters)','password','new-password')}
+                {btn('Reset password',doReset)}
+                <div style={{textAlign:'center',marginTop:8}}>{link('Send a new code',()=>{setAcctErr('');setAcctMode('forgot');})}</div>
+              </>}
+            </>}
+          </div>
+        </div>;
+      })()}
       {/* FINGERPRINT_V272_NOTIFY_SETTINGS — per-device choices */}
       {showNotif&&(()=>{
         const P=notifPrefs||{};
@@ -4728,14 +4931,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           // code) and saves any picks already tapped for this session. The code is emailed as well.
           const joinTeam=async()=>{
             const nm=entryName.trim(), em=entryEmail.trim();
+            if(!acct){ openAcct('signup'); return; }                  // FINGERPRINT_V283 — joining needs an account
             if(!nm) return msg('Enter your name!');
-            if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) return msg('Enter a valid email — your code is sent there');
             setSubmitting(true);
             try{
               const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({poolId,action:'submit',name:nm,email:em,picks:[],joinCode:storedJoinCode()})});
+                body:JSON.stringify({poolId,action:'submit',name:nm,email:em,picks:[],joinCode:storedJoinCode(),auth:acctToken})});
               const d=await r.json();
-              if(d.error){ if(d.needJoinCode) resetJoinGate(); setSubmitting(false); return msg(d.error); }
+              if(d.error){ if(d.needJoinCode) resetJoinGate(); if(d.needAccount) openAcct('signup'); setSubmitting(false); return msg(d.error); }
+              if(d.editCode) setAcctEntries(x=>[...x.filter(e=>e.name!==nm),{name:nm,code:String(d.editCode).toUpperCase()}]);
               if(d.entries) setEntries(d.entries);
               setEntryName(''); setEntryEmail('');
               if(!d.editCode){ setChatName(nm); setSubmitting(false); return msg("You're in! Check your email for your code to save picks 📧"); }
@@ -4844,7 +5048,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   {mode==='new'
                     ? <div style={{display:'flex',flexDirection:'column',gap:8}}>
                         <input style={inp} placeholder="Your name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
-                        <input style={inp} placeholder="Email (your code is sent here too)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>
+                        {acct
+                          ? <div style={{fontSize:12,color:'#6b7c5e'}}>Joining as <b>{acct.name}</b> · {acct.email}</div>
+                          : <div style={{fontSize:12,color:'#6b7c5e'}}>You'll need an account to join — <span onClick={()=>openAcct('signup')} style={{color:T.primary,textDecoration:'underline',cursor:'pointer'}}>create one</span> or <span onClick={()=>openAcct('signin')} style={{color:T.primary,textDecoration:'underline',cursor:'pointer'}}>sign in</span>.</div>}
                         {bigBtn(submitting?'Joining…':(canSave&&dirty?'Join & save picks':'Join'),joinTeam)}
                       </div>
                     : <div style={{display:'flex',flexDirection:'column',gap:8}}>
@@ -4884,7 +5090,16 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>}
           </div>;
         })()}
-        {tab==='Enter Pool'&&!isTeamPool&&!showYoureIn&&((locked&&!(lateOK&&!editMode))
+        {tab==='Enter Pool'&&!isTeamPool&&!acct&&!editMode&&!(locked&&!lateOK)&&poolMeta?.paid!==false&&<div style={sec}>
+          <div style={{textAlign:'center',padding:'8px 0'}}>
+            <div style={{fontSize:34,lineHeight:1}}>👤</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:800,color:T.primary,margin:'8px 0 6px'}}>Make an account to enter</div>
+            <p style={{fontSize:13,color:'#6b7c5e',lineHeight:1.5,margin:'0 0 14px'}}>One account for every pool — no more codes. Your entries and winnings follow you, all season.</p>
+            <button type="button" onClick={()=>openAcct('signup')} style={{...pri,width:'100%',padding:12,fontSize:15}}>Create an account</button>
+            <button type="button" onClick={()=>openAcct('signin')} style={{background:'none',border:'none',color:T.primary,fontSize:13,marginTop:10,textDecoration:'underline',cursor:'pointer'}}>I already have one — sign in</button>
+          </div>
+        </div>}
+        {tab==='Enter Pool'&&!isTeamPool&&!showYoureIn&&(acct||editMode||(locked&&!lateOK)||poolMeta?.paid===false)&&((locked&&!(lateOK&&!editMode))
           ? poolMeta?.paid===false
             ?<div style={bx}>
               <div style={{fontSize:44,marginBottom:10}}>💳</div>
@@ -4914,7 +5129,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <span style={{fontSize:18,fontWeight:800}}>{totalPicked}</span><span style={{fontSize:9,opacity:.6}}>/{TOTAL_PICKS_REQ}</span>
               </div>
             </div>
-            {!editMode&&<input style={{...inp,marginBottom:10,width:'100%'}} type="email" placeholder="Your Email (for edit code)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>}
+            {!editMode&&!acct&&<input style={{...inp,marginBottom:10,width:'100%'}} type="email" placeholder="Your Email (for edit code)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>}
+            {!editMode&&acct&&<div style={{fontSize:12,color:'#6b7c5e',margin:'-2px 0 10px'}}>Entering as <b>{acct.name}</b> · {acct.email}</div>}
             {totalPicked>0&&<div style={{background:`${T.primary}10`,borderRadius:9,padding:10,marginBottom:10,border:`1px solid ${T.primary}1a`}}>
               <div style={{fontSize:10,fontWeight:700,color:T.primary,marginBottom:5,letterSpacing:1}}>YOUR PICKS</div>
               {TIERS.map(t=>{if(!picks[t.id].length)return null;return<div key={t.id} style={{marginBottom:4}}>
@@ -5534,13 +5750,48 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             {/* FINGERPRINT_V181_SCHEDULE — dropdown to switch between Past Results and the Schedule */}
             <div style={{display:'inline-flex',alignItems:'center',gap:8,marginBottom:10}}>
               <select value={historyView} onChange={e=>setHistoryView(e.target.value)} style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,border:`1.5px solid ${T.primary}33`,borderRadius:8,padding:'4px 30px 4px 12px',background:`${T.primary}08`,cursor:'pointer',appearance:'none',WebkitAppearance:'none',backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23${T.primary.replace('#','')}' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E")`,backgroundRepeat:'no-repeat',backgroundPosition:'right 10px center'}}>
+                <option value="season">🏆 Season Standings</option>
                 <option value="results">📚 Past Results</option>
                 <option value="schedule">📅 Schedule</option>
               </select>
             </div>
-            <div style={{fontSize:12,color:'#8a9580'}}>{historyView==='results'?'Final standings from previous events':`${schedule&&schedule.length?new Date().getFullYear():''} ${isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} season schedule`}</div>
+            <div style={{fontSize:12,color:'#8a9580'}}>{historyView==='season'?`Prize money won in this pool, ${seasonYear} season`:historyView==='results'?'Final standings from previous events':`${schedule&&schedule.length?new Date().getFullYear():''} ${isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} season schedule`}</div>
           </div>
-          {historyView==='schedule'?(
+          {historyView==='season'?(()=>{
+            const RACES=[['majors','Majors'],['pgatour','PGA Tour'],['dpworld','DP World']];
+            const defRace=activeMajor==='dpworld'?'dpworld':(isTourMode(activeMajor)||activeMajor==='players')?'pgatour':'majors';
+            const race=seasonRace||defRace;
+            if(!seasonData||seasonData.year!==seasonYear) return <div style={{textAlign:'center',padding:40,color:'#8a9580',fontSize:13}}>Loading standings…</div>;
+            const R=seasonData.races?.[race]||{events:0,rows:[]};
+            const money=(n)=>'$'+(Number.isInteger(n)?n.toLocaleString('en-US'):n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
+            const ord=(n)=>n+(['th','st','nd','rd'][((n%100)-20)%10]||['th','st','nd','rd'][n%100]||'th');
+            return <>
+              <div style={{display:'flex',gap:4,padding:3,borderRadius:9,background:'#f0f0ea',marginBottom:10}}>
+                {RACES.map(([key,label])=>{const on=race===key,ev=seasonData.races?.[key]?.events||0;
+                  return <button key={key} type="button" onClick={()=>setSeasonRace(key)} style={{flex:1,padding:'8px 4px',borderRadius:7,border:'none',cursor:'pointer',
+                    background:on?T.primary:'transparent',color:on?'#fff':'#5a6b4e',fontWeight:700,fontSize:13}}>
+                    {label}<div style={{fontSize:10,fontWeight:600,opacity:.8}}>{ev} event{ev===1?'':'s'}</div></button>;})}
+              </div>
+              {(seasonData.years||[]).length>1&&<div style={{textAlign:'right',marginBottom:8}}>
+                <select value={seasonYear} onChange={e=>setSeasonYear(+e.target.value)} style={{fontSize:13,padding:'4px 8px',borderRadius:6,border:'1px solid #d6d6cf'}}>
+                  {seasonData.years.map(y=><option key={y} value={y}>{y} season</option>)}</select></div>}
+              {R.rows.length===0
+                ? <div style={bx}><div style={{fontSize:40,marginBottom:8}}>🏆</div><p style={{color:'#8a9580',margin:0}}>No finished {RACES.find(x=>x[0]===race)[1]} events in {seasonYear} yet.</p></div>
+                : <div style={{background:'#fff',borderRadius:12,border:`1px solid ${T.cardBorder}`,overflow:'hidden'}}>
+                    {R.rows.map((x,i)=>{const me=acct&&x.uid&&x.uid===acct.uid;
+                      return <div key={x.name+i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:i<R.rows.length-1?`1px solid ${T.cardBorder}`:'none',background:me?`${T.primary}0d`:'#fff'}}>
+                        <div style={{width:28,textAlign:'center',fontSize:i<3&&x.winnings>0?18:13,fontWeight:800,color:'#8a9580'}}>{i<3&&x.winnings>0?['🥇','🥈','🥉'][i]:i+1}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontWeight:700,fontSize:14,color:'#2a3a1e',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.name}{me&&<span style={{fontSize:10,color:T.primary,fontWeight:800,marginLeft:6}}>YOU</span>}</div>
+                          <div style={{fontSize:11,color:'#8a9580'}}>{x.events} event{x.events===1?'':'s'}{x.wins?` · ${x.wins} win${x.wins===1?'':'s'}`:''}{x.best?` · best ${ord(x.best)}`:''}{x.entries>x.events?` · ${x.entries} entries`:''}</div>
+                        </div>
+                        <div style={{fontWeight:800,fontSize:16,color:x.winnings>0?'#2d7a1e':'#aaa'}}>{money(x.winnings)}</div>
+                      </div>;})}
+                  </div>}
+              <p style={{fontSize:11,color:'#8a9580',textAlign:'center',lineHeight:1.5,marginTop:10}}>Prize money from this pool's finished events, added up per player across all their entries.
+                {race==='majors'?' Majors: the Masters, PGA Championship, U.S. Open and The Open.':race==='pgatour'?' Includes the Players.':''}</p>
+            </>;
+          })():historyView==='schedule'?(
             !scheduleLoaded
               ?<div style={{textAlign:'center',padding:40,color:'#8a9580',fontSize:13}}>Loading schedule...</div>
               :!schedule||schedule.length===0
