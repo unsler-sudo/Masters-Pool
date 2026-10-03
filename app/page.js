@@ -73,12 +73,15 @@ export default function LandingPage() {
   const authPost = async (body) => (await fetch('/api/auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })).json();
   const loadPools = (t) => authPost({ action:'my-pools', auth:t }).then(d => { if (d?.ok) setMyPools(d.pools || []); }).catch(()=>{});
   const applySession = (t, u) => { try { localStorage.setItem('tgp_auth', t); } catch {} setToken(t); setAcct(u); loadPools(t); };
-  const signOut = () => { try { localStorage.removeItem('tgp_auth'); } catch {} setToken(null); setAcct(null); setMyPools([]); };
+  const signOut = () => { try { localStorage.removeItem('tgp_auth'); } catch {} authPost({ action:'signout' }).catch(()=>{}); setToken(null); setAcct(null); setMyPools([]); };
   useEffect(() => {
     fetch('/api/auth').then(r => r.json()).then(p => setProviders(p || {})).catch(()=>{});
     let t = null; try { t = localStorage.getItem('tgp_auth'); } catch {}
-    if (!t) return;
-    authPost({ action:'me', auth:t }).then(d => { if (d?.ok) { setToken(t); setAcct(d.user); loadPools(t); } else if (d?.signedOut) { try { localStorage.removeItem('tgp_auth'); } catch {} } }).catch(()=>{});
+    // always ask: the secure cookie restores a sign-in Safari forgot, and each visit renews it for a year
+    authPost({ action:'me', ...(t ? { auth:t } : {}) }).then(d => {
+      if (d?.ok && d.token) { try { localStorage.setItem('tgp_auth', d.token); } catch {} setToken(d.token); setAcct(d.user); loadPools(d.token); }
+      else if (d?.signedOut && t) { try { localStorage.removeItem('tgp_auth'); } catch {} }
+    }).catch(()=>{});
   }, []);
   useEffect(() => { if (acct && step === 'signin') setStep('mypools'); }, [acct, step]);
   useEffect(() => { if (acct && step === 'mypools' && token) loadPools(token); }, [step]);
