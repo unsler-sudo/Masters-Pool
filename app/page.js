@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 // Compute MAJORS dynamically based on current date
 // Always shows the NEXT occurrence of each major, sorted soonest first
@@ -61,20 +61,61 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const upd = (k,v) => setForm(f => ({...f, [k]:v}));
+  // FINGERPRINT_ACCOUNTS_OWNER — making a pool needs an account (shared with the pool pages: same saved sign-in)
+  const [token, setToken] = useState(null);
+  const [acct, setAcct] = useState(null);
+  const [myPools, setMyPools] = useState([]);
+  const [providers, setProviders] = useState({ google:false, apple:false });
+  const [authMode, setAuthMode] = useState('signup');          // signup | signin | forgot | reset
+  const [af, setAf] = useState({ name:'', email:'', phone:'', password:'', code:'' });
+  const [authErr, setAuthErr] = useState('');
+  const [authBusy, setAuthBusy] = useState(false);
+  const authPost = async (body) => (await fetch('/api/auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })).json();
+  const loadPools = (t) => authPost({ action:'my-pools', auth:t }).then(d => { if (d?.ok) setMyPools(d.pools || []); }).catch(()=>{});
+  const applySession = (t, u) => { try { localStorage.setItem('tgp_auth', t); } catch {} setToken(t); setAcct(u); loadPools(t); };
+  const signOut = () => { try { localStorage.removeItem('tgp_auth'); } catch {} setToken(null); setAcct(null); setMyPools([]); };
+  useEffect(() => {
+    fetch('/api/auth').then(r => r.json()).then(p => setProviders(p || {})).catch(()=>{});
+    let t = null; try { t = localStorage.getItem('tgp_auth'); } catch {}
+    if (!t) return;
+    authPost({ action:'me', auth:t }).then(d => { if (d?.ok) { setToken(t); setAcct(d.user); loadPools(t); } else if (d?.signedOut) { try { localStorage.removeItem('tgp_auth'); } catch {} } }).catch(()=>{});
+  }, []);
+  const authCall = async (body) => { setAuthBusy(true); setAuthErr('');
+    try { const d = await authPost(body); if (d.error) setAuthErr(d.error); return d; } catch { setAuthErr('Connection problem — try again'); return {}; } finally { setAuthBusy(false); } };
+  const doAuth = async () => {
+    if (authMode === 'signup') { const d = await authCall({ action:'signup', name:af.name, email:af.email, phone:af.phone, password:af.password }); if (d.ok) applySession(d.token, d.user); else if (d.exists) setAuthMode('signin'); }
+    else if (authMode === 'signin') { const d = await authCall({ action:'login', email:af.email, password:af.password }); if (d.ok) applySession(d.token, d.user); }
+    else if (authMode === 'forgot') { const d = await authCall({ action:'reset-request', email:af.email }); if (d.ok) setAuthMode('reset'); }
+    else if (authMode === 'reset') { const d = await authCall({ action:'reset-confirm', email:af.email, code:af.code, password:af.password }); if (d.ok) applySession(d.token, d.user); }
+  };
+  const startOAuth = async (provider) => {
+    const w = window.open('', '_blank');
+    const d = await authCall({ action:'oauth-start', provider });
+    if (!d.ok) { try { w && w.close(); } catch {} return; }
+    if (w) w.location.href = d.url; else { window.location.href = d.url; return; }
+    const until = Date.now() + 10*60000; setAuthBusy(true);
+    const tick = async () => {
+      if (Date.now() > until) { setAuthBusy(false); return setAuthErr('Sign-in timed out — try again'); }
+      try { const r = await authPost({ action:'oauth-poll', loginId:d.loginId });
+        if (r.ok) { setAuthBusy(false); return applySession(r.token, r.user); }
+        if (r.expired) { setAuthBusy(false); return setAuthErr('Sign-in expired — try again'); } } catch {}
+      setTimeout(tick, 2000);
+    };
+    setTimeout(tick, 2000);
+  };
   const handleCreate = async () => {
     setError('');
     if (!form.poolName.trim())         return setError('Pool name is required');
-    if (!form.commissionerName.trim()) return setError('Your name is required');
-    if (!form.commissionerEmail.trim()) return setError('Your email is required');
-    if (!form.adminPassword.trim())    return setError('Admin password is required');
+    if (!token) return setError('Sign in first');
     setLoading(true);
     try {
       const res = await fetch('/api/create-pool', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, auth: token }),
       });
       const data = await res.json();
+      if (data.needAccount) { signOut(); setLoading(false); return; }
       if (!res.ok || data.error) { setError(data.error || 'Failed to create pool'); setLoading(false); return; }
       if (data.free) {
         setResult(data);
@@ -117,6 +158,36 @@ export default function LandingPage() {
       </div>
     );
   }
+  if (step === 'create' && !acct) {
+    const f = (k, ph, type='text', ac) => <input key={k} style={{...inp, marginBottom:10}} type={type} autoComplete={ac} placeholder={ph} value={af[k]} onChange={e=>setAf(x=>({...x,[k]:e.target.value}))}/>;
+    const lk = (label, mode) => <button type="button" onClick={()=>{setAuthErr('');setAuthMode(mode);}} style={{background:'none',border:'none',color:'#1a2a5c',fontSize:13,textDecoration:'underline',cursor:'pointer',padding:4}}>{label}</button>;
+    const social = (p, label, bg, fg) => <button key={p} type="button" disabled={authBusy} onClick={()=>startOAuth(p)} style={{width:'100%',padding:12,borderRadius:8,border:'1px solid #d1d5db',background:bg,color:fg,fontSize:15,fontWeight:700,marginBottom:10,cursor:'pointer',opacity:authBusy?.6:1}}>{label}</button>;
+    return (
+      <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 50%,#243475 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'DM Sans',sans-serif"}}>
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+        <div style={{background:'#fff',borderRadius:16,padding:32,maxWidth:440,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
+          <button type="button" onClick={()=>setStep('home')} style={{background:'none',border:'none',color:'#6b7280',cursor:'pointer',fontSize:13,marginBottom:16,padding:0}}>← Back</button>
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,color:'#1a2a5c',marginBottom:4}}>
+            {authMode==='signin'?'Sign in':authMode==='signup'?'Create your account':'Reset your password'}</h2>
+          <p style={{color:'#6b7280',fontSize:13,marginBottom:20}}>You'll run your pool from your account — no admin password to remember.</p>
+          {authErr&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{authErr}</div>}
+          {(authMode==='signup'||authMode==='signin')&&(providers.apple||providers.google)&&<>
+            {providers.apple&&social('apple',' Continue with Apple','#000','#fff')}
+            {providers.google&&social('google','Continue with Google','#fff','#1f2937')}
+            <div style={{textAlign:'center',fontSize:12,color:'#9ca3af',margin:'4px 0 12px'}}>or with email</div></>}
+          {authMode==='signup'&&<>{f('name','Your name','text','name')}{f('email','Email','email','email')}{f('phone','Cell number','tel','tel')}{f('password','Password (8+ characters)','password','new-password')}</>}
+          {authMode==='signin'&&<>{f('email','Email','email','email')}{f('password','Password','password','current-password')}</>}
+          {authMode==='forgot'&&<><p style={{fontSize:13,color:'#6b7280',marginTop:0}}>We'll email you a 6-digit code.</p>{f('email','Email','email','email')}</>}
+          {authMode==='reset'&&<><p style={{fontSize:13,color:'#6b7280',marginTop:0}}>Enter the code we emailed to {af.email}, and a new password.</p>{f('code','6-digit code','text','one-time-code')}{f('password','New password (8+ characters)','password','new-password')}</>}
+          <button type="button" style={{...pri,opacity:authBusy?.6:1}} disabled={authBusy} onClick={doAuth}>
+            {authMode==='signup'?'Create account':authMode==='signin'?'Sign in':authMode==='forgot'?'Send code':'Reset password'}</button>
+          <div style={{display:'flex',justifyContent:'space-between',marginTop:10}}>
+            {authMode==='signup'?lk('I already have an account','signin'):authMode==='signin'?<>{lk('Forgot password?','forgot')}{lk('Create an account','signup')}</>:lk('Back to sign in','signin')}
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (step === 'create') {
     return (
       <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 50%,#243475 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'DM Sans',sans-serif"}}>
@@ -129,19 +200,14 @@ export default function LandingPage() {
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Pool Name</label>
             <input style={inp} placeholder="e.g. Office Golf Pool" value={form.poolName} onChange={e=>upd('poolName',e.target.value)}/>
           </div>
-          <div style={{marginBottom:14}}>
-            <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Your Name (Commissioner)</label>
-            <input style={inp} placeholder="e.g. John Smith" value={form.commissionerName} onChange={e=>upd('commissionerName',e.target.value)}/>
+          <div style={{marginBottom:14,background:'#f3f4f6',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#374151'}}>
+            Commissioner: <b>{acct?.name}</b> · {acct?.email}
+            <div style={{fontSize:11,color:'#6b7280',marginTop:3}}>You'll manage this pool from your account. <button type="button" onClick={signOut} style={{background:'none',border:'none',color:'#1a2a5c',textDecoration:'underline',cursor:'pointer',fontSize:11,padding:0}}>Not you?</button></div>
           </div>
           <div style={{marginBottom:14}}>
-            <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Your Email</label>
-            <input style={inp} type="email" placeholder="e.g. john@email.com" value={form.commissionerEmail} onChange={e=>upd('commissionerEmail',e.target.value)}/>
-            <div style={{fontSize:11,color:'#9ca3af',marginTop:4}}>We'll email you when entries open for the next major</div>
-          </div>
-          <div style={{marginBottom:14}}>
-            <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Admin Password</label>
-            <input style={inp} type="password" placeholder="Choose a password for managing entries" value={form.adminPassword} onChange={e=>upd('adminPassword',e.target.value)}/>
-            <div style={{fontSize:11,color:'#9ca3af',marginTop:4}}>Save this — you'll need it to lock entries and manage the pool</div>
+            <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Backup admin password <span style={{fontWeight:400,color:'#9ca3af'}}>(optional)</span></label>
+            <input style={inp} type="password" placeholder="Leave blank unless a co-commissioner needs access" value={form.adminPassword} onChange={e=>upd('adminPassword',e.target.value)}/>
+            <div style={{fontSize:11,color:'#9ca3af',marginTop:4}}>Lets someone run the pool without your account. You never need it yourself.</div>
           </div>
           <div style={{marginBottom:20}}>
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Starting Tournament</label>
@@ -180,6 +246,20 @@ export default function LandingPage() {
   return (
     <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 50%,#243475 100%)',fontFamily:"'DM Sans',sans-serif",color:'#fff'}}>
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+      {acct&&<div style={{maxWidth:520,margin:'0 auto',padding:'16px 20px 0'}}>
+        <div style={{display:'flex',alignItems:'center',fontSize:13,color:'rgba(255,255,255,.75)',marginBottom:10}}>
+          <span style={{flex:1}}>Signed in as <b style={{color:'#fff'}}>{acct.name}</b></span>
+          <button type="button" onClick={signOut} style={{background:'none',border:'none',color:'rgba(255,255,255,.75)',textDecoration:'underline',cursor:'pointer',fontSize:13}}>Sign out</button>
+        </div>
+        {myPools.length>0&&<div style={{background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.15)',borderRadius:12,padding:'6px 14px'}}>
+          <div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:'rgba(255,255,255,.6)',textTransform:'uppercase',padding:'8px 0 4px'}}>My pools</div>
+          {myPools.map(pl=><a key={pl.poolId} href={`/pool/${pl.poolId}`} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 0',borderTop:'1px solid rgba(255,255,255,.1)',color:'#fff',textDecoration:'none'}}>
+            <span style={{flex:1,minWidth:0}}><span style={{display:'block',fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{pl.name}</span>
+              {pl.event&&<span style={{display:'block',fontSize:12,color:'rgba(255,255,255,.6)'}}>{pl.event}</span>}</span>
+            {pl.owner&&<span style={{fontSize:10,fontWeight:800,color:'#1a2a5c',background:'#f5d77a',borderRadius:10,padding:'2px 8px'}}>COMMISSIONER</span>}
+            <span style={{color:'rgba(255,255,255,.5)'}}>›</span></a>)}
+        </div>}
+      </div>}
       <div style={{textAlign:'center',padding:'80px 20px 60px'}}>
         <div style={{fontSize:56,marginBottom:16}}>⛳</div>
         <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:42,fontWeight:900,marginBottom:12,letterSpacing:-1}}>
