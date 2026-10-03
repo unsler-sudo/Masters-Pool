@@ -1,7 +1,8 @@
 'use client';
-// build: late-entries-v281-20261002-1200
+// build: venue-tz-v282-20261002-1300
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
+import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
 import { useParams, useSearchParams } from 'next/navigation';
 
 // ─── MAJOR THEMES — visual/branding only, schedule data fetched from DataGolf ─
@@ -1108,27 +1109,14 @@ const toLastFirst=name=>{const p=name.trim().split(' ');if(p.length<2)return nam
 // Determine the tournament's local IANA timezone based on lat/long.
 // PGA Tour events span US time zones plus a few international venues.
 // This is a lightweight approximation — for production accuracy, use tz-lookup npm package.
+// FINGERPRINT_V282_TZ — the venue's exact IANA time zone from its coordinates (tz-lookup, worldwide).
+// Replaces a hand-made region rule that was wrong for 33 of 62 tour venues tested (Utah, Hawaii,
+// Southern California, Mexico, Bermuda, southern Spain, Turkey, the Middle East, Asia, Africa, Australia).
 function tournamentTimeZone(latitude, longitude) {
-  if (latitude == null || longitude == null) return 'America/New_York';
+  if (latitude == null || longitude == null || latitude === '' || longitude === '') return 'America/New_York';
   const lat = Number(latitude), lng = Number(longitude);
-  // International venues
-  if (lng > -30) {
-    // Europe / UK / Scotland / Spain / Italy
-    if (lat > 50 && lng < 2) return 'Europe/London';     // UK / Scotland / Ireland
-    if (lat > 40 && lng < 20) return 'Europe/Madrid';     // Spain / France / Germany
-    return 'Europe/London';
-  }
-  if (lng < -100 && lng > -130) {
-    // US Mountain or Pacific
-    if (lat < 37 && lng > -118) return 'America/Phoenix'; // Arizona (no DST)
-    return 'America/Los_Angeles';
-  }
-  if (lng <= -100 && lng >= -103) return 'America/Chicago'; // Texas central edge
-  if (lng < -100) return 'America/Denver';
-  if (lng < -87) return 'America/Chicago';  // Central
-  if (lng < -67) return 'America/New_York'; // Eastern
-  if (lat < 20) return 'America/Puerto_Rico'; // Caribbean
-  return 'America/New_York';
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return 'America/New_York';
+  try { return tzlookup(lat, lng); } catch { return 'America/New_York'; }
 }
 
 // Convert a DataGolf tee time string ("2026-05-22 12:43") to user's local time
