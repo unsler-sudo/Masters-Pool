@@ -9,7 +9,15 @@ import {
 
 export const dynamic = 'force-dynamic';
 const bad = (error, status = 400, extra = {}) => Response.json({ error, ...extra }, { status });
-const signedIn = (user) => Response.json({ ok: true, token: makeToken(user), user: publicUser(user) });
+// FINGERPRINT_ACCOUNTS_PERSIST — the sign-in also lives in a secure, server-set cookie. Safari wipes a site's
+// saved data after 7 days without a visit, but not server-set cookies — so the cookie quietly restores the
+// sign-in. HttpOnly: page scripts can't read it; it's only ever sent back to this site.
+const COOKIE = 'tgp_auth';
+const setCookie = (tok) => `${COOKIE}=${tok}; Path=/; Max-Age=${365 * 86400}; HttpOnly; Secure; SameSite=Lax`;
+const clearCookie = `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
+const cookieToken = (request) => { const m = (request.headers.get('cookie') || '').match(/(?:^|;\s*)tgp_auth=([^;]+)/); return m ? m[1] : null; };
+const signedIn = (user) => { const token = makeToken(user);
+  return Response.json({ ok: true, token, user: publicUser(user) }, { headers: { 'Set-Cookie': setCookie(token) } }); };
 
 // Which buttons the page should show
 export async function GET() {
@@ -104,14 +112,17 @@ export async function POST(request) {
       if (rec.status !== 'done') return Response.json({ ok: false, pending: true });
       await redis('DEL', `oauth:${body.loginId}`);
       const user = await verifyToken(rec.token);
-      return user ? Response.json({ ok: true, token: rec.token, user: publicUser(user) }) : Response.json({ ok: false, expired: true });
+      return user ? Response.json({ ok: true, token: rec.token, user: publicUser(user) }, { headers: { 'Set-Cookie': setCookie(rec.token) } }) : Response.json({ ok: false, expired: true });
     }
 
-    // ── everything below needs a signed-in user ──
-    const user = await verifyToken(body.auth);
+    if (a === 'signout') return Response.json({ ok: true }, { headers: { 'Set-Cookie': clearCookie } });
+
+    // ── everything below needs a signed-in user (the page's copy, or the cookie as a backup) ──
+    const user = await verifyToken(body.auth || cookieToken(request));
     if (!user) return bad('Please sign in', 401, { signedOut: true });
 
-    if (a === 'me') return Response.json({ ok: true, user: publicUser(user) });
+    // every visit renews the sign-in for another year
+    if (a === 'me') return signedIn(user);
 
     if (a === 'update-profile') {
       if (body.name !== undefined) { const n = cleanName(body.name); if (n.length < 2) return bad('Enter your name'); user.name = n; }
@@ -131,7 +142,7 @@ export async function POST(request) {
 
     if (a === 'signout-all') {
       user.tv = (user.tv || 0) + 1; await saveUser(user);
-      return Response.json({ ok: true });
+      return Response.json({ ok: true }, { headers: { 'Set-Cookie': clearCookie } });
     }
 
     // your entries in this pool (links any made with your email), with their codes for the page to use
