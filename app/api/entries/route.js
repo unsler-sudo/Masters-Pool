@@ -1,8 +1,9 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
+import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: venue-tz-v201-20261002-1300
+// build: owners-v204-20261002-1900
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1684,6 +1685,14 @@ export async function POST(request) {
       const meta = await getPoolMeta(poolId);
       // If pool doesn't exist (was deleted), no admin access is possible
       if (!meta) return false;
+      // FINGERPRINT_V204_OWNER — the pool's owner, signed in, is admin: the page sends 'acct:<sign-in token>'
+      if (typeof pw === 'string' && pw.startsWith('acct:')) {
+        const u = await verifyToken(pw.slice(5));
+        return !!(u && meta.ownerUid && u.uid === meta.ownerUid);
+      }
+      if (!pw) return false;
+      // an owned pool with no backup password must NEVER fall back to the built-in default
+      if (meta.ownerUid && !meta.adminPassword) return false;
       const validPw = meta.adminPassword || process.env.ADMIN_PASSWORD || 'masters2026';
       return pw === validPw;
     };
@@ -1721,7 +1730,11 @@ export async function POST(request) {
         if (jm?.joinCodeRequired && jm?.joinCode && String(body.joinCode || '').trim().toUpperCase() !== String(jm.joinCode).toUpperCase())
           return Response.json({ error:'This pool needs its join code — enter it to continue.', needJoinCode:true }, { status:403 });
       }
-      const { name, picks, email } = body;
+      const { name, picks } = body;
+      // FINGERPRINT_V202_ACCOUNTS — entering needs an account; the entry takes the account's email and id
+      const acct = await verifyToken(body.auth);
+      if (!acct) return Response.json({ error:'Create an account or sign in to enter', needAccount:true }, { status:401 });
+      const email = acct.email;
       if (!name?.trim()) return Response.json({ error:'Name required' }, { status:400 });
       if (!email?.trim()) return Response.json({ error:'Email required' }, { status:400 });
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return Response.json({ error:'Invalid email' }, { status:400 });
@@ -1737,11 +1750,13 @@ export async function POST(request) {
       entries.push({
         name: name.trim(),
         email: email.trim().toLowerCase(),
+        uid: acct.uid,
         editCode,
         picks,
         ts: Date.now(),
       });
       await saveEntries(poolId, entries);
+      await addUserPool(acct.uid, poolId);                 // FINGERPRINT_V204 — shows in My pools
       // FINGERPRINT_V194 — commissioner alert: new entry
       try {
         const pm = await getPoolMeta(poolId), pot = entries.length * (pm?.entryFee || 0);
@@ -1752,7 +1767,7 @@ export async function POST(request) {
       } catch {}
       // FINGERPRINT_V141_ROSTER — remember this player for future-pool invites
       await upsertRoster(poolId, name.trim(), email.trim().toLowerCase(), editCode);
-      if (process.env.RESEND_API_KEY) {
+      if (process.env.RESEND_API_KEY && !acct) {          // account holders don't need a code email
         const meta = await getPoolMeta(poolId);
         const poolName = meta?.poolName || 'Golf Pool';
         const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
@@ -1790,7 +1805,7 @@ export async function POST(request) {
       // FINGERPRINT_V174_JOIN_CODE — on a match pick'em (reqPicks 0) the new entrant gets THEIR OWN
       // code back so they can save picks immediately instead of waiting on the email. Normal weeks
       // are unchanged (no extra field).
-      return Response.json({ ok:true, entries: srvPublicEntries(entries, await srvHidePicksNow(poolId)), codeSent:true, ...(reqPicks === 0 ? { editCode } : {}) });
+      return Response.json({ ok:true, entries: srvPublicEntries(entries, await srvHidePicksNow(poolId)), codeSent:false, editCode, name: name.trim() });
     }
 
     if (body.action === 'edit-entry') {
@@ -3282,6 +3297,72 @@ export async function POST(request) {
       return Response.json({ ok:true });
     }
 
+    // FINGERPRINT_V203_SEASON — season-long prize-money standings, three races:
+    //   Majors   = masters, pga, usopen, open        PGA Tour = every pgatour week + the Players
+    //   DP World = every dpworld week
+    // Each finished week's prizes are worked out with History's exact rules, then added up PER PERSON — by
+    // account, else by the email they entered with, else by entry name. Only names and totals go out.
+    if (body.action === 'season') {
+      const year = +body.year || new Date().getFullYear();
+      const meta = await getPoolMeta(poolId);
+      const raceOf = (a) => a.major === 'dpworld' ? 'dpworld' : (a.major === 'pgatour' || a.major === 'players') ? 'pgatour'
+        : ['masters', 'pga', 'usopen', 'open'].includes(a.major) ? 'majors' : null;
+      const keys = [];
+      for (const m of ['players', 'masters', 'pga', 'usopen', 'open']) for (let y = 2024; y <= new Date().getFullYear() + 1; y++) keys.push(k(poolId, `archive:${m}_${y}`));
+      try {
+        let cursor = '0';
+        do {
+          const res = await redis('SCAN', cursor, 'MATCH', k(poolId, 'archive:*-*'), 'COUNT', 100);
+          if (!Array.isArray(res) || res.length !== 2) break;
+          cursor = res[0]; (res[1] || []).forEach(x => keys.push(x));
+        } while (cursor !== '0');
+      } catch {}
+      const raws = keys.length ? await redis('MGET', ...keys) : [];
+      const all = raws.map(r => { try { return r ? JSON.parse(r) : null; } catch { return null; } }).filter(a => a && raceOf(a));
+      const years = [...new Set(all.map(a => +a.year).filter(Boolean))].sort((a, b) => b - a);
+      const weeks = all.filter(a => +a.year === year);
+      const norm = (e) => String(e || '').trim().toLowerCase();
+      const emails = [...new Set(weeks.flatMap(a => (a.entries || []).filter(e => !e.uid && e.email).map(e => norm(e.email))))];
+      const uidByEmail = {};
+      if (emails.length) { const r = await redis('MGET', ...emails.map(e => `user:email:${e}`)); emails.forEach((e, i) => { if (r[i]) uidByEmail[e] = r[i]; }); }
+      const uids = [...new Set(weeks.flatMap(a => (a.entries || []).map(e => e.uid || uidByEmail[norm(e.email)]).filter(Boolean)))];
+      const acctName = {};
+      if (uids.length) { const r = await redis('MGET', ...uids.map(u => `user:${u}`)); uids.forEach((u, i) => { try { const x = JSON.parse(r[i] || 'null'); if (x?.name) acctName[u] = x.name; } catch {} }); }
+      const races = { majors: { events: 0, rows: {} }, pgatour: { events: 0, rows: {} }, dpworld: { events: 0, rows: {} } };
+      for (const a of weeks.sort((x, y) => new Date(x.archivedAt || 0) - new Date(y.archivedAt || 0))) {
+        const earnings = a.earnings || {};
+        const ranked = (a.entries || []).map(e => ({ e, total: a.entryTotals ? (+a.entryTotals[e.name] || 0) : (e.picks || []).reduce((t, n) => t + (earnings[n] || 0), 0) }))
+          .filter(x => a.entryTotals || (x.e.picks && x.e.picks.length > 0)).sort((x, y) => y.total - x.total);
+        const fee = a.entryFee || 0, n = (a.entries || []).length, pot = n * fee;
+        const wta = n <= 4 || meta?.payoutMode === 'winner-take-all';
+        const prizes = a.prizes ? [a.prizes.first || 0, a.prizes.second || 0, a.prizes.third || 0]
+          : (fee > 0 && n >= 1 ? (wta ? [pot, 0, 0] : [pot - fee * 3, fee * 2, fee]) : []);
+        const tieSplit = (a.scoring === 'points' || a.scoring === 'matchpicks');
+        const split = tieSplit ? (() => { const out = ranked.map(() => 0); for (let i = 0; i < ranked.length;) { let j = i; while (j + 1 < ranked.length && Math.abs(ranked[j + 1].total - ranked[i].total) < 1e-9) j++; let p = 0; for (let q = i; q <= j; q++) p += (prizes[q] || 0); for (let q = i; q <= j; q++) out[q] = p / (j - i + 1); i = j + 1; } return out; })() : null;
+        const race = races[raceOf(a)];
+        race.events++;
+        const seenThisWeek = new Set();
+        ranked.forEach((x, i) => {
+          const em = norm(x.e.email), uid = x.e.uid || uidByEmail[em] || null;
+          const key = uid ? 'u:' + uid : em ? 'e:' + em : 'n:' + String(x.e.name || '').toLowerCase();
+          const row = race.rows[key] = race.rows[key] || { name: '', uid, winnings: 0, events: 0, entries: 0, wins: 0, cashes: 0, best: null };
+          row.name = uid && acctName[uid] ? acctName[uid] : x.e.name;
+          const won = tieSplit ? (split[i] || 0) : (i < 3 ? (prizes[i] || 0) : 0);
+          const place = 1 + ranked.filter(r => r.total > x.total).length;
+          row.winnings += won; row.entries++;
+          if (!seenThisWeek.has(key)) { row.events++; seenThisWeek.add(key); }
+          if (place === 1 && x.total > 0) row.wins++;
+          if (won > 0) row.cashes++;
+          row.best = row.best == null ? place : Math.min(row.best, place);
+        });
+      }
+      const out = {};
+      for (const [rk, r] of Object.entries(races))
+        out[rk] = { events: r.events, rows: Object.values(r.rows).map(x => ({ ...x, winnings: Math.round(x.winnings * 100) / 100 }))
+          .sort((x, y) => y.winnings - x.winnings || y.wins - x.wins || (x.best ?? 99) - (y.best ?? 99) || y.events - x.events) };
+      return Response.json({ ok: true, year, years: years.length ? years : [year], races: out });
+    }
+
     if (body.action==='get-archives-public') {
       const MAJORS = ['players','masters','pga','usopen','open'];
       const years  = [2025,2026,2027,2028];
@@ -3325,7 +3406,8 @@ export async function POST(request) {
         if (srvIsTourMode(b.major)) return -1;
         return (MAJOR_ORDER[b.major] || 0) - (MAJOR_ORDER[a.major] || 0);
       });
-      return Response.json({ ok:true, archives });
+      // FINGERPRINT_V203 — saved weeks hold raw entries (emails, old codes): strip them for visitors
+      return Response.json({ ok:true, archives: archives.map(a => ({ ...a, entries: srvPublicEntries(a.entries) })) });
     }
 
     // ─── PUBLIC PGA TOUR SCHEDULE (live from DataGolf, cached) ─────────────
