@@ -80,6 +80,8 @@ export default function LandingPage() {
     if (!t) return;
     authPost({ action:'me', auth:t }).then(d => { if (d?.ok) { setToken(t); setAcct(d.user); loadPools(t); } else if (d?.signedOut) { try { localStorage.removeItem('tgp_auth'); } catch {} } }).catch(()=>{});
   }, []);
+  useEffect(() => { if (acct && step === 'signin') setStep('mypools'); }, [acct, step]);
+  useEffect(() => { if (acct && step === 'mypools' && token) loadPools(token); }, [step]);
   const authCall = async (body) => { setAuthBusy(true); setAuthErr('');
     try { const d = await authPost(body); if (d.error) setAuthErr(d.error); return d; } catch { setAuthErr('Connection problem — try again'); return {}; } finally { setAuthBusy(false); } };
   const doAuth = async () => {
@@ -158,7 +160,7 @@ export default function LandingPage() {
       </div>
     );
   }
-  if (step === 'create' && !acct) {
+  if ((step === 'create' || step === 'signin' || step === 'mypools') && !acct) {
     const f = (k, ph, type='text', ac) => <input key={k} style={{...inp, marginBottom:10}} type={type} autoComplete={ac} placeholder={ph} value={af[k]} onChange={e=>setAf(x=>({...x,[k]:e.target.value}))}/>;
     const lk = (label, mode) => <button type="button" onClick={()=>{setAuthErr('');setAuthMode(mode);}} style={{background:'none',border:'none',color:'#1a2a5c',fontSize:13,textDecoration:'underline',cursor:'pointer',padding:4}}>{label}</button>;
     const social = (p, label, bg, fg) => <button key={p} type="button" disabled={authBusy} onClick={()=>startOAuth(p)} style={{width:'100%',padding:12,borderRadius:8,border:'1px solid #d1d5db',background:bg,color:fg,fontSize:15,fontWeight:700,marginBottom:10,cursor:'pointer',opacity:authBusy?.6:1}}>{label}</button>;
@@ -169,7 +171,7 @@ export default function LandingPage() {
           <button type="button" onClick={()=>setStep('home')} style={{background:'none',border:'none',color:'#6b7280',cursor:'pointer',fontSize:13,marginBottom:16,padding:0}}>← Back</button>
           <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,color:'#1a2a5c',marginBottom:4}}>
             {authMode==='signin'?'Sign in':authMode==='signup'?'Create your account':'Reset your password'}</h2>
-          <p style={{color:'#6b7280',fontSize:13,marginBottom:20}}>You'll run your pool from your account — no admin password to remember.</p>
+          <p style={{color:'#6b7280',fontSize:13,marginBottom:20}}>{step==='create'?'You\'ll run your pool from your account — no admin password to remember.':'One account for every pool you run or play in.'}</p>
           {authErr&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{authErr}</div>}
           {(authMode==='signup'||authMode==='signin')&&(providers.apple||providers.google)&&<>
             {providers.apple&&social('apple',' Continue with Apple','#000','#fff')}
@@ -184,6 +186,37 @@ export default function LandingPage() {
           <div style={{display:'flex',justifyContent:'space-between',marginTop:10}}>
             {authMode==='signup'?lk('I already have an account','signin'):authMode==='signin'?<>{lk('Forgot password?','forgot')}{lk('Create an account','signup')}</>:lk('Back to sign in','signin')}
           </div>
+        </div>
+      </div>
+    );
+  }
+  if (step === 'mypools') {
+    const lbl = (m) => m === 'pgatour' ? 'PGA Tour' : m === 'dpworld' ? 'DP World Tour' : m === 'players' ? 'The Players' : m === 'masters' ? 'The Masters' : m === 'pga' ? 'PGA Championship' : m === 'usopen' ? 'U.S. Open' : m === 'open' ? 'The Open' : '';
+    const runs = myPools.filter(p => p.owner), plays = myPools.filter(p => !p.owner);
+    const row = (pl) => (
+      <div key={pl.poolId} style={{display:'flex',alignItems:'center',gap:10,padding:'12px 0',borderTop:'1px solid #e5e7eb'}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,color:'#1a2a5c',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{pl.name}</div>
+          <div style={{fontSize:12,color:'#6b7280'}}>{pl.event || lbl(pl.mode)}</div>
+        </div>
+        {pl.owner&&<a href={`/pool/${pl.poolId}?tab=admin`} style={{fontSize:13,fontWeight:700,color:'#1a2a5c',border:'1.5px solid #1a2a5c',borderRadius:8,padding:'7px 12px',textDecoration:'none',whiteSpace:'nowrap'}}>⚙️ Manage</a>}
+        <a href={`/pool/${pl.poolId}`} style={{fontSize:13,fontWeight:700,color:'#fff',background:'#1a2a5c',borderRadius:8,padding:'8px 12px',textDecoration:'none',whiteSpace:'nowrap'}}>Open</a>
+      </div>);
+    return (
+      <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 50%,#243475 100%)',display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'40px 20px',fontFamily:"'DM Sans',sans-serif"}}>
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+        <div style={{background:'#fff',borderRadius:16,padding:28,maxWidth:520,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
+          <div style={{display:'flex',alignItems:'center',marginBottom:6}}>
+            <button type="button" onClick={()=>setStep('home')} style={{background:'none',border:'none',color:'#6b7280',cursor:'pointer',fontSize:13,padding:0,flex:1,textAlign:'left'}}>← Home</button>
+            <button type="button" onClick={()=>{signOut();setStep('home');}} style={{background:'none',border:'none',color:'#6b7280',cursor:'pointer',fontSize:13,textDecoration:'underline'}}>Sign out</button>
+          </div>
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:800,color:'#1a2a5c',margin:'4px 0 2px'}}>My pools</h2>
+          <p style={{color:'#6b7280',fontSize:13,margin:'0 0 16px'}}>Signed in as <b>{acct.name}</b> · {acct.email}</p>
+          {runs.length>0&&<><div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:'#9ca3af',textTransform:'uppercase',margin:'8px 0 2px'}}>Pools you run</div>{runs.map(row)}</>}
+          {plays.length>0&&<><div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:'#9ca3af',textTransform:'uppercase',margin:'18px 0 2px'}}>Pools you play in</div>{plays.map(row)}</>}
+          {myPools.length===0&&<div style={{textAlign:'center',padding:'20px 0',color:'#6b7280',fontSize:14}}>No pools yet. Create one, or open a pool link a friend sent you — it'll show up here.</div>}
+          <button type="button" onClick={()=>setStep('create')} style={{...pri,marginTop:20}}>+ Create a new pool</button>
+          <p style={{fontSize:11,color:'#9ca3af',textAlign:'center',marginTop:12,lineHeight:1.5}}>Pools you made before accounts appear here after you open them once while signed in (with the same email).</p>
         </div>
       </div>
     );
@@ -246,9 +279,13 @@ export default function LandingPage() {
   return (
     <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 50%,#243475 100%)',fontFamily:"'DM Sans',sans-serif",color:'#fff'}}>
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+      {!acct&&<div style={{maxWidth:520,margin:'0 auto',padding:'16px 20px 0',display:'flex',justifyContent:'flex-end'}}>
+        <button type="button" onClick={()=>{setAuthErr('');setAuthMode('signin');setStep('signin');}} style={{background:'transparent',color:'#fff',border:'1.5px solid rgba(255,255,255,.6)',borderRadius:8,padding:'7px 14px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Sign in · My pools</button>
+      </div>}
       {acct&&<div style={{maxWidth:520,margin:'0 auto',padding:'16px 20px 0'}}>
-        <div style={{display:'flex',alignItems:'center',fontSize:13,color:'rgba(255,255,255,.75)',marginBottom:10}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,fontSize:13,color:'rgba(255,255,255,.75)',marginBottom:10}}>
           <span style={{flex:1}}>Signed in as <b style={{color:'#fff'}}>{acct.name}</b></span>
+          <button type="button" onClick={()=>setStep('mypools')} style={{background:'#fff',color:'#1a2a5c',border:'none',borderRadius:8,padding:'7px 12px',fontWeight:700,fontSize:13,cursor:'pointer'}}>My pools →</button>
           <button type="button" onClick={signOut} style={{background:'none',border:'none',color:'rgba(255,255,255,.75)',textDecoration:'underline',cursor:'pointer',fontSize:13}}>Sign out</button>
         </div>
         {myPools.length>0&&<div style={{background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.15)',borderRadius:12,padding:'6px 14px'}}>
