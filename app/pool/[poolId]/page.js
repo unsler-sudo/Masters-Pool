@@ -1,5 +1,5 @@
 'use client';
-// build: owners-v285-20261002-1900
+// build: season-golfer-v286-20261002-2000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1428,6 +1428,7 @@ export default function App(){
   const [seasonData,setSeasonData]=useState(null);
   const [seasonYear,setSeasonYear]=useState(new Date().getFullYear());
   const [seasonRace,setSeasonRace]=useState(null);
+  const [seasonSort,setSeasonSort]=useState('prize');       // FINGERPRINT_V286 — 'prize' | 'golfer'
   const [schedule,setSchedule]=useState(null);
   const [scheduleLoaded,setScheduleLoaded]=useState(false);
   const [chatMessages,setChatMessages]=useState([]);
@@ -5762,7 +5763,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             const defRace=activeMajor==='dpworld'?'dpworld':(isTourMode(activeMajor)||activeMajor==='players')?'pgatour':'majors';
             const race=seasonRace||defRace;
             if(!seasonData||seasonData.year!==seasonYear) return <div style={{textAlign:'center',padding:40,color:'#8a9580',fontSize:13}}>Loading standings…</div>;
-            const R=seasonData.races?.[race]||{events:0,rows:[]};
+            const R0=seasonData.races?.[race]||{events:0,rows:[]};
+            const R={...R0,rows:seasonSort==='golfer'?[...R0.rows].sort((a,b)=>(b.golfer||0)-(a.golfer||0)||b.winnings-a.winnings):R0.rows};
+            const big=(n)=>!n?'$0':n>=1e6?'$'+(n/1e6).toFixed(n>=1e7?1:2).replace(/\.?0+$/,'')+'M':'$'+Math.round(n/1000)+'K';
+            const lead=seasonSort==='golfer'?(x)=>x.golfer||0:(x)=>x.winnings;
             const money=(n)=>'$'+(Number.isInteger(n)?n.toLocaleString('en-US'):n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
             const ord=(n)=>n+(['th','st','nd','rd'][((n%100)-20)%10]||['th','st','nd','rd'][n%100]||'th');
             return <>
@@ -5772,6 +5776,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     background:on?T.primary:'transparent',color:on?'#fff':'#5a6b4e',fontWeight:700,fontSize:13}}>
                     {label}<div style={{fontSize:10,fontWeight:600,opacity:.8}}>{ev} event{ev===1?'':'s'}</div></button>;})}
               </div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,fontSize:12,color:'#8a9580'}}>
+                <span>Rank by</span>
+                {[['prize','Prize money'],['golfer','Golfer earnings']].map(([k2,l2])=><button key={k2} type="button" onClick={()=>setSeasonSort(k2)}
+                  style={{padding:'4px 10px',borderRadius:12,border:`1px solid ${seasonSort===k2?T.primary:'#d6d6cf'}`,background:seasonSort===k2?T.primary:'#fff',color:seasonSort===k2?'#fff':'#5a6b4e',fontSize:12,fontWeight:700,cursor:'pointer'}}>{l2}</button>)}
+              </div>
               {(seasonData.years||[]).length>1&&<div style={{textAlign:'right',marginBottom:8}}>
                 <select value={seasonYear} onChange={e=>setSeasonYear(+e.target.value)} style={{fontSize:13,padding:'4px 8px',borderRadius:6,border:'1px solid #d6d6cf'}}>
                   {seasonData.years.map(y=><option key={y} value={y}>{y} season</option>)}</select></div>}
@@ -5780,15 +5789,18 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 : <div style={{background:'#fff',borderRadius:12,border:`1px solid ${T.cardBorder}`,overflow:'hidden'}}>
                     {R.rows.map((x,i)=>{const me=acct&&x.uid&&x.uid===acct.uid;
                       return <div key={x.name+i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:i<R.rows.length-1?`1px solid ${T.cardBorder}`:'none',background:me?`${T.primary}0d`:'#fff'}}>
-                        <div style={{width:28,textAlign:'center',fontSize:i<3&&x.winnings>0?18:13,fontWeight:800,color:'#8a9580'}}>{i<3&&x.winnings>0?['🥇','🥈','🥉'][i]:i+1}</div>
+                        <div style={{width:28,textAlign:'center',fontSize:i<3&&lead(x)>0?18:13,fontWeight:800,color:'#8a9580'}}>{i<3&&lead(x)>0?['🥇','🥈','🥉'][i]:i+1}</div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontWeight:700,fontSize:14,color:'#2a3a1e',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{x.name}{me&&<span style={{fontSize:10,color:T.primary,fontWeight:800,marginLeft:6}}>YOU</span>}</div>
                           <div style={{fontSize:11,color:'#8a9580'}}>{x.events} event{x.events===1?'':'s'}{x.wins?` · ${x.wins} win${x.wins===1?'':'s'}`:''}{x.best?` · best ${ord(x.best)}`:''}{x.entries>x.events?` · ${x.entries} entries`:''}</div>
                         </div>
-                        <div style={{fontWeight:800,fontSize:16,color:x.winnings>0?'#2d7a1e':'#aaa'}}>{money(x.winnings)}</div>
+                        <div style={{textAlign:'right'}}>
+                          <div style={{fontWeight:800,fontSize:16,color:x.winnings>0?'#2d7a1e':'#aaa'}}>{money(x.winnings)}</div>
+                          <div style={{fontSize:11,color:seasonSort==='golfer'?T.primary:'#8a9580',fontWeight:seasonSort==='golfer'?800:600}}>⛳ {big(x.golfer||0)}</div>
+                        </div>
                       </div>;})}
                   </div>}
-              <p style={{fontSize:11,color:'#8a9580',textAlign:'center',lineHeight:1.5,marginTop:10}}>Prize money from this pool's finished events, added up per player across all their entries.
+              <p style={{fontSize:11,color:'#8a9580',textAlign:'center',lineHeight:1.5,marginTop:10}}>Big number: prize money won, across all your entries. ⛳ Golfer earnings: what your picks earned on tour — your best entry each week (Cup weeks are points, so they don't count).
                 {race==='majors'?' Majors: the Masters, PGA Championship, U.S. Open and The Open.':race==='pgatour'?' Includes the Players.':''}</p>
             </>;
           })():historyView==='schedule'?(
