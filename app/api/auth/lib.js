@@ -9,7 +9,8 @@
 //   rl:{what}:{who}       → counter for rate limits
 //
 // Sign-in tokens are signed, not stored: base64url({u:uid, v:tokenVersion, x:expiry}).HMAC. Bumping a user's
-// tv (password change, "sign out everywhere") invalidates every older token. Valid 90 days.
+// tv (password change, "sign out everywhere") invalidates every older token. Valid 365 days, and renewed on
+// every visit (the page calls "me"), so regular players are effectively never signed out.
 import { createHmac, randomBytes, scryptSync, timingSafeEqual, randomInt } from 'crypto';
 
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -59,7 +60,7 @@ export function checkPassword(pw, stored) {
 
 // ── tokens ─────────────────────────────────────────────────────────────────
 export function makeToken(user) {
-  const payload = Buffer.from(JSON.stringify({ u: user.uid, v: user.tv || 0, x: Date.now() + 90 * 864e5 })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({ u: user.uid, v: user.tv || 0, x: Date.now() + 365 * 864e5 })).toString('base64url');
   return `${payload}.${createHmac('sha256', SECRET()).update(payload).digest('base64url')}`;
 }
 export async function verifyToken(tok) {
