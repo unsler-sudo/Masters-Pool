@@ -1,5 +1,5 @@
 'use client';
-// build: season-golfer-v286-20261002-2000
+// build: manage-link-v287-20261002-2100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3405,6 +3405,7 @@ export default function App(){
     u.searchParams.delete('t'); u.searchParams.delete('tab');
     window.history.replaceState({}, '', u.pathname + (u.searchParams.toString()?'?'+u.searchParams.toString():'') + u.hash);
     if(openTab==='picks') setTab('Enter Pool');
+    else if(openTab==='admin') setTab('Admin');          // FINGERPRINT_V287 — "Manage" from My pools
     if(!t) return;
     (async()=>{
       try{
