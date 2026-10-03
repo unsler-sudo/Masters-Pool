@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto';   // FINGERPRINT_V191_MAGIC_LINKS
 import webpush from 'web-push';                            // FINGERPRINT_V193_PUSH
 export const dynamic = 'force-dynamic';
-// build: hide-until-tee-v199-20261002-1100
+// build: late-entries-v200-20261002-1200
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -319,6 +319,13 @@ async function srvFirstTeeMs(meta) {
     if (ms) await redis('SETEX', key, 10 * 86400, String(ms));
     return ms;
   } catch { return null; }
+}
+// FINGERPRINT_V200_LATE_ENTRIES — has this pool's event teed off? (unknown → no). Cup weeks are skipped:
+// their joining deadline is the first session, handled on the page.
+async function srvPastFirstTee(meta) {
+  if (!meta || srvIsTeamEvent(meta.currentPgatourEvent)) return false;
+  const t = await srvFirstTeeMs(meta);
+  return !!(t && Date.now() >= t);
 }
 // Should picks be withheld from visitors right now?
 async function srvHidePicksNow(poolId, picksHidden, locked, meta) {
@@ -1710,7 +1717,9 @@ export async function POST(request) {
 
     if (body.action === 'submit') {
       const locked = await getLocked(poolId);
-      if (locked) return Response.json({ error:'Entries are locked!' }, { status:403 });
+      const lm = await getPoolMeta(poolId);
+      if (!lm?.allowLateEntries && (locked || await srvPastFirstTee(lm)))
+        return Response.json({ error:'Entries are locked!' }, { status:403 });
       {
         const jm = await getPoolMeta(poolId);
         if (jm?.joinCodeRequired && jm?.joinCode && String(body.joinCode || '').trim().toUpperCase() !== String(jm.joinCode).toUpperCase())
@@ -1790,7 +1799,7 @@ export async function POST(request) {
 
     if (body.action === 'edit-entry') {
       const locked = await getLocked(poolId);
-      if (locked) return Response.json({ error:'Entries are locked — cannot edit' }, { status:403 });
+      if (locked || await srvPastFirstTee(await getPoolMeta(poolId))) return Response.json({ error:'Entries are locked — cannot edit' }, { status:403 });
       const { name, code } = body;
       if (!name || !code) return Response.json({ error:'Name and code required' }, { status:400 });
       const entries = await getEntries(poolId);
@@ -1804,7 +1813,7 @@ export async function POST(request) {
 
     if (body.action === 'update-entry') {
       const locked = await getLocked(poolId);
-      if (locked) return Response.json({ error:'Entries are locked' }, { status:403 });
+      if (locked || await srvPastFirstTee(await getPoolMeta(poolId))) return Response.json({ error:'Entries are locked — picks can\'t change after the first tee' }, { status:403 });
       const { name, code, picks } = body;
       if (!name || !code) return Response.json({ error:'Name and code required' }, { status:400 });
       const reqPicks = await srvRequiredPicks(poolId);
@@ -3082,6 +3091,15 @@ export async function POST(request) {
       meta.payoutMode = body.payoutMode === 'winner-take-all' ? 'winner-take-all' : 'standard';
       await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
       return Response.json({ ok:true, payoutMode: meta.payoutMode });
+    }
+
+    // FINGERPRINT_V200_LATE_ENTRIES — Admin: let NEW entries in after the first tee (edits stay locked)
+    if (body.action === 'set-late-entries') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = (await getPoolMeta(poolId)) || {};
+      meta.allowLateEntries = !!body.on;
+      await redis('SET', k(poolId, 'meta'), JSON.stringify(meta));
+      return Response.json({ ok:true, allowLateEntries: meta.allowLateEntries });
     }
 
     if (body.action==='set-join-code') {
