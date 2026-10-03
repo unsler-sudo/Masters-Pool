@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: season-rollover-v207-20261002-2200
+// build: admin-alerts-state-v208-20261003-1000
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -2451,6 +2451,15 @@ export async function POST(request) {
       dev.prefs = { ...(dev.prefs || {}), ...srvCleanPrefs(body.prefs) };
       await redis('SET', key, JSON.stringify(subs));
       return Response.json({ ok:true, prefs: srvPrefsView(dev) });
+    }
+
+    // FINGERPRINT_V208 — is THIS device already getting commissioner alerts? (so Admin shows the right button)
+    if (body.action === 'push-admin-status') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      let subs = {};
+      try { const r = await redis('GET', k(poolId, 'pushsubs')); if (r) subs = JSON.parse(r); } catch {}
+      const ep = String(body.endpoint || '');
+      return Response.json({ ok:true, on: !!ep && (subs.__admin__ || []).some(x => x.endpoint === ep) });
     }
 
     // FINGERPRINT_V194_NOTIFY_PREFS — commissioner alerts on this device (new entries, unpaid count)
