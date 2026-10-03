@@ -1,5 +1,5 @@
 'use client';
-// build: manage-link-v287-20261002-2100
+// build: season-accounts-v288-20261002-2130
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -5786,7 +5786,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <select value={seasonYear} onChange={e=>setSeasonYear(+e.target.value)} style={{fontSize:13,padding:'4px 8px',borderRadius:6,border:'1px solid #d6d6cf'}}>
                   {seasonData.years.map(y=><option key={y} value={y}>{y} season</option>)}</select></div>}
               {R.rows.length===0
-                ? <div style={bx}><div style={{fontSize:40,marginBottom:8}}>🏆</div><p style={{color:'#8a9580',margin:0}}>No finished {RACES.find(x=>x[0]===race)[1]} events in {seasonYear} yet.</p></div>
+                ? <div style={bx}><div style={{fontSize:40,marginBottom:8}}>🏆</div><p style={{color:'#8a9580',margin:0}}>{R0.events?`No one with an account has played ${RACES.find(x=>x[0]===race)[1]} events in ${seasonYear} yet.`:`No finished ${RACES.find(x=>x[0]===race)[1]} events in ${seasonYear} yet.`}</p></div>
                 : <div style={{background:'#fff',borderRadius:12,border:`1px solid ${T.cardBorder}`,overflow:'hidden'}}>
                     {R.rows.map((x,i)=>{const me=acct&&x.uid&&x.uid===acct.uid;
                       return <div key={x.name+i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderBottom:i<R.rows.length-1?`1px solid ${T.cardBorder}`:'none',background:me?`${T.primary}0d`:'#fff'}}>
@@ -5801,7 +5801,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         </div>
                       </div>;})}
                   </div>}
-              <p style={{fontSize:11,color:'#8a9580',textAlign:'center',lineHeight:1.5,marginTop:10}}>Big number: prize money won, across all your entries. ⛳ Golfer earnings: what your picks earned on tour — your best entry each week (Cup weeks are points, so they don't count).
+              {!acct&&<div style={{display:'flex',alignItems:'center',gap:10,marginTop:10,padding:'10px 12px',borderRadius:10,background:'#fff8e6',border:'1px solid #f0c060'}}>
+                <span style={{fontSize:18}}>👤</span>
+                <div style={{flex:1,fontSize:13,color:'#3a4a2e',lineHeight:1.4}}>Season standings are for players with an account. Make one to join them — your earlier weeks count too.</div>
+                <button type="button" onClick={()=>openAcct('signup')} style={{background:T.primary,color:'#fff',border:'none',borderRadius:7,padding:'8px 12px',fontWeight:700,fontSize:13,cursor:'pointer',whiteSpace:'nowrap'}}>Join</button>
+              </div>}
+              <p style={{fontSize:11,color:'#8a9580',textAlign:'center',lineHeight:1.5,marginTop:10}}>Players with an account. Big number: prize money won, across all your entries. ⛳ Golfer earnings: what your picks earned on tour — your best entry each week (Cup weeks are points, so they don't count).
                 {race==='majors'?' Majors: the Masters, PGA Championship, U.S. Open and The Open.':race==='pgatour'?' Includes the Players.':''}</p>
             </>;
           })():historyView==='schedule'?(
