@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: season-golfer-v205-20261002-2000
+// build: season-accounts-v206-20261002-2130
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -3360,7 +3360,8 @@ export async function POST(request) {
       }
       const out = {};
       for (const [rk, r] of Object.entries(races))
-        out[rk] = { events: r.events, rows: Object.values(r.rows).map(x => ({ ...x, winnings: Math.round(x.winnings * 100) / 100, golfer: Math.round(x.golfer) }))
+        // FINGERPRINT_V206 — only players with an account are listed (their earlier weeks count, matched by email)
+        out[rk] = { events: r.events, rows: Object.values(r.rows).filter(x => x.uid).map(x => ({ ...x, winnings: Math.round(x.winnings * 100) / 100, golfer: Math.round(x.golfer) }))
           .sort((x, y) => y.winnings - x.winnings || y.wins - x.wins || (x.best ?? 99) - (y.best ?? 99) || y.events - x.events) };
       return Response.json({ ok: true, year, years: years.length ? years : [year], races: out });
     }
