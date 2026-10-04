@@ -1,5 +1,5 @@
 'use client';
-// build: backup-pw-v305-20261004-2100
+// build: login-link-v306-20261004-2130
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -6449,7 +6449,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
         </div>
         <div>{isTeamPool ? 'Most points wins · a halved match is worth ½' : 'Highest combined earnings wins'}</div>
         {/* FINGERPRINT_V304 — the way into Admin for co-commissioners (the pool's owner uses the profile menu) */}
-        {tab!=='Admin'&&<div style={{marginTop:12}}>
+        {tab!=='Admin'&&(poolMeta?.hasAdminPassword||!poolMeta?.ownerUid)&&<div style={{marginTop:12}}>
           <button type="button" onClick={()=>{setTab('Admin');try{window.scrollTo(0,0);}catch{}}}
             style={{background:'none',border:'none',color:'#a3ac98',fontSize:10,textDecoration:'underline',cursor:'pointer',padding:0}}>Commissioner login</button>
         </div>}
