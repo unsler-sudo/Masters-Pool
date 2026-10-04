@@ -142,6 +142,8 @@ export async function POST(request) {
     if (a === 'update-profile') {
       if (body.name !== undefined) { const n = cleanName(body.name); if (n.length < 2) return bad('Enter your name'); user.name = n; }
       if (body.phone !== undefined) { const p = normPhone(body.phone); if (!p) return bad('Enter a valid cell number (10 digits, or +country code)'); user.phone = p; }
+      // FINGERPRINT_ACCOUNTS_NICKNAME — optional; your default entry name in pools (blank removes it)
+      if (body.nickname !== undefined) { const n = cleanName(body.nickname).slice(0, 30); if (n) user.nickname = n; else delete user.nickname; }
       await saveUser(user);
       return Response.json({ ok: true, user: publicUser(user) });
     }
