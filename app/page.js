@@ -1,6 +1,30 @@
 'use client';
 import { useState, useEffect } from 'react';
 
+// FINGERPRINT_EMOJI_FONT — Windows has no flag emoji (🇺🇸 shows as "US") and older emoji sets, so on Windows/Linux
+// load Google's Noto Color Emoji and put it BEHIND the page's fonts: text looks the same, only emoji change.
+// Apple (iPhone/iPad/Mac) and Android keep their own emoji. Google Fonts only sends the emoji actually used.
+function gpEmojiSetup() {
+  if (typeof window === 'undefined' || document.getElementById('gp-emoji-font')) return;
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod|Macintosh|Mac OS X|Android/.test(ua)) return;
+  const link = document.createElement('link');
+  link.id = 'gp-emoji-font'; link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap';
+  document.head.appendChild(link);
+  const css = document.createElement('style');
+  css.id = 'gp-emoji-css';
+  const SANS = "'DM Sans','Noto Color Emoji',sans-serif", SERIF = "'Playfair Display','Noto Color Emoji',serif";
+  css.textContent = [
+    `body{font-family:${SANS}}`,
+    `[style*="font-family"]:not([style*="Playfair"]):not([style*="monospace"]):not([style*="Roboto"]):not([style*="apple-system"]){font-family:${SANS}!important}`,
+    `[style*="Playfair"]{font-family:${SERIF}!important}`,
+    `button:not([style*="font-family"]),input:not([style*="font-family"]),select,textarea{font-family:${SANS}}`,
+  ].join('\n');
+  document.head.appendChild(css);
+}
+
+
 // Compute MAJORS dynamically based on current date
 // Always shows the NEXT occurrence of each major, sorted soonest first
 function getMajors() {
@@ -56,6 +80,7 @@ const DEFAULT_MAJOR = MAJORS[0].key; // soonest upcoming major
 
 export default function LandingPage() {
   const [step, setStep]     = useState('home');
+  useEffect(() => { gpEmojiSetup(); }, []);   // FINGERPRINT_EMOJI_FONT
   const [form, setForm]     = useState({ poolName:'', commissionerName:'', commissionerEmail:'', adminPassword:'', major:DEFAULT_MAJOR, bypassCode:'' });
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
