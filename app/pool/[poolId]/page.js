@@ -1,5 +1,5 @@
 'use client';
-// build: pay-after-entry-v320-20261005-1500
+// build: nickname-v322-20261005-1600
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1373,7 +1373,7 @@ export default function App(){
   const [acctEntries,setAcctEntries]=useState([]);
   const [showAcct,setShowAcct]=useState(false);
   const [acctMode,setAcctMode]=useState('signin');        // signin | signup | forgot | reset
-  const [acctForm,setAcctForm]=useState({name:'',email:'',phone:'',password:'',current:'',code:''});
+  const [acctForm,setAcctForm]=useState({name:'',nickname:'',email:'',phone:'',password:'',current:'',code:''});
   const [acctBusy,setAcctBusy]=useState(false);
   const [acctErr,setAcctErr]=useState('');
   const [acctEditing,setAcctEditing]=useState(false);     // FINGERPRINT_V300 — editing name/cell
@@ -3158,7 +3158,7 @@ export default function App(){
   const removePick=name=>{const np={};for(const t of[1,2,3])np[t]=picks[t].filter(p=>p!==name);setPicks(np);};
 
   const submit=async()=>{
-    if(!entryName.trim())return msg('Enter your name!');
+    if(!acct&&!entryName.trim())return msg('Enter your name!');   // FINGERPRINT_V321 — signed in: blank = your profile name
     if(!editMode){
       if(!acct&&!editMode&&!entryEmail.trim())return msg('Enter your email!');
       if(!acct&&!editMode&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(entryEmail.trim()))return msg('Invalid email format');
@@ -3421,7 +3421,7 @@ export default function App(){
     if(d.ok){ setAcctMode('reset'); msg('If that email has an account, a code is on its way'); } };
   const doReset=async()=>{ const d=await acctCall({action:'reset-confirm',email:acctForm.email,code:acctForm.code,password:acctForm.password});
     if(d.ok){ applySession(d.token,d.user); setShowAcct(false); msg('Password reset ✓'); } };
-  const doProfile=async()=>{ const d=await acctCall({action:'update-profile',auth:acctToken,name:acctForm.name,phone:acctForm.phone});
+  const doProfile=async()=>{ const d=await acctCall({action:'update-profile',auth:acctToken,name:acctForm.name,nickname:acctForm.nickname||'',phone:acctForm.phone});
     if(d.ok){ setAcct(d.user); msg('Saved ✓'); } return !!d.ok; };
   const doPassword=async()=>{ const d=await acctCall({action:'change-password',auth:acctToken,current:acctForm.current,password:acctForm.password});
     if(d.ok){ applySession(d.token,d.user); setAcctForm(f=>({...f,current:'',password:''})); msg('Password updated — other devices signed out'); } return !!d.ok; };
@@ -4869,12 +4869,14 @@ export default function App(){
               <div style={{border:`1px solid ${T.cardBorder}`,borderRadius:10,padding:'2px 12px 8px'}}>
                 <div style={{display:'flex',alignItems:'center',padding:'8px 0 6px'}}>
                   <div style={{flex:1,fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase'}}>Your details</div>
-                  {!acctEditing&&<button type="button" onClick={()=>{setAcctErr('');setAcctForm(f=>({...f,name:acct.name||'',phone:acct.phone||''}));setAcctEditing(true);}}
+                  {!acctEditing&&<button type="button" onClick={()=>{setAcctErr('');setAcctForm(f=>({...f,name:acct.name||'',nickname:acct.nickname||'',phone:acct.phone||''}));setAcctEditing(true);}}
                     style={{background:'none',border:'none',color:T.primary,fontSize:13,fontWeight:700,cursor:'pointer',padding:0}}>✏️ Edit</button>}
                 </div>
                 {acctEditing ? <>
                   <div style={{fontSize:12,color:'#8a9580',margin:'4px 0 4px'}}>Name</div>
                   {field('name','Your name','text','name')}
+                  <div style={{fontSize:12,color:'#8a9580',margin:'2px 0 4px'}}>Nickname <span style={{color:'#a3ac98'}}>— optional, your default entry name</span></div>
+                  {field('nickname','e.g. Tuna','text','nickname')}
                   <div style={{fontSize:12,color:'#8a9580',margin:'2px 0 4px'}}>Cell</div>
                   {field('phone','Cell number','tel','tel')}
                   <div style={{fontSize:11,color:'#8a9580',margin:'-2px 0 8px'}}>Your email is your sign-in, so it can't be changed here.</div>
@@ -4884,6 +4886,7 @@ export default function App(){
                   </div>
                 </> : <>
                   {row('Name',acct.name)}
+                  {row('Nickname',acct.nickname||<span style={{color:'#a3ac98',fontWeight:500}}>—</span>)}
                   {row('Email',acct.email)}
                   {row('Cell',acct.phone?fmtPhone(acct.phone):<span onClick={()=>{setAcctErr('');setAcctForm(f=>({...f,name:acct.name||'',phone:''}));setAcctEditing(true);}}
                     style={{color:'#b45309',cursor:'pointer',textDecoration:'underline'}}>📱 Add your cell number</span>)}
@@ -5232,14 +5235,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           // FINGERPRINT_V247_JOIN_THEN_PICK — joining signs you straight in (the server returns your own
           // code) and saves any picks already tapped for this session. The code is emailed as well.
           const joinTeam=async()=>{
-            const nm=entryName.trim(), em=entryEmail.trim();
+            let nm=entryName.trim(); const em=entryEmail.trim();
             if(!acct){ openAcct('signup'); return; }                  // FINGERPRINT_V283 — joining needs an account
-            if(!nm) return msg('Enter your name!');
+            if(!nm&&!acct) return msg('Enter your name!');
             setSubmitting(true);
             try{
               const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({poolId,action:'submit',name:nm,email:em,picks:[],joinCode:storedJoinCode(),auth:acctToken})});
               const d=await r.json();
+              if(d.name) nm=d.name;              // FINGERPRINT_V321 — the name the server actually used (e.g. "Tuna 2")
               if(d.error){ if(d.needJoinCode) resetJoinGate(); if(d.needAccount) openAcct('signup'); setSubmitting(false); return msg(d.error); }
               if(d.editCode) setAcctEntries(x=>[...x.filter(e=>e.name!==nm),{name:nm,code:String(d.editCode).toUpperCase()}]);
               if(d.entries) setEntries(d.entries);
@@ -5333,7 +5337,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </div>;
                 return <div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:6}}>
                   <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                        <input style={inp} placeholder="Your name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
+                        <input style={inp} placeholder={acct?`Entry name (optional — ${acct.nickname||acct.name})`:'Your name'} value={entryName} onChange={e=>setEntryName(e.target.value)}/>
                         {acct
                           ? <div style={{fontSize:12,color:'#6b7c5e'}}>Joining as <b>{acct.name}</b> · {acct.email}</div>
                           : <div style={{fontSize:12,color:'#6b7c5e'}}>You'll need an account to join — <span onClick={()=>openAcct('signup')} style={{color:T.primary,textDecoration:'underline',cursor:'pointer'}}>create one</span> or <span onClick={()=>openAcct('signin')} style={{color:T.primary,textDecoration:'underline',cursor:'pointer'}}>sign in</span>.</div>}
@@ -5405,7 +5409,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               <button type="button" onClick={()=>{setEditMode(false);setEntryName('');setEntryEmail('');setEditCode('');setPicks({1:[],2:[],3:[]});}} style={{background:'transparent',border:'1px solid #7a550040',color:'#7a5500',padding:'2px 8px',borderRadius:5,fontSize:10,fontWeight:600,cursor:'pointer'}}>Cancel</button>
             </div>}
             <div style={{display:'flex',gap:8,marginBottom:8}}>
-              <input style={inp} placeholder="Your Name" value={entryName} disabled={editMode} onChange={e=>setEntryName(e.target.value)}/>
+              <input style={inp} placeholder={acct&&!editMode?`Entry name (optional — ${acct.nickname||acct.name})`:'Your Name'} value={entryName} disabled={editMode} onChange={e=>setEntryName(e.target.value)}/>
               <div style={{background:T.primary,color:'#faf6ed',minWidth:50,height:44,borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'0 6px'}}>
                 <span style={{fontSize:18,fontWeight:800}}>{totalPicked}</span><span style={{fontSize:9,opacity:.6}}>/{TOTAL_PICKS_REQ}</span>
               </div>
