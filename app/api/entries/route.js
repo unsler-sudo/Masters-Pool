@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: backup-pw-v214-20261004-2100
+// build: login-link-v215-20261004-2130
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -292,6 +292,7 @@ function srvPublicMeta(m) {
   const o = { ...m };
   delete o.adminPassword; delete o.joinCode;
   for (const kk of Object.keys(o)) if (/password|secret|token|api_?key/i.test(kk)) delete o[kk];
+  o.hasAdminPassword = !!m.adminPassword;   // FINGERPRINT_V215 — yes/no only (set after the filter, which strips '*password*' names)
   return o;
 }
 
