@@ -166,10 +166,27 @@ export default function LandingPage() {
   if ((step === 'create' || step === 'signin' || step === 'mypools') && !acct) {
     const f = (k, ph, type='text', ac) => <input key={k} style={{...inp, marginBottom:10}} type={type} autoComplete={ac} placeholder={ph} value={af[k]} onChange={e=>setAf(x=>({...x,[k]:e.target.value}))}/>;
     const lk = (label, mode) => <button type="button" onClick={()=>{setAuthErr('');setAuthMode(mode);}} style={{background:'none',border:'none',color:'#1a2a5c',fontSize:13,textDecoration:'underline',cursor:'pointer',padding:4}}>{label}</button>;
-    const social = (p, label, bg, fg) => <button key={p} type="button" disabled={authBusy} onClick={()=>startOAuth(p)} style={{width:'100%',padding:12,borderRadius:8,border:'1px solid #d1d5db',background:bg,color:fg,fontSize:15,fontWeight:700,marginBottom:10,cursor:'pointer',opacity:authBusy?.6:1}}>{label}</button>;
+    const social = (p)=>{ const up=authMode==='signup', g=p==='google';
+          const label=`${up?'Sign up':'Sign in'} with ${g?'Google':'Apple'}`;
+          // FINGERPRINT_BRAND — official button specs. Google: white, 1px #747775 border, #1F1F1F Roboto Medium 14px,
+          // full-colour G. Apple: black, white logo + white system-font title at ~43% of the 44px height. The logos are
+          // Google's and Apple's OWN files, from their official kits, saved in public/brand/ (.svg or .png).
+          const logo=g
+            // Google's own light 40x40 button tile (PNG — its SVG gradient doesn't render in Safari images): show its centre 20x20 = the G
+            ? <span style={{width:20,height:20,overflow:'hidden',display:'block',flexShrink:0}}><img src="/brand/google-g.png" alt="" width={40} height={40}
+                style={{display:'block',margin:-10,maxWidth:'none'}} onError={e=>{e.currentTarget.parentNode.style.display='none';}}/></span>
+            // Apple's own logo-only tile ("White" = white logo on black), 44x44: show the 18x20 around the logo,
+            // which renders it 15x19 — matching the 19px title, per Apple's guidelines
+            : <span style={{width:18,height:20,overflow:'hidden',display:'block',flexShrink:0}}><img src="/brand/apple-logo-white.png" alt="" width={44} height={44}
+                style={{display:'block',margin:'-10px 0 0 -13px',maxWidth:'none'}} onError={e=>{e.currentTarget.parentNode.style.display='none';}}/></span>;
+          return <button key={p} type="button" disabled={authBusy} onClick={()=>startOAuth(p)} aria-label={label}
+            style={g
+              ? {display:'flex',alignItems:'center',justifyContent:'center',gap:10,width:'100%',height:44,padding:'0 12px',marginBottom:10,borderRadius:4,border:'1px solid #747775',background:'#FFFFFF',color:'#1F1F1F',fontFamily:"Roboto,Arial,sans-serif",fontWeight:500,fontSize:14,letterSpacing:'0.25px',cursor:'pointer',opacity:authBusy?.6:1,boxSizing:'border-box'}
+              : {display:'flex',alignItems:'center',justifyContent:'center',gap:6,width:'100%',height:44,padding:'0 12px',marginBottom:10,borderRadius:8,border:'none',background:'#000000',color:'#FFFFFF',fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Helvetica,Arial,sans-serif",fontWeight:500,fontSize:19,cursor:'pointer',opacity:authBusy?.6:1,boxSizing:'border-box'}}>
+            {logo}{label}</button>; };
     return (
       <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#0a1a3a 0%,#1a2a5c 50%,#243475 100%)',display:'flex',alignItems:'center',justifyContent:'center',padding:20,fontFamily:"'DM Sans',sans-serif"}}>
-        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+        <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=Roboto:wght@500&display=swap" rel="stylesheet"/>
         <div style={{background:'#fff',borderRadius:16,padding:32,maxWidth:440,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
           <button type="button" onClick={()=>setStep('home')} style={{background:'none',border:'none',color:'#6b7280',cursor:'pointer',fontSize:13,marginBottom:16,padding:0}}>← Back</button>
           <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,color:'#1a2a5c',marginBottom:4}}>
@@ -177,8 +194,8 @@ export default function LandingPage() {
           <p style={{color:'#6b7280',fontSize:13,marginBottom:20}}>{step==='create'?'You\'ll run your pool from your account — no admin password to remember.':'One account for every pool you run or play in.'}</p>
           {authErr&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:14}}>{authErr}</div>}
           {(authMode==='signup'||authMode==='signin')&&(providers.apple||providers.google)&&<>
-            {providers.apple&&social('apple',' Continue with Apple','#000','#fff')}
-            {providers.google&&social('google','Continue with Google','#fff','#1f2937')}
+            {providers.apple&&social('apple')}
+            {providers.google&&social('google')}
             <div style={{textAlign:'center',fontSize:12,color:'#9ca3af',margin:'4px 0 12px'}}>or with email</div></>}
           {authMode==='signup'&&<>{f('name','Your name','text','name')}{f('email','Email','email','email')}{f('phone','Cell number','tel','tel')}{f('password','Password (8+ characters)','password','new-password')}</>}
           {authMode==='signin'&&<>{f('email','Email','email','email')}{f('password','Password','password','current-password')}</>}
