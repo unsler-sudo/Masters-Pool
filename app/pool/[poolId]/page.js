@@ -1,5 +1,5 @@
 'use client';
-// build: dark-mode-v313-20261005-1100
+// build: dark-borders-v315-20261005-1200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -473,7 +473,7 @@ const gpDarkTheme = (t) => ({ ...t, bg:'#0f1411', bodyBg:'#0f1411', navBg:'#151b
   cardBorder:'#2c352d', inputBorder:'#33402f', stripeBg:'#161c18', rowHl:'#24301f', accentLight:'#2a2426' });
 function gpDarkCss(T) {
   const D = 'html[data-gp-theme="dark"]', out = [];
-  const sel = { bg: r => `[style*="background: ${r}"],[style*="background-color: ${r}"]`, fg: r => `[style^="color: ${r}"],[style*="; color: ${r}"]`, bd: r => `[style*="solid ${r}"]` };
+  const sel = { bg: r => `[style*="background: ${r}"],[style*="background-color: ${r}"]`, fg: r => `[style^="color: ${r}"],[style*="; color: ${r}"]`, bd: r => `[style*="solid ${r}"],[style*="border-color: ${r}"],[style*="border-top-color: ${r}"],[style*="border-bottom-color: ${r}"],[style*="border-left-color: ${r}"],[style*="border-right-color: ${r}"]` };   // V315 — browsers often write borders the long way
   const decl = { bg: c => `background-color:${c}!important;background-image:none!important`, fg: c => `color:${c}!important`, bd: c => `border-color:${c}!important` };
   for (const p of ['bg', 'fg', 'bd']) for (const [from, to] of Object.entries(GP_DARK[p])) { const r = gpRgb(from); if (r) out.push(`${D} :is(${sel[p](r)}){${decl[p](to)}}`); }
   for (const c of new Set([T.primary, T.dark, T.navBorder, T.mid])) { const r = gpRgb(c); if (r) out.push(`${D} :is(${sel.fg(r)}){color:${gpLighten(c)}!important}`); }
@@ -1323,8 +1323,8 @@ export default function App(){
   const resetJoinGate = () => { try { localStorage.removeItem(`jc_${poolId}`); localStorage.removeItem(`jc_${poolId}_code`); } catch {} setJoinCodePassed(false); };
 
   const [tab,setTab]=useState('Standings');
-  // FINGERPRINT_V313_DARK — Light · Dark · Auto (follows the device), saved per device; default Light
-  const [appearance,setAppearanceRaw]=useState('light');
+  // FINGERPRINT_V313_DARK — Light · Dark · Auto (follows the device), saved per device; default Auto (V314)
+  const [appearance,setAppearanceRaw]=useState('auto');
   const [sysDark,setSysDark]=useState(false);
   useEffect(()=>{
     try{ const a=localStorage.getItem('gp_appearance'); if(a==='dark'||a==='auto'||a==='light') setAppearanceRaw(a); }catch{}
