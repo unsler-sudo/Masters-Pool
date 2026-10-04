@@ -1,5 +1,5 @@
 'use client';
-// build: login-link-v306-20261004-2130
+// build: my-record-v307-20261004-2200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1330,6 +1330,11 @@ export default function App(){
   const [acctEditing,setAcctEditing]=useState(false);     // FINGERPRINT_V300 — editing name/cell
   const [acctPwView,setAcctPwView]=useState(false);       // FINGERPRINT_V300 — the change-password screen
   const [acctNotifView,setAcctNotifView]=useState(false); // FINGERPRINT_V303 — the notifications screen
+  const [acctRecordView,setAcctRecordView]=useState(false); // FINGERPRINT_V307 — My record
+  const [record,setRecord]=useState(null);
+  const [recKind,setRecKind]=useState('all');
+  const [recYear,setRecYear]=useState('all');
+  const [recOpen,setRecOpen]=useState(null);
   const [providers,setProviders]=useState({google:false,apple:false});
   const [ownerAdmin,setOwnerAdmin]=useState(false);       // FINGERPRINT_V285_OWNER — Admin via your account
   const [myPools,setMyPools]=useState([]);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
@@ -3243,7 +3248,7 @@ export default function App(){
     if(ownerAdmin){ setOwnerAdmin(false); setAdminOk(false); setAdminPw(''); } };
   const adoptEntry=(name,code)=>{ setChatName(name); setChatCode(code); setChatVerified(true);
     try{ localStorage.setItem(`chat_${poolId}_name`,name); localStorage.setItem(`chat_${poolId}_code`,code); }catch{} };
-  const openAcct=(mode)=>{ if(mode) setAcctMode(mode); setAcctErr(''); setAcctEditing(false); setAcctPwView(false); setAcctNotifView(false);
+  const openAcct=(mode)=>{ if(mode) setAcctMode(mode); setAcctErr(''); setAcctEditing(false); setAcctPwView(false); setAcctNotifView(false); setAcctRecordView(false);
     setAcctForm(f=>({...f,name:acct?.name||f.name,phone:acct?.phone||f.phone,password:'',current:'',code:''})); setShowAcct(true); };
   useEffect(()=>{
     let t=null; try{ t=localStorage.getItem('tgp_auth'); }catch{}
@@ -3281,6 +3286,12 @@ export default function App(){
     if(!showAcct||!acctToken) return;
     authPost({action:'my-pools',auth:acctToken}).then(d=>{ if(d?.ok) setMyPools(d.pools||[]); }).catch(()=>{});
   },[showAcct,acctToken]);
+  useEffect(()=>{
+    if(!acctRecordView||!acctToken) return;
+    setRecord(null); setRecOpen(null);
+    fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'my-record',auth:acctToken})})
+      .then(r=>r.json()).then(d=>setRecord(d?.ok?d:{error:d?.error||'Could not load'})).catch(()=>setRecord({error:'Connection problem'}));
+  },[acctRecordView,acctToken,poolId]);
   const acctCall=async(body)=>{ setAcctBusy(true); setAcctErr('');
     try{ const d=await authPost(body); if(d.error) setAcctErr(d.error); return d; }
     catch{ setAcctErr('Connection problem — try again'); return {}; }
@@ -4531,11 +4542,62 @@ export default function App(){
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto',borderRadius:'16px 16px 0 0',padding:'16px 16px 28px',boxSizing:'border-box'}}>
             <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
               <div style={{flex:1,fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:800,color:T.primary}}>
-                {acct?(acctNotifView?'🔔 Notifications':acctPwView?'🔒 Change password':'👤 Your account'):acctMode==='signup'?'Create your account':acctMode==='forgot'||acctMode==='reset'?'Reset your password':'Sign in'}</div>
+                {acct?(acctRecordView?'📊 My record':acctNotifView?'🔔 Notifications':acctPwView?'🔒 Change password':'👤 Your account'):acctMode==='signup'?'Create your account':acctMode==='forgot'||acctMode==='reset'?'Reset your password':'Sign in'}</div>
               <button type="button" onClick={()=>setShowAcct(false)} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
             </div>
             {acctErr&&<div style={{background:'#fdecea',color:'#b3261e',borderRadius:8,padding:'8px 10px',fontSize:13,marginBottom:10}}>{acctErr}</div>}
-            {acct ? (acctNotifView ? <>
+            {acct ? (acctRecordView ? <>
+              {/* FINGERPRINT_V307_MY_RECORD — every finished week, across all your pools */}
+              <button type="button" onClick={()=>setAcctRecordView(false)} style={{background:'none',border:'none',color:T.primary,fontSize:13,fontWeight:700,cursor:'pointer',padding:'0 0 8px'}}>← Back</button>
+              {(()=>{
+                if(!record) return <div style={{fontSize:13,color:'#8a9580',padding:'16px 0'}}>Loading your record…</div>;
+                if(record.error) return <div style={{fontSize:13,color:'#b3261e',padding:'12px 0'}}>{record.error}</div>;
+                const big=(n)=>!n?'$0':n>=1e6?'$'+(n/1e6).toFixed(2).replace(/\.?0+$/,'')+'M':'$'+Math.round(n/1000)+'K';
+                const usd=(n)=>'$'+(Number.isInteger(n)?n.toLocaleString('en-US'):n.toFixed(2));
+                const ord=(n)=>n+(['th','st','nd','rd'][((n%100)-20)%10]||['th','st','nd','rd'][n%100]||'th');
+                const last=(nm)=>String(nm||'').split(',')[0];
+                const S=record.summary||{}, rows=record.rows||[];
+                if(!rows.length) return <div style={{textAlign:'center',padding:'24px 6px',color:'#6b7c5e',fontSize:14,lineHeight:1.5}}><div style={{fontSize:34}}>📊</div>No finished events yet — your record builds as you play.</div>;
+                const KINDS=[['all','All'],['majors','Majors'],['pgatour','PGA Tour'],['dpworld','DP World'],['cup','Cups']].filter(([k2])=>k2==='all'||rows.some(r=>r.kind===k2));
+                const years=[...new Set(rows.map(r=>r.year).filter(Boolean))].sort((a,b)=>b-a);
+                const list=rows.filter(r=>(recKind==='all'||r.kind===recKind)&&(recYear==='all'||r.year===+recYear));
+                const stat=(v,l)=><div style={{flex:1,textAlign:'center',padding:'8px 2px'}}><div style={{fontSize:18,fontWeight:800,color:T.primary}}>{v}</div><div style={{fontSize:10,color:'#8a9580',textTransform:'uppercase',letterSpacing:.6}}>{l}</div></div>;
+                return <>
+                  <div style={{border:`1px solid ${T.cardBorder}`,borderRadius:10,padding:'4px 6px 10px',marginBottom:12}}>
+                    <div style={{display:'flex'}}>{stat(S.entries,'Events')}{stat(S.wins,'Wins')}{stat(S.top3,'Top 3')}{stat(usd(S.won||0),'Won')}</div>
+                    <div style={{fontSize:12,color:'#6b7c5e',textAlign:'center',lineHeight:1.6,padding:'0 6px'}}>
+                      {S.best?`Best finish ${ord(S.best)} · Average ${ord(S.avg)}`:''}
+                      {S.favorite&&<div>Most-picked golfer: <b>{last(S.favorite.name)}</b> ({S.favorite.times} time{S.favorite.times===1?'':'s'})</div>}
+                      {S.bestPick&&<div>Best pick: <b>{last(S.bestPick.name)}</b> — {big(S.bestPick.earned)} at the {S.bestPick.event}{S.bestPick.year?` ${S.bestPick.year}`:''}</div>}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center',marginBottom:10}}>
+                    {KINDS.map(([k2,l])=><button key={k2} type="button" onClick={()=>setRecKind(k2)} style={{padding:'5px 11px',borderRadius:14,fontSize:12,fontWeight:700,cursor:'pointer',
+                      border:`1px solid ${recKind===k2?T.primary:'#d6d6cf'}`,background:recKind===k2?T.primary:'#fff',color:recKind===k2?'#fff':'#5a6b4e'}}>{l}</button>)}
+                    {years.length>1&&<select value={recYear} onChange={e=>setRecYear(e.target.value)} style={{marginLeft:'auto',fontSize:12,padding:'4px 6px',borderRadius:6,border:'1px solid #d6d6cf'}}>
+                      <option value="all">All years</option>{years.map(y=><option key={y} value={y}>{y}</option>)}</select>}
+                  </div>
+                  {list.length===0&&<div style={{fontSize:13,color:'#8a9580',padding:'10px 0'}}>Nothing here for that filter.</div>}
+                  {list.map((r,i)=>{const open=recOpen===i, icon=r.place===1?'🏆':r.place===2?'🥈':r.place===3?'🥉':'⛳';
+                    return <div key={i} style={{borderTop:'1px solid #f0f0ea'}}>
+                      <button type="button" onClick={()=>setRecOpen(open?null:i)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',textAlign:'left',background:'none',border:'none',padding:'10px 2px',cursor:'pointer'}}>
+                        <span style={{fontSize:18,width:22,textAlign:'center'}}>{icon}</span>
+                        <span style={{flex:1,minWidth:0}}>
+                          <span style={{display:'block',fontSize:14,fontWeight:700,color:'#2a3a1e',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.event}{r.year?` ${r.year}`:''}</span>
+                          <span style={{display:'block',fontSize:12,color:'#8a9580',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ord(r.place)} of {r.field} · {r.pts?`${r.total} pts`:big(r.total)} · {r.poolName}{rows.filter(x=>x.event===r.event&&x.year===r.year&&x.poolId===r.poolId).length>1?` · ${r.entry}`:''}</span>
+                        </span>
+                        {r.prize>0&&<span style={{fontSize:13,fontWeight:800,color:'#2d7a1e'}}>{usd(r.prize)}</span>}
+                        <span style={{color:'#bbb'}}>{open?'▾':'›'}</span>
+                      </button>
+                      {open&&<div style={{padding:'0 4px 10px 34px'}}>
+                        {r.pts ? <div style={{fontSize:12,color:'#6b7c5e'}}>Match pick'em — {r.total} point{r.total===1?'':'s'}.</div>
+                          : r.picks.map(p=><div key={p.name} style={{display:'flex',fontSize:12,padding:'2px 0',color:p.earned>0?'#2a3a1e':'#a3ac98'}}>
+                              <span style={{flex:1}}>{last(p.name)}</span><span>{p.earned>0?big(p.earned):'—'}</span></div>)}
+                      </div>}
+                    </div>;})}
+                </>;
+              })()}
+            </> : acctNotifView ? <>
               {/* FINGERPRINT_V303 — notifications, inside the profile */}
               <button type="button" onClick={()=>{setAcctNotifView(false);setAcctErr('');}} style={{background:'none',border:'none',color:T.primary,fontSize:13,fontWeight:700,cursor:'pointer',padding:'0 0 8px'}}>← Back</button>
               {!chatVerified ? <p style={{fontSize:14,color:'#6b7c5e',lineHeight:1.5}}>Notifications follow your entry. Enter this week's pool first, then turn them on here.</p>
@@ -4606,6 +4668,7 @@ export default function App(){
               {/* FINGERPRINT_V303 — settings menu */}
               <div style={{marginTop:12,border:`1px solid ${T.cardBorder}`,borderRadius:10,overflow:'hidden'}}>
                 <div style={{marginTop:-1}}>
+                  {navRow('📊','My record','Every event you’ve played, in all your pools',()=>{setRecKind('all');setRecYear('all');setAcctRecordView(true);})}
                   {navRow('🔔','Notifications',pushState==='on'?'On for this device':'Off',()=>{setAcctErr('');setAcctNotifView(true);})}
                   {(ownerAdmin||adminOk)&&navRow('⚙️','Commissioner settings','Entries, payments, invites and more',()=>{setShowAcct(false);setTab('Admin');})}
                 </div>
