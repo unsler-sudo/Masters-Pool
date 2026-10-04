@@ -1,5 +1,5 @@
 'use client';
-// build: recap-link-v298-20261004-1500
+// build: admin-tidy-v299-20261004-1700
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -4022,17 +4022,6 @@ export default function App(){
     if(d?.ok)msg(paid?`${eName} marked unpaid`:`${eName} marked paid ✓`);
   };
 
-  const switchMajor=async(major)=>{
-    setActiveMajor(major);
-    activeMajorRef.current = major;
-    setField([]);
-    setFieldSource(`⏳ Loading ${THEMES[major]?.eventName} field...`);
-    const d=await adminAction('set-major',{major});
-    if(d?.ok){
-      msg(`Switched to ${THEMES[major].eventName} ${THEMES[major].emoji}`);
-      fetchField(major, true);
-    }
-  };
 
   const pri={background:T.primary,color:'#faf6ed',border:'none',padding:'8px 18px',borderRadius:7,fontWeight:600,fontSize:13,cursor:'pointer'};
   const dan={background:'#8b2020',color:'#fff',border:'none',padding:'8px 18px',borderRadius:7,fontWeight:600,fontSize:13,cursor:'pointer'};
@@ -5946,44 +5935,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
           </div>
           :<>
-            <div style={sec}>
-              <h3 style={stl}>🏆 Active Major</h3>
-              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:12}}>Switch the active tournament for all users. Updates theme, tee time, course pars, and field.</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
-                {Object.entries(THEMES).map(([key,theme])=>{
-                  const active=activeMajor===key;
-                  return(
-                    <button key={key} type="button" onClick={()=>switchMajor(key)}
-                      style={{padding:'14px 10px',borderRadius:12,border:`2px solid ${active?theme.primary:'#e0e0e0'}`,background:active?theme.primary:'#fafafa',color:active?'#fff':'#555',fontWeight:active?700:500,fontSize:12,cursor:'pointer',transition:'all .2s',textAlign:'center'}}>
-                      <div style={{fontSize:26,marginBottom:6}}>{theme.emoji}</div>
-                      <div style={{fontWeight:700,fontSize:13,marginBottom:2}}>{theme.eventName.replace(' 2026','')}</div>
-                      <div style={{fontSize:10,opacity:.7,marginBottom:active?4:0}}>{theme.courseName}</div>
-                      {active&&<div style={{fontSize:10,background:'#ffffff30',borderRadius:8,padding:'2px 8px',display:'inline-block',marginTop:2}}>✓ Active</div>}
-                    </button>
-                  );
-                })}
-              </div>
-              <div style={{background:'#f8f9ff',borderRadius:8,padding:'10px 12px',border:'1px solid #e0e4f0'}}>
-                <div style={{fontSize:10,fontWeight:700,color:'#555',letterSpacing:.5,marginBottom:6}}>⏰ AUTO-MANAGEMENT SCHEDULE</div>
-                <div style={{fontSize:11,color:'#6b7c5e',lineHeight:1.7}}>
-                  <div>🔓 <b>Monday 9 AM ET of tournament week</b> (majors) or <b>after rotation fires</b> (PGA Tour mode) — entries unlock</div>
-                  <div>🔒 <b>At first tee time Thursday</b> — entries lock, picks reveal</div>
-                  <div>🔄 <b>Sunday R4 finish OR Tuesday 6–11 AM ET</b> — auto-rotates to next event, archives current results</div>
-                  <div>💵 <b>Commissioner pays per event</b> to unlock for new entries</div>
-                </div>
-              </div>
-            </div>
-
-            <div style={sec}><h3 style={stl}>📡 Live Scores</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Auto-refreshes from DataGolf every 60s.</p>
-              <button type="button" style={{...pri,opacity:refreshing?.5:1}} onClick={()=>fetchScores(false)} disabled={refreshing}>{refreshing?'Updating...':'⟳ Refresh Now'}</button>
-              {lastUp&&<span style={{fontSize:11,color:'#8a9580',marginLeft:8}}>Last: {lastUp}</span>}
-            </div>
-            <div style={sec}><h3 style={stl}>🔒 Entry Lock</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Lock entries before R1 tees off.</p>
-              <button type="button" style={locked?dan:pri} onClick={async()=>{const d=await adminAction(locked?'unlock':'lock');if(d?.ok)msg(locked?'Unlocked':'Locked!');}}>{locked?'🔓 Unlock':'🔒 Lock'} Entries</button>
-            </div>
-            <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
-              <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
-            </div>
+            {/* FINGERPRINT_V299_ADMIN_GROUPS */}
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>This week</div>
             {/* FINGERPRINT_V245_MATCH_PICKEM — commissioner: post matches, set the lock, enter results */}
             {isTeamPool&&(()=>{
               const sessions = teamSessionsFor(tcEventName);
@@ -6058,6 +6011,41 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </div>
               </div>;
             })()}
+            <div style={sec}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                <h3 style={{...stl,marginBottom:0,flex:1}}>👥 Entries & Payments ({entries.length})</h3>
+                {(()=>{
+                  const paidCount = entries.filter(e=>!!payments[e.name]).length;
+                  const total = entries.length;
+                  const pct = total>0?Math.round(paidCount/total*100):0;
+                  return <span style={{background:'#e8f5e8',color:'#2d7a1e',borderRadius:8,padding:'2px 10px',fontSize:11,fontWeight:700}}>{paidCount}/{total} paid · {pct}%</span>;
+                })()}
+              </div>
+              {entries.length===0?<p style={{color:'#8a9580',fontSize:12}}>No entries yet</p>:
+                <div style={{border:'1px solid #f0ebe0',borderRadius:8,overflow:'hidden'}}>
+                  <div style={{display:'flex',padding:'8px 10px',background:'#fafaf6',borderBottom:'1px solid #f0ebe0',fontSize:10,fontWeight:700,color:'#888',letterSpacing:.5}}>
+                    <span style={{flex:1}}>NAME</span>
+                    <span style={{width:50,textAlign:'center'}}>PICKS</span>
+                    <span style={{width:80,textAlign:'center'}}>PAYMENT</span>
+                    <span style={{width:60,textAlign:'right'}}>ACTION</span>
+                  </div>
+                  {entries.map(e=>{const paid=!!payments[e.name];return(
+                    <div key={e.name} style={{display:'flex',alignItems:'center',padding:'8px 10px',borderBottom:'1px solid #f5f0e8',fontSize:13}}>
+                      <span style={{flex:1,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</span>
+                      <span style={{width:50,textAlign:'center',fontSize:11,color:'#8a9580'}}>{e.picks.length}</span>
+                      <button type="button" onClick={()=>togglePayment(e.name)} style={{width:74,marginLeft:3,marginRight:3,background:paid?'#e8f5e8':'#f5f5f5',border:`1px solid ${paid?'#2d7a1e':'#ccc'}`,color:paid?'#2d7a1e':'#888',padding:'4px 0',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer'}}>{paid?'✓ Paid':'Mark Paid'}</button>
+                      <button type="button" style={{width:54,marginLeft:3,background:'transparent',border:'1px solid #c44',color:'#c44',padding:'4px 0',borderRadius:5,fontSize:11,cursor:'pointer'}} onClick={async()=>{
+                        if(!confirm(`Remove ${e.name}'s entry?`))return;
+                        const d=await adminAction('delete',{name:e.name});
+                        if(d?.ok){msg(`Removed ${e.name}`);loadEntries();}
+                      }}>Remove</button>
+                    </div>);})}
+                </div>
+              }
+            </div>
+            <div style={sec}><h3 style={stl}>🔒 Entry Lock</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Lock entries before R1 tees off.</p>
+              <button type="button" style={locked?dan:pri} onClick={async()=>{const d=await adminAction(locked?'unlock':'lock');if(d?.ok)msg(locked?'Unlocked':'Locked!');}}>{locked?'🔓 Unlock':'🔒 Lock'} Entries</button>
+            </div>
             {/* FINGERPRINT_V281_LATE_ENTRIES — allow new entries after the first tee */}
             {!isTeamPool&&<div style={sec}>
               <h3 style={stl}>⏰ Late entries</h3>
@@ -6075,13 +6063,146 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </span>
               </label>
             </div>}
-            {/* FINGERPRINT_V272_NOTIFY_SETTINGS — commissioner alerts on this device */}
-            {pushKey&&(pushState==='default'||pushState==='granted'||pushState==='on')&&<div style={sec}>
-              <h3 style={stl}>🔔 Commissioner alerts</h3>
-              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>On this device: a notification when someone joins, and an entries / unpaid summary an hour before the pool locks.</p>
-              <button type="button" onClick={()=>toggleAdminPush(!adminPush)} style={{...pri,background:adminPush?'#fff':T.primary,color:adminPush?T.primary:'#fff',border:`1.5px solid ${T.primary}`}}>
-                {adminPush?'Turn off on this device':'Turn on for this device'}</button>
-            </div>}
+            <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
+              <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
+            </div>
+            <div style={sec}><h3 style={stl}>📡 Live Scores</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Auto-refreshes from DataGolf every 60s.</p>
+              <button type="button" style={{...pri,opacity:refreshing?.5:1}} onClick={()=>fetchScores(false)} disabled={refreshing}>{refreshing?'Updating...':'⟳ Refresh Now'}</button>
+              {lastUp&&<span style={{fontSize:11,color:'#8a9580',marginLeft:8}}>Last: {lastUp}</span>}
+            </div>
+            {/* FINGERPRINT_V299_ADMIN_GROUPS */}
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>Money</div>
+            <div style={sec}>
+              <h3 style={stl}>💵 Entry Fee & Payouts</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Set entry fee to display payouts in header. 3rd = 1× fee, 2nd = 2× fee, 1st = rest.</p>
+              <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:10}}>
+                <span style={{fontSize:13,color:'#555'}}>$</span>
+                <input type="number" min="0" placeholder="20" defaultValue={poolMeta?.entryFee||''}
+                  id="entryFeeInput"
+                  style={{...inp,maxWidth:100}}/>
+                <button type="button" style={pri} onClick={async()=>{
+                  const val=parseFloat(document.getElementById('entryFeeInput').value)||0;
+                  const d=await adminAction('set-entry-fee',{entryFee:val});
+                  if(d?.ok){loadEntries();msg(val>0?`Entry fee set to $${val}`:'Entry fee cleared');}
+                }}>Save</button>
+              </div>
+              {poolMeta?.entryFee>0&&entries.length>=1&&(()=>{
+                const fee=poolMeta.entryFee;
+                const pot=entries.length*fee;
+                const wta = isWinnerTakeAll(entries.length);
+                const first = wta ? pot : pot-fee*3;
+                return <div style={{background:`${T.primary}0a`,borderRadius:8,padding:'10px 12px',fontSize:12,color:T.primary}}>
+                  <div style={{fontWeight:700,marginBottom:4}}>Current Pot: ${pot} ({entries.length} × ${fee})</div>
+                  {wta
+                    ? <div>🥇 Winner takes all: <b>${first}</b></div>
+                    : <div>🥇 1st: <b>${first}</b> · 🥈 2nd: <b>${fee*2}</b> · 🥉 3rd: <b>${fee}</b></div>
+                  }
+                </div>;
+              })()}
+              {poolMeta?.entryFee>0&&entries.length===0&&<div style={{fontSize:11,color:'#888'}}>Payouts will show once entries are submitted.</div>}
+            </div>
+            <div style={sec}><h3 style={stl}>💰 Payout Structure</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Choose how the pot is split. <b>Standard</b> pays 1st/2nd/3rd (1st gets the pot minus two entry fees, 2nd gets two entry fees, 3rd gets one). <b>Winner-take-all</b> gives the entire pot to 1st place.</p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                {[['standard','🥇🥈🥉 Standard','1st / 2nd / 3rd split'],['winner-take-all','🏆 Winner Take All','1st place gets entire pot']].map(([mode,label,desc])=>{
+                  const current=(poolMeta?.payoutMode||'standard')===mode;
+                  return <button key={mode} type="button" onClick={async()=>{
+                    const d=await adminAction('set-payout-mode',{payoutMode:mode});
+                    if(d?.ok){msg(mode==='winner-take-all'?'Winner-take-all enabled':'Standard payouts enabled');setPoolMeta(prev=>({...prev,payoutMode:mode}));}
+                  }} style={{padding:'14px 10px',borderRadius:12,border:`2px solid ${current?T.primary:'#e0e0e0'}`,background:current?T.primary:'#fafafa',color:current?'#fff':'#555',fontWeight:current?700:500,fontSize:12,cursor:'pointer',textAlign:'center'}}>
+                    <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>{label}</div>
+                    <div style={{fontSize:10,opacity:.75}}>{desc}</div>
+                    {current&&<div style={{fontSize:10,background:'#ffffff30',borderRadius:8,padding:'2px 8px',display:'inline-block',marginTop:6}}>✓ Active</div>}
+                  </button>;
+                })}
+              </div>
+              <p style={{fontSize:11,color:'#888',marginTop:8}}>Note: pools with 4 or fewer entries are always winner-take-all regardless of this setting.</p>
+            </div>
+            <div style={sec}><h3 style={stl}>💰 Show/Hide Payment Status</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Paid/Unpaid badges are currently <b>{paymentsHidden?'hidden':'visible'}</b>. Useful to hide during the tournament when payment status is no longer relevant.</p>
+              <button type="button" style={paymentsHidden?pri:dan} onClick={async()=>{const d=await adminAction(paymentsHidden?'show-payments':'hide-payments');if(d?.ok){setPaymentsHidden(!paymentsHidden);msg(paymentsHidden?'Payment badges visible':'Payment badges hidden');}}}>{paymentsHidden?'👀 Show Payment Badges':'🙈 Hide Payment Badges'}</button>
+            </div>
+            {/* FINGERPRINT_V299_ADMIN_GROUPS */}
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>Players</div>
+            {/* FINGERPRINT_V141_INVITE_UI */}
+            <div style={sec}><h3 style={stl}>📧 Invite Past Players</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Email everyone who's entered a past pool (and left an email) to join this week's event. Great to run after the pool rotates to a new tournament. Each person gets a personal invite with a link to make their picks.</p>
+              {roster===null
+                ? <button type="button" style={pri} onClick={async()=>{
+                    const d=await adminAction('get-roster',{});
+                    if(d?.ok){setRoster(d.roster||[]);}
+                    else msg(d?.error||'Could not load roster');
+                  }}>👥 Load Past Players</button>
+                : roster.length===0
+                ? <p style={{fontSize:13,color:'#888'}}>No past players with emails yet. Once people enter pools with their email, they'll show up here.</p>
+                : <>
+                    <div style={{fontSize:13,fontWeight:600,color:T.primary,marginBottom:8}}>{roster.length} past player{roster.length===1?'':'s'} on file</div>
+                    <div style={{maxHeight:160,overflowY:'auto',border:`1px solid ${T.cardBorder}`,borderRadius:8,padding:'6px 0',marginBottom:10,background:'#fafafa'}}>
+                      {roster.map((p,i)=>(
+                        <div key={p.email} style={{display:'flex',justifyContent:'space-between',padding:'5px 12px',fontSize:12,borderBottom:i<roster.length-1?`1px solid ${T.cardBorder}55`:'none'}}>
+                          <span style={{fontWeight:600}}>{p.name||'(no name)'}</span>
+                          <span style={{color:'#8a9580'}}>{p.email}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <textarea id="inviteNoteInput" placeholder="Optional message to include (e.g. 'Big purse this week — get in before Thursday!')" style={{width:'100%',boxSizing:'border-box',padding:'9px 12px',borderRadius:7,border:`1px solid ${T.inputBorder}`,fontSize:13,fontFamily:"'DM Sans',sans-serif",minHeight:54,marginBottom:10,resize:'vertical'}}/>
+                    <button type="button" disabled={inviting} style={{...pri,opacity:inviting?0.6:1,cursor:inviting?'default':'pointer'}} onClick={async()=>{
+                      if(!window.confirm(`Send an invite email to all ${roster.length} past players?`))return;
+                      setInviting(true);
+                      const note=(document.getElementById('inviteNoteInput')?.value||'').trim();
+                      const d=await adminAction('invite-roster',{message:note});
+                      setInviting(false);
+                      if(d?.ok){
+                        msg(`Invites sent to ${d.sent} player${d.sent===1?'':'s'}${d.failed?` (${d.failed} failed)`:''}`);
+                        // FINGERPRINT_V143_INVITE_DIAG — surface which emails failed and why
+                        if(d.failures && d.failures.length){
+                          console.warn('Invite failures:', d.failures);
+                          const lines = d.failures.map(f=>`• ${f.email} — ${f.reason}`).join('\n');
+                          setTimeout(()=>alert(`${d.failed} invite${d.failed===1?'':'s'} failed:\n\n${lines}`), 300);
+                        }
+                      }
+                      else msg(d?.error||'Invite failed');
+                    }}>{inviting?'Sending…':`📨 Send Invite to ${roster.length} Player${roster.length===1?'':'s'}`}</button>
+                    <button type="button" style={{...inp,flex:'none',marginLeft:8,cursor:'pointer',background:'#f0f0f0',border:'none',fontWeight:600,fontSize:12,padding:'9px 14px'}} onClick={()=>setRoster(null)}>Refresh</button>
+                  </>
+              }
+            </div>
+            <div style={sec}><h3 style={stl}>🔑 Join Code</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Optionally require a join code to enter the pool. Share the code only with the people you want to join.</p>
+              <label style={{fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginBottom:10}}>
+                <input type="checkbox" id="joinCodeRequiredInput" defaultChecked={!!poolMeta?.joinCodeRequired} onChange={async(e)=>{
+                  const required=e.target.checked;
+                  const d=await adminAction('set-join-code',{joinCodeRequired:required,joinCode:poolMeta?.joinCode||''});
+                  if(d?.ok){msg(required?'Join code now required':'Join code optional');setPoolMeta(prev=>({...prev,joinCodeRequired:required}));}
+                }}/>
+                <span style={{fontWeight:600}}>Require join code to enter pool</span>
+              </label>
+              <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                <input style={{...inp,marginBottom:0,textTransform:'uppercase',fontFamily:'monospace',letterSpacing:2,fontSize:16,fontWeight:700}} type="text" placeholder="ABCD12" id="joinCodeInput" defaultValue={poolMeta?.joinCode||''} maxLength={20}/>
+                <button type="button" style={pri} onClick={async()=>{
+                  const code=document.getElementById('joinCodeInput').value.trim().toUpperCase();
+                  if(!code){msg('Code cannot be empty');return;}
+                  const d=await adminAction('set-join-code',{joinCodeRequired:!!poolMeta?.joinCodeRequired,joinCode:code});
+                  if(d?.ok){msg('Join code updated');setPoolMeta(prev=>({...prev,joinCode:code}));document.getElementById('joinCodeInput').value=code;}
+                }}>💾 Save Code</button>
+              </div>
+              <p style={{fontSize:11,color:'#888',marginTop:8}}>Current code: <strong style={{fontFamily:'monospace',color:T.primary,fontSize:13}}>{poolMeta?.joinCode||'(none set)'}</strong></p>
+            </div>
+            <div style={sec}>
+              <h3 style={stl}>💬 Chat Moderation</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>{chatMessages.length} messages in pool chat. Use the X button next to messages to delete individual ones.</p>
+              <button type="button" style={dan} onClick={async()=>{
+                if(!confirm('Clear ALL chat messages? This cannot be undone.'))return;
+                console.log('Clearing chat with adminPw:', adminPw?.length, 'chars');
+                const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({poolId,action:'chat-clear-all',password:adminPw})});
+                const d=await r.json();
+                console.log('Clear chat response:', d);
+                if(d.error){msg('Error: '+d.error);return;}
+                setChatMessages([]);msg('Chat cleared');
+              }}>🗑 Clear All Chat Messages</button>
+            </div>
+            {/* FINGERPRINT_V299_ADMIN_GROUPS */}
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>Pool setup</div>
             {/* FINGERPRINT_V218_DPWORLD_MODE — three-way pool mode selector */}
             <div style={sec}><h3 style={stl}>🏌️ Pool Mode</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Choose what this pool follows. Tour modes track whichever event that tour is playing this week; Majors follows the major schedule. <b>Switching resets current entries.</b></p>
@@ -6127,87 +6248,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 }}>{rotating?'Rotating…':`🔄 Rotate to Next ${isDPWorld(activeMajor)?'DP World':'PGA Tour'} Event`}</button>
                 <p style={{fontSize:11,color:'#999',marginTop:6,lineHeight:1.4}}>Archives this event, wipes entries, and advances to the next event. Use after the current tournament finishes.</p>
               </div>}
-            </div>
-            <div style={sec}><h3 style={stl}>🔑 Join Code</h3>
-              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Optionally require a join code to enter the pool. Share the code only with the people you want to join.</p>
-              <label style={{fontSize:13,display:'flex',alignItems:'center',gap:6,cursor:'pointer',marginBottom:10}}>
-                <input type="checkbox" id="joinCodeRequiredInput" defaultChecked={!!poolMeta?.joinCodeRequired} onChange={async(e)=>{
-                  const required=e.target.checked;
-                  const d=await adminAction('set-join-code',{joinCodeRequired:required,joinCode:poolMeta?.joinCode||''});
-                  if(d?.ok){msg(required?'Join code now required':'Join code optional');setPoolMeta(prev=>({...prev,joinCodeRequired:required}));}
-                }}/>
-                <span style={{fontWeight:600}}>Require join code to enter pool</span>
-              </label>
-              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                <input style={{...inp,marginBottom:0,textTransform:'uppercase',fontFamily:'monospace',letterSpacing:2,fontSize:16,fontWeight:700}} type="text" placeholder="ABCD12" id="joinCodeInput" defaultValue={poolMeta?.joinCode||''} maxLength={20}/>
-                <button type="button" style={pri} onClick={async()=>{
-                  const code=document.getElementById('joinCodeInput').value.trim().toUpperCase();
-                  if(!code){msg('Code cannot be empty');return;}
-                  const d=await adminAction('set-join-code',{joinCodeRequired:!!poolMeta?.joinCodeRequired,joinCode:code});
-                  if(d?.ok){msg('Join code updated');setPoolMeta(prev=>({...prev,joinCode:code}));document.getElementById('joinCodeInput').value=code;}
-                }}>💾 Save Code</button>
+              <div style={{background:'#f8f9ff',borderRadius:8,padding:'10px 12px',border:'1px solid #e0e4f0',marginTop:12}}>
+                <div style={{fontSize:10,fontWeight:700,color:'#555',letterSpacing:.5,marginBottom:6}}>⏰ HOW THE WEEK RUNS</div>
+                <div style={{fontSize:11,color:'#6b7c5e',lineHeight:1.7}}>
+                  <div>🔓 <b>Monday 9 AM ET of tournament week</b> (majors) or <b>after rotation fires</b> (PGA Tour mode) — entries unlock</div>
+                  <div>🔒 <b>At first tee time Thursday</b> — entries lock, picks reveal</div>
+                  <div>🔄 <b>Sunday R4 finish OR Tuesday 6–11 AM ET</b> — auto-rotates to next event, archives current results</div>
+                  <div>💵 <b>Commissioner pays per event</b> to unlock for new entries</div>
+                </div>
               </div>
-              <p style={{fontSize:11,color:'#888',marginTop:8}}>Current code: <strong style={{fontFamily:'monospace',color:T.primary,fontSize:13}}>{poolMeta?.joinCode||'(none set)'}</strong></p>
-            </div>
-            <div style={sec}><h3 style={stl}>💰 Payout Structure</h3>
-              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Choose how the pot is split. <b>Standard</b> pays 1st/2nd/3rd (1st gets the pot minus two entry fees, 2nd gets two entry fees, 3rd gets one). <b>Winner-take-all</b> gives the entire pot to 1st place.</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                {[['standard','🥇🥈🥉 Standard','1st / 2nd / 3rd split'],['winner-take-all','🏆 Winner Take All','1st place gets entire pot']].map(([mode,label,desc])=>{
-                  const current=(poolMeta?.payoutMode||'standard')===mode;
-                  return <button key={mode} type="button" onClick={async()=>{
-                    const d=await adminAction('set-payout-mode',{payoutMode:mode});
-                    if(d?.ok){msg(mode==='winner-take-all'?'Winner-take-all enabled':'Standard payouts enabled');setPoolMeta(prev=>({...prev,payoutMode:mode}));}
-                  }} style={{padding:'14px 10px',borderRadius:12,border:`2px solid ${current?T.primary:'#e0e0e0'}`,background:current?T.primary:'#fafafa',color:current?'#fff':'#555',fontWeight:current?700:500,fontSize:12,cursor:'pointer',textAlign:'center'}}>
-                    <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>{label}</div>
-                    <div style={{fontSize:10,opacity:.75}}>{desc}</div>
-                    {current&&<div style={{fontSize:10,background:'#ffffff30',borderRadius:8,padding:'2px 8px',display:'inline-block',marginTop:6}}>✓ Active</div>}
-                  </button>;
-                })}
-              </div>
-              <p style={{fontSize:11,color:'#888',marginTop:8}}>Note: pools with 4 or fewer entries are always winner-take-all regardless of this setting.</p>
-            </div>
-            {/* FINGERPRINT_V141_INVITE_UI */}
-            <div style={sec}><h3 style={stl}>📧 Invite Past Players</h3>
-              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Email everyone who's entered a past pool (and left an email) to join this week's event. Great to run after the pool rotates to a new tournament. Each person gets a personal invite with a link to make their picks.</p>
-              {roster===null
-                ? <button type="button" style={pri} onClick={async()=>{
-                    const d=await adminAction('get-roster',{});
-                    if(d?.ok){setRoster(d.roster||[]);}
-                    else msg(d?.error||'Could not load roster');
-                  }}>👥 Load Past Players</button>
-                : roster.length===0
-                ? <p style={{fontSize:13,color:'#888'}}>No past players with emails yet. Once people enter pools with their email, they'll show up here.</p>
-                : <>
-                    <div style={{fontSize:13,fontWeight:600,color:T.primary,marginBottom:8}}>{roster.length} past player{roster.length===1?'':'s'} on file</div>
-                    <div style={{maxHeight:160,overflowY:'auto',border:`1px solid ${T.cardBorder}`,borderRadius:8,padding:'6px 0',marginBottom:10,background:'#fafafa'}}>
-                      {roster.map((p,i)=>(
-                        <div key={p.email} style={{display:'flex',justifyContent:'space-between',padding:'5px 12px',fontSize:12,borderBottom:i<roster.length-1?`1px solid ${T.cardBorder}55`:'none'}}>
-                          <span style={{fontWeight:600}}>{p.name||'(no name)'}</span>
-                          <span style={{color:'#8a9580'}}>{p.email}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <textarea id="inviteNoteInput" placeholder="Optional message to include (e.g. 'Big purse this week — get in before Thursday!')" style={{width:'100%',boxSizing:'border-box',padding:'9px 12px',borderRadius:7,border:`1px solid ${T.inputBorder}`,fontSize:13,fontFamily:"'DM Sans',sans-serif",minHeight:54,marginBottom:10,resize:'vertical'}}/>
-                    <button type="button" disabled={inviting} style={{...pri,opacity:inviting?0.6:1,cursor:inviting?'default':'pointer'}} onClick={async()=>{
-                      if(!window.confirm(`Send an invite email to all ${roster.length} past players?`))return;
-                      setInviting(true);
-                      const note=(document.getElementById('inviteNoteInput')?.value||'').trim();
-                      const d=await adminAction('invite-roster',{message:note});
-                      setInviting(false);
-                      if(d?.ok){
-                        msg(`Invites sent to ${d.sent} player${d.sent===1?'':'s'}${d.failed?` (${d.failed} failed)`:''}`);
-                        // FINGERPRINT_V143_INVITE_DIAG — surface which emails failed and why
-                        if(d.failures && d.failures.length){
-                          console.warn('Invite failures:', d.failures);
-                          const lines = d.failures.map(f=>`• ${f.email} — ${f.reason}`).join('\n');
-                          setTimeout(()=>alert(`${d.failed} invite${d.failed===1?'':'s'} failed:\n\n${lines}`), 300);
-                        }
-                      }
-                      else msg(d?.error||'Invite failed');
-                    }}>{inviting?'Sending…':`📨 Send Invite to ${roster.length} Player${roster.length===1?'':'s'}`}</button>
-                    <button type="button" style={{...inp,flex:'none',marginLeft:8,cursor:'pointer',background:'#f0f0f0',border:'none',fontWeight:600,fontSize:12,padding:'9px 14px'}} onClick={()=>setRoster(null)}>Refresh</button>
-                  </>
-              }
             </div>
             <div style={sec}><h3 style={stl}>🎨 Custom Pool Logo</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Override the major's default logo with your own. Paste a public image URL (PNG/JPG). Leave blank to use the default major logo.</p>
@@ -6238,71 +6287,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 }}>↺ Reset</button>
               </div>
             </div>
-
-            <div style={sec}><h3 style={stl}>💰 Show/Hide Payment Status</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Paid/Unpaid badges are currently <b>{paymentsHidden?'hidden':'visible'}</b>. Useful to hide during the tournament when payment status is no longer relevant.</p>
-              <button type="button" style={paymentsHidden?pri:dan} onClick={async()=>{const d=await adminAction(paymentsHidden?'show-payments':'hide-payments');if(d?.ok){setPaymentsHidden(!paymentsHidden);msg(paymentsHidden?'Payment badges visible':'Payment badges hidden');}}}>{paymentsHidden?'👀 Show Payment Badges':'🙈 Hide Payment Badges'}</button>
-            </div>
-            <div style={sec}>
-              <h3 style={stl}>💵 Entry Fee & Payouts</h3>
-              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Set entry fee to display payouts in header. 3rd = 1× fee, 2nd = 2× fee, 1st = rest.</p>
-              <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:10}}>
-                <span style={{fontSize:13,color:'#555'}}>$</span>
-                <input type="number" min="0" placeholder="20" defaultValue={poolMeta?.entryFee||''}
-                  id="entryFeeInput"
-                  style={{...inp,maxWidth:100}}/>
-                <button type="button" style={pri} onClick={async()=>{
-                  const val=parseFloat(document.getElementById('entryFeeInput').value)||0;
-                  const d=await adminAction('set-entry-fee',{entryFee:val});
-                  if(d?.ok){loadEntries();msg(val>0?`Entry fee set to $${val}`:'Entry fee cleared');}
-                }}>Save</button>
-              </div>
-              {poolMeta?.entryFee>0&&entries.length>=1&&(()=>{
-                const fee=poolMeta.entryFee;
-                const pot=entries.length*fee;
-                const wta = isWinnerTakeAll(entries.length);
-                const first = wta ? pot : pot-fee*3;
-                return <div style={{background:`${T.primary}0a`,borderRadius:8,padding:'10px 12px',fontSize:12,color:T.primary}}>
-                  <div style={{fontWeight:700,marginBottom:4}}>Current Pot: ${pot} ({entries.length} × ${fee})</div>
-                  {wta
-                    ? <div>🥇 Winner takes all: <b>${first}</b></div>
-                    : <div>🥇 1st: <b>${first}</b> · 🥈 2nd: <b>${fee*2}</b> · 🥉 3rd: <b>${fee}</b></div>
-                  }
-                </div>;
-              })()}
-              {poolMeta?.entryFee>0&&entries.length===0&&<div style={{fontSize:11,color:'#888'}}>Payouts will show once entries are submitted.</div>}
-            </div>
-            <div style={sec}>
-              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-                <h3 style={{...stl,marginBottom:0,flex:1}}>👥 Entries & Payments ({entries.length})</h3>
-                {(()=>{
-                  const paidCount = entries.filter(e=>!!payments[e.name]).length;
-                  const total = entries.length;
-                  const pct = total>0?Math.round(paidCount/total*100):0;
-                  return <span style={{background:'#e8f5e8',color:'#2d7a1e',borderRadius:8,padding:'2px 10px',fontSize:11,fontWeight:700}}>{paidCount}/{total} paid · {pct}%</span>;
-                })()}
-              </div>
-              {entries.length===0?<p style={{color:'#8a9580',fontSize:12}}>No entries yet</p>:
-                <div style={{border:'1px solid #f0ebe0',borderRadius:8,overflow:'hidden'}}>
-                  <div style={{display:'flex',padding:'8px 10px',background:'#fafaf6',borderBottom:'1px solid #f0ebe0',fontSize:10,fontWeight:700,color:'#888',letterSpacing:.5}}>
-                    <span style={{flex:1}}>NAME</span>
-                    <span style={{width:50,textAlign:'center'}}>PICKS</span>
-                    <span style={{width:80,textAlign:'center'}}>PAYMENT</span>
-                    <span style={{width:60,textAlign:'right'}}>ACTION</span>
-                  </div>
-                  {entries.map(e=>{const paid=!!payments[e.name];return(
-                    <div key={e.name} style={{display:'flex',alignItems:'center',padding:'8px 10px',borderBottom:'1px solid #f5f0e8',fontSize:13}}>
-                      <span style={{flex:1,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{e.name}</span>
-                      <span style={{width:50,textAlign:'center',fontSize:11,color:'#8a9580'}}>{e.picks.length}</span>
-                      <button type="button" onClick={()=>togglePayment(e.name)} style={{width:74,marginLeft:3,marginRight:3,background:paid?'#e8f5e8':'#f5f5f5',border:`1px solid ${paid?'#2d7a1e':'#ccc'}`,color:paid?'#2d7a1e':'#888',padding:'4px 0',borderRadius:6,fontSize:11,fontWeight:600,cursor:'pointer'}}>{paid?'✓ Paid':'Mark Paid'}</button>
-                      <button type="button" style={{width:54,marginLeft:3,background:'transparent',border:'1px solid #c44',color:'#c44',padding:'4px 0',borderRadius:5,fontSize:11,cursor:'pointer'}} onClick={async()=>{
-                        if(!confirm(`Remove ${e.name}'s entry?`))return;
-                        const d=await adminAction('delete',{name:e.name});
-                        if(d?.ok){msg(`Removed ${e.name}`);loadEntries();}
-                      }}>Remove</button>
-                    </div>);})}
-                </div>
-              }
-            </div>
+            {/* FINGERPRINT_V272_NOTIFY_SETTINGS — commissioner alerts on this device */}
+            {pushKey&&(pushState==='default'||pushState==='granted'||pushState==='on')&&<div style={sec}>
+              <h3 style={stl}>🔔 Commissioner alerts</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>On this device: a notification when someone joins, and an entries / unpaid summary an hour before the pool locks.</p>
+              <button type="button" onClick={()=>toggleAdminPush(!adminPush)} style={{...pri,background:adminPush?'#fff':T.primary,color:adminPush?T.primary:'#fff',border:`1.5px solid ${T.primary}`}}>
+                {adminPush?'Turn off on this device':'Turn on for this device'}</button>
+            </div>}
+            {/* FINGERPRINT_V299_ADMIN_GROUPS */}
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>History</div>
             <div style={sec}>
               <h3 style={stl}>📚 Past Results</h3>
               {entries.length>0&&<div style={{marginBottom:10}}>
@@ -6372,22 +6365,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   })}
               </div>}
             </div>
-
-            <div style={sec}>
-              <h3 style={stl}>💬 Chat Moderation</h3>
-              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>{chatMessages.length} messages in pool chat. Use the X button next to messages to delete individual ones.</p>
-              <button type="button" style={dan} onClick={async()=>{
-                if(!confirm('Clear ALL chat messages? This cannot be undone.'))return;
-                console.log('Clearing chat with adminPw:', adminPw?.length, 'chars');
-                const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-                  body:JSON.stringify({poolId,action:'chat-clear-all',password:adminPw})});
-                const d=await r.json();
-                console.log('Clear chat response:', d);
-                if(d.error){msg('Error: '+d.error);return;}
-                setChatMessages([]);msg('Chat cleared');
-              }}>🗑 Clear All Chat Messages</button>
-            </div>
-
+            {/* FINGERPRINT_V299_ADMIN_GROUPS */}
+            <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>Danger zone</div>
             <div style={{...sec,borderColor:'#d4444460'}}><h3 style={{...stl,color:'#a03030'}}>⚠ Danger</h3><button type="button" style={dan} onClick={async()=>{if(!confirm('Reset everything?'))return;await adminAction('reset');setEntries([]);setPayments({});msg('Reset done');}}>Reset All</button></div>
           </>)}
       </main>
