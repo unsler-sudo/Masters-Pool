@@ -1,5 +1,5 @@
 'use client';
-// build: nickname-v322-20261005-1600
+// build: prefill-name-v323-20261005-1630
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1364,6 +1364,7 @@ export default function App(){
   const [entryEmail,setEntryEmail]=useState('');
   const [editMode,setEditMode]=useState(false);
   const [addAnother,setAddAnother]=useState(false);
+  const [nameTouched,setNameTouched]=useState(false);     // FINGERPRINT_V323 — they've edited the pre-filled entry name
   const [newAdminPw,setNewAdminPw]=useState('');          // FINGERPRINT_V305 — backup admin password field
   const [ownPicks,setOwnPicks]=useState(null);            // FINGERPRINT_V280 — your picks while picks are hidden
   const [hsTick,setHsTick]=useState(0);
@@ -3173,7 +3174,7 @@ export default function App(){
       const d=await r.json();
       if(d.error){if(d.needJoinCode)resetJoinGate();if(d.needAccount)openAcct('signup');msg(d.error);setSubmitting(false);return;}
       if(d.entries)setEntries(d.entries);
-      setEntryName('');setEntryEmail('');setPicks({1:[],2:[],3:[]});setSearch('');
+      setEntryName('');setEntryEmail('');setNameTouched(false);setPicks({1:[],2:[],3:[]});setSearch('');
       setEditMode(false);setEditCode('');
       if(isTeamPool){ if(d.editCode&&d.name) adoptEntry(d.name,d.editCode); else setChatName(entryName.trim()); msg("You're in! ✓ Now make your picks"); }
       else { if(!editMode&&d.editCode&&d.name){ adoptEntry(d.name,d.editCode); setAcctEntries(x=>[...x.filter(e=>e.name!==d.name),{name:d.name,code:d.editCode}]);
@@ -3452,6 +3453,16 @@ export default function App(){
       .then(r=>r.json()).then(d=>{ if(!gone&&d?.ok) setSeasonData(d); }).catch(()=>{});
     return ()=>{ gone=true; };
   },[tab,historyView,seasonYear,poolId]);
+
+  // FINGERPRINT_V323_PREFILL — fill the entry name for signed-in players: nickname, else name, numbered if taken
+  // ("Tuna 2"). Kept in sync until they edit it; they can backspace and type anything.
+  const defaultEntryName=(()=>{ if(!acct) return '';
+    const base=String(acct.nickname||acct.name||'').trim().slice(0,40); if(!base) return '';
+    const taken=(n)=>(entries||[]).some(e=>String(e.name).toLowerCase()===n.toLowerCase());
+    let nm=base; for(let i=2;taken(nm)&&i<100;i++) nm=`${base} ${i}`; return nm; })();
+  useEffect(()=>{
+    if(tab==='Enter Pool'&&acct&&!editMode&&!nameTouched&&defaultEntryName&&entryName!==defaultEntryName) setEntryName(defaultEntryName);
+  },[tab,acct,editMode,nameTouched,defaultEntryName]);
 
   // FINGERPRINT_V271_PUSH — notifications. iPhones allow them only for the Home Screen app (opened from its
   // icon), and only after a tap; Android/desktop browsers allow them straight from the site.
@@ -5337,7 +5348,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </div>;
                 return <div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:6}}>
                   <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                        <input style={inp} placeholder={acct?`Entry name (optional — ${acct.nickname||acct.name})`:'Your name'} value={entryName} onChange={e=>setEntryName(e.target.value)}/>
+                        <input style={inp} placeholder={acct?`Entry name (optional — ${acct.nickname||acct.name})`:'Your name'} value={entryName} onChange={e=>{setNameTouched(true);setEntryName(e.target.value);}}/>
                         {acct
                           ? <div style={{fontSize:12,color:'#6b7c5e'}}>Joining as <b>{acct.name}</b> · {acct.email}</div>
                           : <div style={{fontSize:12,color:'#6b7c5e'}}>You'll need an account to join — <span onClick={()=>openAcct('signup')} style={{color:T.primary,textDecoration:'underline',cursor:'pointer'}}>create one</span> or <span onClick={()=>openAcct('signin')} style={{color:T.primary,textDecoration:'underline',cursor:'pointer'}}>sign in</span>.</div>}
@@ -5409,7 +5420,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               <button type="button" onClick={()=>{setEditMode(false);setEntryName('');setEntryEmail('');setEditCode('');setPicks({1:[],2:[],3:[]});}} style={{background:'transparent',border:'1px solid #7a550040',color:'#7a5500',padding:'2px 8px',borderRadius:5,fontSize:10,fontWeight:600,cursor:'pointer'}}>Cancel</button>
             </div>}
             <div style={{display:'flex',gap:8,marginBottom:8}}>
-              <input style={inp} placeholder={acct&&!editMode?`Entry name (optional — ${acct.nickname||acct.name})`:'Your Name'} value={entryName} disabled={editMode} onChange={e=>setEntryName(e.target.value)}/>
+              <input style={inp} placeholder={acct&&!editMode?`Entry name (optional — ${acct.nickname||acct.name})`:'Your Name'} value={entryName} disabled={editMode} onChange={e=>{setNameTouched(true);setEntryName(e.target.value);}}/>
               <div style={{background:T.primary,color:'#faf6ed',minWidth:50,height:44,borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'0 6px'}}>
                 <span style={{fontSize:18,fontWeight:800}}>{totalPicked}</span><span style={{fontSize:9,opacity:.6}}>/{TOTAL_PICKS_REQ}</span>
               </div>
