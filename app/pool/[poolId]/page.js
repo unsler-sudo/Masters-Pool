@@ -1,5 +1,5 @@
 'use client';
-// build: profile-title-v312-20261005-1000
+// build: dark-mode-v313-20261005-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -446,6 +446,42 @@ const teamSessionsFor = (n) => /ryder/i.test(n || '')
 const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
 // FINGERPRINT_V263_TEAM_COLOURS — USA red; International (and Europe, for the Ryder Cup) blue
 const TEAM_COLOUR = { USA: '#c8102e', INT: '#1f4e9c' };
+// FINGERPRINT_V313_DARK — dark mode. The page sets colours inline everywhere, so rather than rewrite it, dark mode
+// is a LAYER: (1) the theme object gets dark backgrounds/borders, and (2) a <style> maps the page's common literal
+// colours (found by survey) to dark equivalents via attribute selectors on the browser-serialised inline styles.
+// Only present while dark mode is on — light mode is untouched.
+const gpRgb = (hex) => { const h = String(hex || '').trim().replace('#', '');
+  const f = h.length === 3 ? h.split('').map(c => c + c).join('') : h.length === 6 ? h : null;
+  if (!f || !/^[0-9a-f]{6}$/i.test(f)) return null;
+  return `rgb(${parseInt(f.slice(0, 2), 16)}, ${parseInt(f.slice(2, 4), 16)}, ${parseInt(f.slice(4, 6), 16)})`; };
+const gpLighten = (hex, amt = 0.55) => { const m = gpRgb(hex); if (!m) return hex;
+  const [r, g, b] = m.match(/\d+/g).map(Number); const L = (c) => Math.round(c + (255 - c) * amt);
+  return `rgb(${L(r)}, ${L(g)}, ${L(b)})`; };
+const GP_DARK = {
+  bg: { '#fff':'#1a211c','#ffffff':'#1a211c','#fafafa':'#1a211c','#f5f5f0':'#151b17','#f5f5f5':'#1a211c','#f0f0f0':'#1d241f','#f2f4f0':'#1d241f',
+        '#eee':'#232b25','#ddd':'#2c352d','#f0f0ea':'#232b25','#f6f3ea':'#1a211c','#d6d6cf':'#3a443b',
+        '#e8f5e8':'#1c2b1e','#fff0d6':'#2c2416','#fff8e6':'#2c2416','#fff7e6':'#2c2416','#fff3d6':'#2c2416','#f0e6c8':'#2c2718',
+        '#f2f6fb':'#18222e','#eef2ff':'#1c2236','#ffcdd2':'#3a1d1f','#fdecea':'#3a1d1f' },
+  fg: { '#2a3a1e':'#e7ece4','#3a4a2e':'#dfe6db','#1f2937':'#e7ece4','#1a2e0a':'#e7ece4','#2a3a4e':'#d6dde8','#374151':'#d6dcd2','#555':'#c9d1c5',
+        '#6b7c5e':'#a6b29f','#5a6b4e':'#a6b29f','#8a9580':'#97a291','#6b7280':'#a1a7b0','#888':'#9aa095','#999':'#8d9389','#aaa':'#80867c','#bbb':'#727870','#a3ac98':'#7c8576',
+        '#2d7a1e':'#6fd062','#15803d':'#6fd062','#2d9a3e':'#6fd062','#7a5500':'#e7b75c','#7a4a00':'#e7b75c','#9a6a00':'#e7b75c','#5a4a1a':'#d9c08a','#8b6914':'#e0b85a','#b45309':'#f0a35c','#d97706':'#f5b04a',
+        '#1a2a5c':'#9fb4ec','#b3261e':'#ff8a80','#a03030':'#ff8a80','#c44':'#ff8a80','#dc2626':'#ff8a80','#8b2020':'#ff8a80','#b91c1c':'#ff8a80' },
+  bd: { '#f0f0ea':'#2a332b','#f0ebe0':'#2a332b','#eee8dc':'#2a332b','#eee':'#2a332b','#f5f0e8':'#2a332b','#e5e5dc':'#323c33','#e5e7eb':'#323c33','#f3f4f6':'#2a332b',
+        '#ddd':'#323c33','#d6d6cf':'#3a443b','#d1d5db':'#3a443b','#f0c060':'#8a6a20','#f5c14a':'#8a6a20','#c9d6ea':'#2a3a4f' },
+};
+const gpDarkTheme = (t) => ({ ...t, bg:'#0f1411', bodyBg:'#0f1411', navBg:'#151b17', navActive:'#222b24',
+  cardBorder:'#2c352d', inputBorder:'#33402f', stripeBg:'#161c18', rowHl:'#24301f', accentLight:'#2a2426' });
+function gpDarkCss(T) {
+  const D = 'html[data-gp-theme="dark"]', out = [];
+  const sel = { bg: r => `[style*="background: ${r}"],[style*="background-color: ${r}"]`, fg: r => `[style^="color: ${r}"],[style*="; color: ${r}"]`, bd: r => `[style*="solid ${r}"]` };
+  const decl = { bg: c => `background-color:${c}!important;background-image:none!important`, fg: c => `color:${c}!important`, bd: c => `border-color:${c}!important` };
+  for (const p of ['bg', 'fg', 'bd']) for (const [from, to] of Object.entries(GP_DARK[p])) { const r = gpRgb(from); if (r) out.push(`${D} :is(${sel[p](r)}){${decl[p](to)}}`); }
+  for (const c of new Set([T.primary, T.dark, T.navBorder, T.mid])) { const r = gpRgb(c); if (r) out.push(`${D} :is(${sel.fg(r)}){color:${gpLighten(c)}!important}`); }
+  out.push(`${D}{color-scheme:dark}${D} body{background:#0f1411;color:#e7ece4}`,
+    `${D} input,${D} textarea,${D} select{background-color:#141a16!important;color:#e7ece4!important;border-color:#33402f!important}`,
+    `${D} input::placeholder,${D} textarea::placeholder{color:#6f786b!important}`);
+  return out.join('\n');
+}
 // FINGERPRINT_V303 — notification types, shown in the profile's Notifications screen
 const NOTIF_GROUPS = [
   ['Your pool',[['lockSoon','⏰ Pool locks in an hour — if you’re not in yet'],['poolOpen','📢 A new pool is open'],
@@ -1287,6 +1323,19 @@ export default function App(){
   const resetJoinGate = () => { try { localStorage.removeItem(`jc_${poolId}`); localStorage.removeItem(`jc_${poolId}_code`); } catch {} setJoinCodePassed(false); };
 
   const [tab,setTab]=useState('Standings');
+  // FINGERPRINT_V313_DARK — Light · Dark · Auto (follows the device), saved per device; default Light
+  const [appearance,setAppearanceRaw]=useState('light');
+  const [sysDark,setSysDark]=useState(false);
+  useEffect(()=>{
+    try{ const a=localStorage.getItem('gp_appearance'); if(a==='dark'||a==='auto'||a==='light') setAppearanceRaw(a); }catch{}
+    if(typeof window==='undefined'||!window.matchMedia) return;
+    const mq=window.matchMedia('(prefers-color-scheme: dark)'); setSysDark(mq.matches);
+    const on=(e)=>setSysDark(e.matches); mq.addEventListener?mq.addEventListener('change',on):mq.addListener(on);
+    return ()=>{ mq.removeEventListener?mq.removeEventListener('change',on):mq.removeListener(on); };
+  },[]);
+  const setAppearance=(a)=>{ setAppearanceRaw(a); try{ localStorage.setItem('gp_appearance',a); }catch{} };
+  const gpDark = appearance==='dark' || (appearance==='auto' && sysDark);
+  useEffect(()=>{ try{ document.documentElement.dataset.gpTheme = gpDark?'dark':'light'; }catch{} },[gpDark]);
   const [activeMajor,setActiveMajor]=useState('pga');
   const [scheduleData,setScheduleData]=useState({});
   const [entries,setEntries]=useState([]);
@@ -1493,7 +1542,8 @@ export default function App(){
       eventOverrides = PGATOUR_EVENT_THEMES[matchKey];
     }
   }
-  const T = { ...baseTheme, ...eventOverrides, ...scheduleOverrides };
+  const T0 = { ...baseTheme, ...eventOverrides, ...scheduleOverrides };
+  const T = gpDark ? gpDarkTheme(T0) : T0;          // FINGERPRINT_V313_DARK
   // Detect if schedule data hasn't loaded yet — without this gate the UI can default to wrong state:
   // - pgatour: no teeTime default → "not started" mode → could allow late entries
   // - majors in 2027+: hardcoded teeTime is 2026 → "tournament is over" → blocks legitimate entries
@@ -4557,6 +4607,7 @@ export default function App(){
             <button type="button" onClick={hidePush} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
           </div>
         : null)}
+      {gpDark&&<style>{gpDarkCss(T)}</style>}{/* FINGERPRINT_V313_DARK — the dark layer, only while dark */}
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
         {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t==='History'?'Season':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
@@ -4776,6 +4827,16 @@ export default function App(){
                   {navRow('📊','My record','Every event you’ve played, in all your pools',()=>{setRecKind('all');setRecYear('all');setAcctRecordView(true);})}
                   {navRow('🔔','Notifications',pushState==='on'?'On for this device':'Off',()=>{setAcctErr('');setAcctNotifView(true);})}
                   {(ownerAdmin||adminOk)&&navRow('⚙️','Commissioner settings','Entries, payments, invites and more',()=>{setShowAcct(false);setTab('Admin');})}
+                  {/* FINGERPRINT_V313_DARK — Appearance */}
+                  <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderTop:'1px solid #f0f0ea',background:'#fff'}}>
+                    <span style={{fontSize:18,width:22,textAlign:'center'}}>🌓</span>
+                    <span style={{flex:1}}><span style={{display:'block',fontSize:14,fontWeight:700,color:'#2a3a1e'}}>Appearance</span>
+                      <span style={{display:'block',fontSize:12,color:'#8a9580'}}>{appearance==='auto'?`Auto — ${sysDark?'dark':'light'} right now`:appearance==='dark'?'Dark':'Light'}</span></span>
+                    <div style={{display:'flex',background:'#f0f0ea',borderRadius:8,padding:2,gap:2}}>
+                      {[['light','Light'],['dark','Dark'],['auto','Auto']].map(([k2,l])=><button key={k2} type="button" onClick={()=>setAppearance(k2)}
+                        style={{border:'none',borderRadius:6,padding:'6px 10px',fontSize:12,fontWeight:700,cursor:'pointer',background:appearance===k2?T.primary:'transparent',color:appearance===k2?'#fff':'#5a6b4e'}}>{l}</button>)}
+                    </div>
+                  </div>
                 </div>
               </div>
               {/* FINGERPRINT_V302 — only when you have 2+ entries here: which one this device plays as */}
