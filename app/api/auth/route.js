@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 import {
   redis, BASE_URL, normEmail, validEmail, normPhone, cleanName, hashPassword, checkPassword,
   makeToken, verifyToken, getUser, saveUser, findUid, newUser, publicUser, tooMany, sixDigits,
-  sendEmail, linkPoolEntries, linkPoolOwner,
+  sendEmail, linkPoolEntries, linkPoolOwner, unsubSig,
 } from './lib';
 
 export const dynamic = 'force-dynamic';
@@ -19,8 +19,20 @@ const cookieToken = (request) => { const m = (request.headers.get('cookie') || '
 const signedIn = (user) => { const token = makeToken(user);
   return Response.json({ ok: true, token, user: publicUser(user) }, { headers: { 'Set-Cookie': setCookie(token) } }); };
 
-// Which buttons the page should show
-export async function GET() {
+// Which buttons the page should show — or, with ?unsub=…&s=…, unsubscribe from platform announcements
+export async function GET(request) {
+  const u = new URL(request.url);
+  if (u.searchParams.get('unsub')) {
+    const email = normEmail(u.searchParams.get('unsub'));
+    const ok = u.searchParams.get('s') === unsubSig(email);
+    if (ok) await redis('SET', `unsub:${email}`, '1');
+    const msg = ok ? "You're unsubscribed from Tuna Golf Pool announcements. You'll still get emails about pools you're in — reminders and results."
+                   : "That unsubscribe link isn't valid. Please use the link from the email.";
+    return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tuna Golf Pool</title></head>
+<body style="font-family:-apple-system,system-ui,sans-serif;background:#f6f3ea;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px">
+<div style="background:#fff;border-radius:16px;padding:28px 22px;max-width:380px;text-align:center;color:#1a4d2e"><div style="font-size:40px">${ok ? '✅' : '⚠️'}</div>
+<p style="font-size:15px;line-height:1.5;color:#3a4a2e">${msg}</p></div></body></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  }
   return Response.json({
     google: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     apple: !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY),
@@ -122,7 +134,10 @@ export async function POST(request) {
     if (!user) return bad('Please sign in', 401, { signedOut: true });
 
     // every visit renews the sign-in for another year
-    if (a === 'me') return signedIn(user);
+    if (a === 'me') {
+      if (!user.seen || Date.now() - Date.parse(user.seen) > 6 * 3600e3) { user.seen = new Date().toISOString(); await saveUser(user); }
+      return signedIn(user);
+    }
 
     if (a === 'update-profile') {
       if (body.name !== undefined) { const n = cleanName(body.name); if (n.length < 2) return bad('Enter your name'); user.name = n; }
