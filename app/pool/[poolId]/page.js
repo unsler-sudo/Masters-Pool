@@ -1,5 +1,5 @@
 'use client';
-// build: emoji-font-v324-20261005-1700
+// build: festive-same-v327-20261005-1845
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -466,6 +466,68 @@ function gpEmojiSetup() {
     `button:not([style*="font-family"]),input:not([style*="font-family"]),select,textarea{font-family:${SANS}}`,
   ].join('\n');
   document.head.appendChild(css);
+}
+// FINGERPRINT_V325_FESTIVE — holiday decorations for PGA Tour pools, around the EDGES of the screen.
+// Halloween Oct 15–Nov 1 · Thanksgiving Nov 2–30 · Christmas all December. Never blocks taps (pointer-events none),
+// corner pieces only on wide screens, still (no falling) for people who turned on "reduce motion".
+// Preview any time with ?season=halloween | thanksgiving | christmas.
+const gpSeasonFor = (d) => { const m = d.getMonth() + 1, day = d.getDate();
+  if ((m === 10 && day >= 15) || (m === 11 && day === 1)) return 'halloween';
+  if (m === 11) return 'thanksgiving';
+  if (m === 12) return 'christmas';
+  return null; };
+const GP_FESTIVE = {
+  halloween:    { label:'🎃 Halloween', falling:['🦇','👻','🦇','🍬'], dir:'up', corners:['🕸️','🎃'],
+    stripes:'repeating-linear-gradient(45deg,#ff7a00 0 10px,#1a1a1a 10px 20px)', flags:['#ff7a00','#5b2a86','#1a1a1a','#ff7a00','#5b2a86'], garland:['🎃','🦇','👻','🕸️'] },
+  thanksgiving: { label:'🦃 Thanksgiving', falling:['🍂','🍁','🍂','🍁'], dir:'down', corners:['🦃','🌽'],
+    stripes:'linear-gradient(180deg,#b33a1e,#d98c2b 35%,#8a5a2b 70%,#c0572b)', flags:['#b33a1e','#d98c2b','#8a5a2b','#c0572b','#e0a53a'], garland:['🍂','🦃','🍁','🌽'] },
+  christmas:    { label:'🎄 Christmas', falling:['❄️','❄','❅','❄️'], dir:'down', corners:['🎄','🎁'],
+    stripes:'repeating-linear-gradient(45deg,#d42426 0 10px,#ffffff 10px 20px)', lights:['#ff3b30','#34c759','#ffcc00','#0a84ff','#ff9f0a'] },
+};
+function GpFestive({ season }) {
+  const S = GP_FESTIVE[season]; if (!S) return null;
+  const rnd = (i, k) => { const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };   // deterministic
+  const parts = Array.from({ length: 16 }, (_, i) => {
+    const side = i % 2 === 0, edge = rnd(i, 1) * 9;   // keep to the outer ~9% each side
+    return { left: side ? edge : 100 - edge - 3, size: 14 + Math.round(rnd(i, 2) * 12), dur: 9 + rnd(i, 3) * 9,
+      delay: -rnd(i, 4) * 18, sway: 10 + rnd(i, 5) * 25, ch: S.falling[i % S.falling.length] }; });
+  const css = `
+  @keyframes gpFall{0%{transform:translate(0,-12vh) rotate(0)}50%{transform:translate(var(--sw),48vh) rotate(180deg)}100%{transform:translate(0,112vh) rotate(360deg)}}
+  @keyframes gpRise{0%{transform:translate(0,112vh)}50%{transform:translate(var(--sw),50vh)}100%{transform:translate(0,-12vh)}}
+  @keyframes gpTwinkle{0%,100%{opacity:1;filter:brightness(1.15)}50%{opacity:.45;filter:brightness(.8)}}
+  @keyframes gpBob{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+  .gpf-part{position:absolute;top:0;opacity:.8;will-change:transform}
+  @media (prefers-reduced-motion: no-preference){ .gpf-part.down{animation:gpFall linear infinite} .gpf-part.up{animation:gpRise linear infinite}
+    .gpf-bulb{animation:gpTwinkle 1.6s ease-in-out infinite} .gpf-bob{animation:gpBob 2.4s ease-in-out infinite} }
+  @media (prefers-reduced-motion: reduce){ .gpf-part{display:none} }
+  .gpf-corner{display:none} @media (min-width:900px){ .gpf-corner{display:block} }`;
+  return <>
+    <style>{css}</style>
+    {/* top garland — in the page flow, so it never covers the sticky tabs */}
+    <div aria-hidden="true" style={{position:'relative',height:S.lights?30:34,overflow:'hidden',pointerEvents:'none',background:'transparent'}}>
+      {S.lights ? <>
+          <div style={{position:'absolute',left:0,right:0,top:6,height:2,background:'#2a3a1e',opacity:.55}}/>
+          <div style={{display:'flex',justifyContent:'space-between',padding:'0 6px'}}>
+            {Array.from({length:22},(_,i)=><span key={i} style={{display:'block',marginTop:(i%2?8:5)}}>
+              <span style={{display:'block',width:4,height:4,margin:'0 auto',background:'#2a3a1e'}}/>
+              <span className="gpf-bulb" style={{display:'block',width:9,height:13,borderRadius:'50% 50% 50% 50% / 60% 60% 40% 40%',background:S.lights[i%S.lights.length],
+                boxShadow:`0 0 8px 2px ${S.lights[i%S.lights.length]}`,animationDelay:`${(i%5)*0.31}s`}}/></span>)}
+          </div></>
+        : <div style={{display:'flex',justifyContent:'space-between'}}>
+            {Array.from({length:18},(_,i)=><span key={i} style={{position:'relative',width:26,height:30,display:'block'}}>
+              <span style={{position:'absolute',inset:0,background:S.flags[i%S.flags.length],clipPath:'polygon(0 0,100% 0,50% 100%)',opacity:.9}}/>
+              <span className="gpf-bob" style={{position:'absolute',left:0,right:0,top:2,textAlign:'center',fontSize:12,animationDelay:`${(i%4)*0.4}s`}}>{S.garland[i%S.garland.length]}</span></span>)}
+          </div>}
+    </div>
+    {/* edges, falling pieces and corners — fixed, behind the tabs and every popup, never taking a tap */}
+    <div aria-hidden="true" style={{position:'fixed',inset:0,pointerEvents:'none',zIndex:3,overflow:'hidden'}}>
+      <div style={{position:'absolute',top:0,bottom:0,left:0,width:7,background:S.stripes,opacity:.9}}/>
+      <div style={{position:'absolute',top:0,bottom:0,right:0,width:7,background:S.stripes,opacity:.9}}/>
+      {parts.map((pt,i)=><span key={i} className={`gpf-part ${S.dir}`} style={{left:`${pt.left}%`,fontSize:pt.size,animationDuration:`${pt.dur}s`,animationDelay:`${pt.delay}s`,['--sw']:`${i%2?-pt.sway:pt.sway}px`}}>{pt.ch}</span>)}
+      <span className="gpf-corner" style={{position:'absolute',left:14,bottom:10,fontSize:46}}>{S.corners[0]}</span>
+      <span className="gpf-corner" style={{position:'absolute',right:14,bottom:10,fontSize:46}}>{S.corners[1]}</span>
+    </div>
+  </>;
 }
 const TEAM_COLOUR = { USA: '#c8102e', INT: '#1f4e9c' };
 // FINGERPRINT_V313_DARK — dark mode. The page sets colours inline everywhere, so rather than rewrite it, dark mode
@@ -1349,6 +1411,14 @@ export default function App(){
   // FINGERPRINT_V313_DARK — Light · Dark · Auto (follows the device), saved per device; default Auto (V314)
   const [appearance,setAppearanceRaw]=useState('auto');
   const [sysDark,setSysDark]=useState(false);
+  // FINGERPRINT_V325_FESTIVE — holiday decorations: per-device off switch + ?season= preview
+  const [festiveOff,setFestiveOffRaw]=useState(false);
+  const [seasonPreview,setSeasonPreview]=useState(null);
+  useEffect(()=>{
+    try{ setFestiveOffRaw(localStorage.getItem('gp_festive_off')==='1'); }catch{}
+    try{ const q=new URL(window.location.href).searchParams.get('season'); if(q&&GP_FESTIVE[q]) setSeasonPreview(q); }catch{}
+  },[]);
+  const setFestiveOff=(v)=>{ setFestiveOffRaw(v); try{ localStorage.setItem('gp_festive_off',v?'1':'0'); }catch{} };
   useEffect(()=>{
     try{ const a=localStorage.getItem('gp_appearance'); if(a==='dark'||a==='auto'||a==='light') setAppearanceRaw(a); }catch{}
     if(typeof window==='undefined'||!window.matchMedia) return;
@@ -1572,6 +1642,8 @@ export default function App(){
   }
   const T0 = { ...baseTheme, ...eventOverrides, ...scheduleOverrides };
   const T = gpDark ? gpDarkTheme(T0) : T0;          // FINGERPRINT_V313_DARK
+  // FINGERPRINT_V325_FESTIVE — PGA Tour and DP World pools, same themes for both (V327)
+  const festiveSeason = (activeMajor==='pgatour'||activeMajor==='dpworld') ? (seasonPreview || gpSeasonFor(new Date())) : null;
   // Detect if schedule data hasn't loaded yet — without this gate the UI can default to wrong state:
   // - pgatour: no teeTime default → "not started" mode → could allow late entries
   // - majors in 2027+: hardcoded teeTime is 2026 → "tournament is over" → blocks legitimate entries
@@ -4282,6 +4354,7 @@ export default function App(){
 
   return(
     <div style={{fontFamily:"'DM Sans',sans-serif",background:T.bg,minHeight:'100vh',color:'#1a2e0a'}}>
+      {festiveSeason&&!festiveOff&&<GpFestive season={festiveSeason}/>}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,800;0,900;1,400&family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes fu{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
@@ -4934,6 +5007,15 @@ export default function App(){
                   {navRow('📊','My record','Every event you’ve played, in all your pools',()=>{setRecKind('all');setRecYear('all');setAcctRecordView(true);})}
                   {navRow('🔔','Notifications',pushState==='on'?'On for this device':'Off',()=>{setAcctErr('');setAcctNotifView(true);})}
                   {(ownerAdmin||adminOk)&&navRow('⚙️','Commissioner settings','Entries, payments, invites and more',()=>{setShowAcct(false);setTab('Admin');})}
+                  {festiveSeason&&<div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderTop:'1px solid #f0f0ea',background:'#fff'}}>
+                    <span style={{fontSize:18,width:22,textAlign:'center'}}>{GP_FESTIVE[festiveSeason].label.split(' ')[0]}</span>
+                    <span style={{flex:1}}><span style={{display:'block',fontSize:14,fontWeight:700,color:'#2a3a1e'}}>Holiday decorations</span>
+                      <span style={{display:'block',fontSize:12,color:'#8a9580'}}>{GP_FESTIVE[festiveSeason].label.split(' ').slice(1).join(' ')} theme</span></span>
+                    <div style={{display:'flex',background:'#f0f0ea',borderRadius:8,padding:2,gap:2}}>
+                      {[[false,'On'],[true,'Off']].map(([off,l])=><button key={l} type="button" onClick={()=>setFestiveOff(off)}
+                        style={{border:'none',borderRadius:6,padding:'6px 12px',fontSize:12,fontWeight:700,cursor:'pointer',background:festiveOff===off?T.primary:'transparent',color:festiveOff===off?'#fff':'#5a6b4e'}}>{l}</button>)}
+                    </div>
+                  </div>}
                   {/* FINGERPRINT_V313_DARK — Appearance */}
                   <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderTop:'1px solid #f0f0ea',background:'#fff'}}>
                     <span style={{fontSize:18,width:22,textAlign:'center'}}>🌓</span>
