@@ -1,5 +1,5 @@
 'use client';
-// build: google-photo-v311-20261005-0930
+// build: profile-title-v312-20261005-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -4608,7 +4608,7 @@ export default function App(){
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto',borderRadius:'16px 16px 0 0',padding:'16px 16px 28px',boxSizing:'border-box'}}>
             <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
               <div style={{flex:1,fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:800,color:T.primary}}>
-                {acct?(acctRecordView?'📊 My record':acctNotifView?'🔔 Notifications':acctPwView?'🔒 Change password':'👤 Your account'):acctMode==='signup'?'Create your account':acctMode==='forgot'||acctMode==='reset'?'Reset your password':'Sign in'}</div>
+                {acct?(acctRecordView?'📊 My record':acctNotifView?'🔔 Notifications':acctPwView?'🔒 Change password':''):acctMode==='signup'?'Create your account':acctMode==='forgot'||acctMode==='reset'?'Reset your password':'Sign in'}</div>
               <button type="button" onClick={()=>setShowAcct(false)} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
             </div>
             {acctErr&&<div style={{background:'#fdecea',color:'#b3261e',borderRadius:8,padding:'8px 10px',fontSize:13,marginBottom:10}}>{acctErr}</div>}
