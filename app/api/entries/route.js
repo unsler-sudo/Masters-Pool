@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: no-codes-v210-20261003-1300
+// build: makecut-v211-20261004-1000
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -372,6 +372,18 @@ const srvEvMatch = (a, b) => { const x = srvNormEv(a), y = srvNormEv(b); return 
 const srvBig = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M' : '$' + Math.round((n || 0) / 1000) + 'K';
 const srvOrd = (n) => n + (['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || ['th', 'st', 'nd', 'rd'][n % 100] || 'th');
 
+// FINGERPRINT_V211_MAKECUT — same rule as the page: once EVERY golfer's live make-cut % is exactly 0 or 100,
+// anyone at exactly 0 who has finished their round has missed the cut (DataGolf labels CUT later).
+function srvApplyMakeCut(players) {
+  const mcOf = (p) => { const v = p.make_cut; if (v == null || v === '' || isNaN(+v)) return null; const n = +v; return n > 1 ? n / 100 : n; };
+  const live = players.filter(p => !/WD|DQ/i.test(String(p.current_pos || '')) && mcOf(p) != null);
+  if (live.length < 30 || !live.every(p => mcOf(p) === 0 || mcOf(p) >= 0.9999)) return players;
+  return players.map(p => {
+    const t = parseInt(p.thru, 10), midRound = t >= 1 && t <= 17;
+    return mcOf(p) === 0 && !midRound && !/CUT|WD|DQ|MC/i.test(String(p.current_pos || '')) ? { ...p, current_pos: 'CUT' } : p;
+  });
+}
+
 async function srvNotifyTick() {
   if (!srvPushReady()) return { skipped: 'no VAPID keys' };
   let pids = [];
@@ -447,7 +459,7 @@ async function srvNotifyPool(pid, meta, subs, st, dg) {
   // 🏁 live: round recaps, the cut, the final result, lead changes, golfer moments
   if (entries.length && (!ev.firstTee || now >= ev.firstTee)) {
     const ip = await dg(`preds/in-play?tour=${tour}&dead_heat=no&odds_format=percent`);
-    const players = ip?.data || ip?.players || [];
+    const players = srvApplyMakeCut(ip?.data || ip?.players || []);
     if (players.length && srvEvMatch(ip?.info?.event_name, evName)) {
       const round = +(ip?.info?.current_round) || 0;
       const active = players.filter(p => !/CUT|WD|DQ|MC/i.test(String(p.current_pos || '')));
