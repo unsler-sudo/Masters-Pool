@@ -1,5 +1,5 @@
 'use client';
-// build: festive-frame-v330-20261005-2030
+// build: signin-dark-v331-20261005-2100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -4815,16 +4815,20 @@ export default function App(){
           // Google's and Apple's OWN files, from their official kits, saved in public/brand/ (.svg or .png).
           const logo=g
             // Google's own light 40x40 button tile (PNG — its SVG gradient doesn't render in Safari images): show its centre 20x20 = the G
-            ? <span style={{width:20,height:20,overflow:'hidden',display:'block',flexShrink:0}}><img src="/brand/google-g.png" alt="" width={40} height={40}
+            ? <span style={{width:20,height:20,overflow:'hidden',display:'block',flexShrink:0}}><img src={gpDark?'/brand/google-g-dark.png':'/brand/google-g.png'} alt="" width={40} height={40}
                 style={{display:'block',margin:-10,maxWidth:'none'}} onError={e=>{e.currentTarget.parentNode.style.display='none';}}/></span>
             // Apple's own logo-only tile ("White" = white logo on black), 44x44: show the 18x20 around the logo,
             // which renders it 15x19 — matching the 19px title, per Apple's guidelines
-            : <span style={{width:18,height:20,overflow:'hidden',display:'block',flexShrink:0}}><img src="/brand/apple-logo-white.png" alt="" width={44} height={44}
+            : <span style={{width:18,height:20,overflow:'hidden',display:'block',flexShrink:0}}><img src={gpDark?'/brand/apple-logo-black.png':'/brand/apple-logo-white.png'} alt="" width={44} height={44}
                 style={{display:'block',margin:'-10px 0 0 -13px',maxWidth:'none'}} onError={e=>{e.currentTarget.parentNode.style.display='none';}}/></span>;
           return <button key={p} type="button" disabled={acctBusy} onClick={()=>startOAuth(p)} aria-label={label}
             style={g
-              ? {display:'flex',alignItems:'center',justifyContent:'center',gap:10,width:'100%',height:44,padding:'0 12px',marginBottom:10,borderRadius:4,border:'1px solid #747775',background:'#FFFFFF',color:'#1F1F1F',fontFamily:"Roboto,Arial,sans-serif",fontWeight:500,fontSize:14,letterSpacing:'0.25px',cursor:'pointer',opacity:acctBusy?.6:1,boxSizing:'border-box'}
-              : {display:'flex',alignItems:'center',justifyContent:'center',gap:6,width:'100%',height:44,padding:'0 12px',marginBottom:10,borderRadius:8,border:'none',background:'#000000',color:'#FFFFFF',fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Helvetica,Arial,sans-serif",fontWeight:500,fontSize:19,cursor:'pointer',opacity:acctBusy?.6:1,boxSizing:'border-box'}}>
+              ? {display:'flex',alignItems:'center',justifyContent:'center',gap:10,width:'100%',height:44,padding:'0 12px',marginBottom:10,borderRadius:4,
+                  border:`1px solid ${gpDark?'#8E918F':'#747775'}`,background:gpDark?'#131314':'#FFFFFF',color:gpDark?'#E3E3E3':'#1F1F1F',   // FINGERPRINT_V331 — Google's dark theme in dark mode
+                  fontFamily:"Roboto,Arial,sans-serif",fontWeight:500,fontSize:14,letterSpacing:'0.25px',cursor:'pointer',opacity:acctBusy?.6:1,boxSizing:'border-box'}
+              : {display:'flex',alignItems:'center',justifyContent:'center',gap:6,width:'100%',height:44,padding:'0 12px',marginBottom:10,borderRadius:8,border:'none',
+                  background:gpDark?'#FEFEFE':'#000000',color:gpDark?'#000000':'#FFFFFF',   // FINGERPRINT_V331 — Apple's white button on dark backgrounds (#FEFEFE so the dark layer leaves it white)
+                  fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Helvetica,Arial,sans-serif",fontWeight:500,fontSize:19,cursor:'pointer',opacity:acctBusy?.6:1,boxSizing:'border-box'}}>
             {logo}{label}</button>; };
         return <div onClick={()=>setShowAcct(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:170,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto',borderRadius:'16px 16px 0 0',padding:'16px 16px 28px',boxSizing:'border-box'}}>
