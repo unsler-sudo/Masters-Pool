@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: makecut-v211-20261004-1000
+// build: archive-lock-v212-20261004-1200
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -382,6 +382,25 @@ function srvApplyMakeCut(players) {
     const t = parseInt(p.thru, 10), midRound = t >= 1 && t <= 17;
     return mcOf(p) === 0 && !midRound && !/CUT|WD|DQ|MC/i.test(String(p.current_pos || '')) ? { ...p, current_pos: 'CUT' } : p;
   });
+}
+
+// FINGERPRINT_V212_ARCHIVE_LOCK — the page saves archives automatically ('auto'). Two rules keep it from
+// clobbering History (it overwrote the hand-rebuilt Masters + PGA Championship weeks):
+//  1. an auto save may only write the event the pool is ACTUALLY on (its current mode) — a PGA Tour pool's page
+//     can never write a major's week, e.g. during the moment it briefly assumes 'pga' while loading;
+//  2. an auto save can't change a FINISHED week: it gets 12 hours after the first save to settle (late payout
+//     fixes), then the week is frozen. Weeks restored/rebuilt by hand are `locked` and never auto-touched.
+// Saves made with the admin password (Admin's "Save Final Results", rebuild/import) are always allowed.
+async function srvAutoArchiveBlock(poolId, major, archiveKey) {
+  const meta = await getPoolMeta(poolId);
+  if (!meta || major !== meta.major) return `auto save for '${major}' but this pool is on '${meta?.major}'`;
+  let ex = null;
+  try { const r = await redis('GET', archiveKey); if (r) ex = JSON.parse(r); } catch {}
+  if (!ex) return null;
+  if (ex.locked) return 'this week was fixed by hand (locked)';
+  const first = Date.parse(ex.firstSavedAt || '');
+  if (!Number.isFinite(first) || Date.now() - first > 12 * 3600e3) return 'this week is finished (frozen)';
+  return null;
 }
 
 async function srvNotifyTick() {
@@ -2777,6 +2796,7 @@ export async function POST(request) {
         ? k(poolId, `archive:${major}-${slug}_${year}`)
         : k(poolId, `archive:${major}_${year}`);
       const archiveData = {
+        locked: true,                       // FINGERPRINT_V212 — fixed by hand: never auto-overwritten
         major, year,
         eventName: eventName || undefined,
         archivedAt: new Date().toISOString(),
@@ -2847,9 +2867,10 @@ export async function POST(request) {
         ? k(poolId, `archive:${major}-${slug}_${year}`)
         : k(poolId, `archive:${major}_${year}`);
       const archiveData = {
+        locked: true,                       // FINGERPRINT_V212 — fixed by hand: never auto-overwritten
         major, year,
         eventName: eventName || undefined,
-        archivedAt: new Date().toISOString(),
+        archivedAt: body.archivedAt || new Date().toISOString(),   // a restore keeps the week's original date
         entries, payments: payments || {}, earnings: earnings || {},
         entryFee: entryFee || 0,
         prizes: prizes || null,
@@ -3147,6 +3168,12 @@ export async function POST(request) {
       const archiveKey = (srvIsTourMode(major) && slug)
         ? k(poolId, `archive:${major}-${slug}_${year}`)
         : k(poolId, `archive:${major}_${year}`);
+      if (body.password === 'auto') {
+        const why = await srvAutoArchiveBlock(poolId, major, archiveKey);
+        if (why) return Response.json({ ok:true, skipped: why });
+      }
+      let prevFirst = null;
+      try { const pr = await redis('GET', archiveKey); if (pr) prevFirst = JSON.parse(pr).firstSavedAt || null; } catch {}
       // FINGERPRINT_V155_COLLISION_GUARD — if an archive already exists at this key for a DIFFERENT
       // event, don't clobber it. Guards against a blank/rotated evName resolving to the wrong slug
       // and overwriting a good archive (how The Open got wiped by a 3M Open save).
@@ -3173,6 +3200,7 @@ export async function POST(request) {
         return Response.json({ ok:true, skipped:'no entries — refusing to save empty archive' });
       }
       const archiveData = {
+        firstSavedAt: prevFirst || new Date().toISOString(),
         major,
         year,
         eventName: evName || undefined,
@@ -3211,6 +3239,10 @@ export async function POST(request) {
       const archiveKey = (srvIsTourMode(major) && slug)
         ? k(poolId, `archive:${major}-${slug}_${year}`)
         : k(poolId, `archive:${major}_${year}`);
+      if (body.password === 'auto') {
+        const why = await srvAutoArchiveBlock(poolId, major, archiveKey);
+        if (why) return Response.json({ ok:true, skipped: why });
+      }
       try {
         const r = await redis('GET', archiveKey);
         // Only update if archive already exists — don't create empty ones
