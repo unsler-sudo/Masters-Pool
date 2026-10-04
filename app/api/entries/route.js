@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: venmo-v218-20261005-1300
+// build: nickname-v220-20261005-1600
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -2060,17 +2060,23 @@ export async function POST(request) {
         if (jm?.joinCodeRequired && jm?.joinCode && String(body.joinCode || '').trim().toUpperCase() !== String(jm.joinCode).toUpperCase())
           return Response.json({ error:'This pool needs its join code — enter it to continue.', needJoinCode:true }, { status:403 });
       }
-      const { name, picks } = body;
+      const { picks } = body;
+      let name = String(body.name || '').trim();   // FINGERPRINT_V219 — optional: blank = your account name
       // FINGERPRINT_V202_ACCOUNTS — entering needs an account; the entry takes the account's email and id
       const acct = await verifyToken(body.auth);
       if (!acct) return Response.json({ error:'Create an account or sign in to enter', needAccount:true }, { status:401 });
       const email = acct.email;
-      if (!name?.trim()) return Response.json({ error:'Name required' }, { status:400 });
+      if (!name) name = '__ACCOUNT__';   // resolved below, once this pool's entries are loaded
       if (!email?.trim()) return Response.json({ error:'Email required' }, { status:400 });
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return Response.json({ error:'Invalid email' }, { status:400 });
       const reqPicks = await srvRequiredPicks(poolId);
       if (!picks || picks.length !== reqPicks) return Response.json({ error:`${reqPicks} picks required` }, { status:400 });
       const entries = await getEntries(poolId);
+      if (name === '__ACCOUNT__') {
+        const base = String(acct.nickname || acct.name || '').trim().slice(0, 40) || acct.email.split('@')[0];   // V220 — nickname first
+        const taken = (n) => entries.some(e => e.name.toLowerCase() === n.toLowerCase());
+        name = base; for (let n = 2; taken(name) && n < 100; n++) name = `${base} ${n}`;
+      }
       if (entries.find(e=>e.name.toLowerCase()===name.trim().toLowerCase()))
         return Response.json({ error:'Name already taken!' }, { status:409 });
 
