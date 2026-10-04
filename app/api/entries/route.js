@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: admin-alerts-state-v208-20261003-1000
+// build: no-codes-v210-20261003-1300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -574,8 +574,7 @@ async function srvNotifyPicksOpen(poolId, ev, year, sk, sessNow) {
             ${rows}
           </table>
           <p><a href="${srvMagicLink(poolUrl, poolId, e, 'picks')}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
-          <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> · your code:
-            <b style="letter-spacing:2px">${esc(e.editCode)}</b></p>
+          <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> — the button signs you straight in.</p>
           <p style="font-size:12px;color:#999">1 pt per correct pick · a halved match gives ½ to everyone who picked it.</p>
         </div>`,
 }));
@@ -844,7 +843,7 @@ async function srvSendPickReminders(pools, ev, year, all) {
               <p>Hi ${esc(e.name)} — you've picked <b>${n} of ${total}</b> ${esc(label)} matches. Picks lock at <b>${esc(lockTxt)}</b>,
                 and any match you haven't picked scores nothing.</p>
               <p><a href="${srvMagicLink(poolUrl, pl.poolId, e, 'picks')}" style="background:#1a2a5c;color:#fff;padding:11px 22px;text-decoration:none;border-radius:6px;display:inline-block">Make your picks →</a></p>
-              <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> · your code: <b style="letter-spacing:2px">${esc(e.editCode)}</b></p>
+              <p style="font-size:13px;color:#666;margin-top:18px">Your entry: <b>${esc(e.name)}</b> — the button signs you straight in.</p>
             </div>` });
       }
     }
@@ -1841,103 +1840,9 @@ export async function POST(request) {
       return Response.json({ ok:true, entries: srvPublicEntries(entries, await srvHidePicksNow(poolId)) });
     }
 
-    if (body.action === 'resend-code') {
-      const { name, email } = body;
-      if (!name?.trim()) return Response.json({ error:'Name required' }, { status:400 });
-      const entries = await getEntries(poolId);
-      // FINGERPRINT_V198_PRIVACY — the code always goes to the email ON FILE, so the page no longer needs to
-      // know anyone's address (a typed email, if given, must still match). Max once per 2 minutes per entry.
-      const entry = entries.find(e =>
-        e.name.toLowerCase() === name.trim().toLowerCase() &&
-        (!email?.trim() || e.email?.toLowerCase() === email.trim().toLowerCase())
-      );
-      if (!entry) return Response.json({ error:'No entry found with that name' + (email?.trim() ? ' and email' : '') }, { status:404 });
-      if (!entry.email) return Response.json({ error:'That entry has no email on file — ask your commissioner' }, { status:400 });
-      {
-        const rk = k(poolId, `resend:${entry.name.toLowerCase()}`);
-        if (await redis('GET', rk)) return Response.json({ error:`A code was just sent to ${srvMaskEmail(entry.email)} — check your inbox (or wait 2 minutes)` }, { status:429 });
-        await redis('SETEX', rk, 120, '1');
-      }
+    // FINGERPRINT_V210 — removed: 'resend-code' (emailed edit codes; accounts replaced them)
 
-      if (process.env.RESEND_API_KEY) {
-        const meta = await getPoolMeta(poolId);
-        const poolName = meta?.poolName || 'Golf Pool';
-        const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
-        try {
-          await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
-              to: entry.email,
-              subject: `Your edit code for ${poolName} (resent)`,
-              html: `
-                <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
-                  <h2 style="color:#1a2a5c;">Your edit code</h2>
-                  <p>Hey ${entry.name},</p>
-                  <p>Here's your edit code for <b>${poolName}</b>:</p>
-                  <div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0;">
-                    <div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1a2a5c;">${entry.editCode}</div>
-                  </div>
-                  <p><a href="${srvMagicLink(poolUrl, poolId, entry)}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
-                </div>
-              `,
-            }),
-          });
-        } catch (e) { console.error('email send failed:', e.message); }
-      }
-      return Response.json({ ok:true });
-    }
-
-    if (body.action === 'claim-entry') {
-      // Note: This works even when entries are locked since adding an email
-      // doesn't change picks — it's just to enable chat verification
-      const { name, email } = body;
-      if (!name?.trim() || !email?.trim()) return Response.json({ error:'Name and email required' }, { status:400 });
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return Response.json({ error:'Invalid email' }, { status:400 });
-      const entries = await getEntries(poolId);
-      const idx = entries.findIndex(e => e.name.toLowerCase() === name.trim().toLowerCase());
-      if (idx === -1) return Response.json({ error:'Entry not found' }, { status:404 });
-      if (entries[idx].email) return Response.json({ error:'This entry already has an email — use Resend Code instead' }, { status:409 });
-
-      const editCode = Math.random().toString(36).slice(2,8).toUpperCase();
-      entries[idx].email = email.trim().toLowerCase();
-      entries[idx].editCode = editCode;
-      await saveEntries(poolId, entries);
-      // FINGERPRINT_V141_ROSTER
-      await upsertRoster(poolId, entries[idx].name, email.trim().toLowerCase(), editCode);
-
-      if (process.env.RESEND_API_KEY) {
-        const meta = await getPoolMeta(poolId);
-        const poolName = meta?.poolName || 'Golf Pool';
-        const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
-        try {
-          await fetch('https://api.resend.com/emails', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              from: 'Tuna Golf Pool <noreply@tunagolfpool.com>',
-              to: email.trim(),
-              subject: `Your edit code for ${poolName}`,
-              html: `
-                <div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto;padding:20px;">
-                  <h2 style="color:#1a2a5c;">Your edit code ⛳</h2>
-                  <p>Hey ${entries[idx].name},</p>
-                  <p>You've added your email to your existing entry in <b>${poolName}</b>.</p>
-                  <p>You can now edit your picks before entries lock using this code:</p>
-                  <div style="background:#f5f5f5;border-radius:8px;padding:20px;text-align:center;margin:20px 0;">
-                    <div style="font-size:11px;color:#888;letter-spacing:1px;margin-bottom:6px;">YOUR EDIT CODE</div>
-                    <div style="font-size:32px;font-weight:800;letter-spacing:6px;color:#1a2a5c;">${editCode}</div>
-                  </div>
-                  <p><a href="${srvMagicLink(poolUrl, poolId, entries[idx])}" style="background:#1a2a5c;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;">Open Pool</a></p>
-                </div>
-              `,
-            }),
-          });
-        } catch (e) { console.error('email send failed:', e.message); }
-      }
-      return Response.json({ ok:true });
-    }
+    // FINGERPRINT_V210 — removed: 'claim-entry' (emailed edit codes; accounts replaced them)
 
     if (body.action === 'delete-own') {
       const locked = await getLocked(poolId);
@@ -2231,6 +2136,7 @@ export async function POST(request) {
                   <p><b>${poolName}</b> is now open for <b>${eventName}</b>.</p>
                   ${customNote ? `<p style="background:#f5f7fb;border-left:3px solid #1a2a5c;padding:10px 14px;margin:16px 0;">${customNote.replace(/</g,'&lt;')}</p>` : ''}
                   ${fee>0 ? `<p>Entry is <b>$${fee}</b>. Get your picks in before the first tee.</p>` : `<p>Get your picks in before the first tee.</p>`}
+                  <p style="font-size:13px;color:#555;background:#f6f3ea;border-radius:8px;padding:10px 12px;">🆕 Entries now use a free Tuna Golf Pool account — no more edit codes. <b>Sign up with this email address</b> and your past entries and season standings come with you.</p>
                   <p style="margin:22px 0;"><a href="${poolUrl}" style="background:#1a2a5c;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;font-weight:600;">Make My Picks →</a></p>
                   <p style="font-size:12px;color:#888;margin-top:28px;">You're getting this because you entered a past ${poolName} pool. See you on the leaderboard.</p>
                 </div>
