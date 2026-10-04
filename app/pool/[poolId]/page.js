@@ -1,5 +1,5 @@
 'use client';
-// build: festive-art-v329-20261005-2000
+// build: festive-frame-v330-20261005-2030
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -523,9 +523,10 @@ function GpFestive({ season }) {
           </div>}
     </div>
     {/* edges, falling pieces and corners — fixed, behind the tabs and every popup, never taking a tap */}
+    {/* FINGERPRINT_V330 — the side stripes sit ABOVE the sticky tabs bar (z 10), so the frame is unbroken; popups (160+) stay on top */}
+    <div aria-hidden="true" style={{position:'fixed',top:0,bottom:0,left:0,width:7,background:S.stripes,opacity:.9,pointerEvents:'none',zIndex:15}}/>
+    <div aria-hidden="true" style={{position:'fixed',top:0,bottom:0,right:0,width:7,background:S.stripes,opacity:.9,pointerEvents:'none',zIndex:15}}/>
     <div aria-hidden="true" style={{position:'fixed',inset:0,pointerEvents:'none',zIndex:3,overflow:'hidden'}}>
-      <div style={{position:'absolute',top:0,bottom:0,left:0,width:7,background:S.stripes,opacity:.9}}/>
-      <div style={{position:'absolute',top:0,bottom:0,right:0,width:7,background:S.stripes,opacity:.9}}/>
       {parts.map((pt,i)=><span key={i} className={`gpf-part ${S.dir}`} style={{left:`${pt.left}%`,animationDuration:`${pt.dur}s`,animationDelay:`${pt.delay}s`,['--sw']:`${i%2?-pt.sway:pt.sway}px`}}>{gpArt(pt.art,pt.size)}</span>)}
       <span className="gpf-corner" style={{position:'absolute',left:16,bottom:10}}><span style={{display:'flex',alignItems:'flex-end',gap:2}}>{S.left.map((n,i)=><span key={n}>{gpArt(n,i?40:60)}</span>)}</span></span>
       <span className="gpf-corner" style={{position:'absolute',right:16,bottom:10}}><span style={{display:'flex',alignItems:'flex-end',gap:2}}>{S.right.map((n,i)=><span key={n}>{gpArt(n,i?40:60)}</span>)}</span></span>
