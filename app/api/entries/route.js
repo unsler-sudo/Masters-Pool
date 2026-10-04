@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: recap-v213-20261004-1500
+// build: backup-pw-v214-20261004-2100
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1879,7 +1879,7 @@ export async function POST(request) {
     if (body.action === 'verify-admin') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const am = await getPoolMeta(poolId);
-      return Response.json({ ok:true, joinCode: am?.joinCode || '' });   // FINGERPRINT_V198 — Admin only
+      return Response.json({ ok:true, joinCode: am?.joinCode || '', hasPassword: !!am?.adminPassword, ownedPool: !!am?.ownerUid });   // FINGERPRINT_V198/V214 — Admin only
     }
 
     // FINGERPRINT_V198_PRIVACY — your own picks (read-only, works after lock), for when picks are hidden
@@ -3200,6 +3200,25 @@ export async function POST(request) {
       meta.payoutMode = body.payoutMode === 'winner-take-all' ? 'winner-take-all' : 'standard';
       await redis('SET', k(poolId,'meta'), JSON.stringify(meta));
       return Response.json({ ok:true, payoutMode: meta.payoutMode });
+    }
+
+    // FINGERPRINT_V214_BACKUP_PW — Admin: set, change or remove the pool's backup admin password.
+    // Removing is only allowed on pools linked to an account: an unowned pool with no password would fall back
+    // to the built-in default (see checkAdmin), so those always keep one.
+    if (body.action === 'set-admin-password') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId);
+      if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
+      const np = String(body.newPassword || '').trim();
+      if (!np) {
+        if (!meta.ownerUid) return Response.json({ error:'This pool needs a password until it’s linked to your account' }, { status:400 });
+        delete meta.adminPassword;
+      } else {
+        if (np.length < 6) return Response.json({ error:'Use at least 6 characters' }, { status:400 });
+        meta.adminPassword = np;
+      }
+      await redis('SET', k(poolId, 'meta'), JSON.stringify(meta));
+      return Response.json({ ok:true, hasPassword: !!meta.adminPassword });
     }
 
     // FINGERPRINT_V200_LATE_ENTRIES — Admin: let NEW entries in after the first tee (edits stay locked)
