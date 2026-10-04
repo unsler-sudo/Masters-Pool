@@ -91,7 +91,7 @@ export async function newUser({ name, email, phone = '', pw = '', google = '', a
   return u;
 }
 export const publicUser = (u) => u && ({
-  uid: u.uid, name: u.name, email: u.email, phone: u.phone || '',
+  uid: u.uid, name: u.name, email: u.email, phone: u.phone || '', photo: u.photo || '',
   hasPassword: !!u.pw, google: !!u.google, apple: !!u.apple, needsPhone: !u.phone,
 });
 
@@ -121,7 +121,7 @@ export async function sendEmail(to, subject, html) {
 // ── Google / Apple: find or create the account, then hand the token to the waiting app ──
 // The app starts sign-in with a loginId and polls for it; this marks it done. That hand-off is what makes
 // Google/Apple work in the iPhone Home Screen app, whose storage is separate from Safari's.
-export async function finishOAuth({ provider, sub, email, name, loginId }) {
+export async function finishOAuth({ provider, sub, email, name, loginId, picture }) {
   email = normEmail(email);
   let user = null;
   const byProvider = await findUid(provider, sub);
@@ -138,6 +138,9 @@ export async function finishOAuth({ provider, sub, email, name, loginId }) {
     user = await newUser({ name, email, [provider]: sub });
     if (!user) throw new Error('Please try again');
   }
+  // FINGERPRINT_ACCOUNTS_PHOTO — keep the Google profile photo (Apple never shares one); refreshed each Google sign-in
+  const photo = /^https:\/\/[a-z0-9.-]*googleusercontent\.com\//i.test(picture || '') ? String(picture).replace(/=s\d+(-c)?$/, '=s128-c') : '';
+  if (photo && user.photo !== photo) { user.photo = photo; await saveUser(user); }
   if (loginId) await redis('SETEX', `oauth:${loginId}`, 600, JSON.stringify({ status: 'done', token: makeToken(user) }));
   return user;
 }
