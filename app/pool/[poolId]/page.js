@@ -1,5 +1,5 @@
 'use client';
-// build: prefill-name-v323-20261005-1630
+// build: emoji-font-v324-20261005-1700
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -445,6 +445,28 @@ const teamSessionsFor = (n) => /ryder/i.test(n || '')
   : [['thu','Thu'],['fri','Fri'],['satam','Sat AM'],['satpm','Sat PM'],['sun','Sun Singles']];
 const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
 // FINGERPRINT_V263_TEAM_COLOURS — USA red; International (and Europe, for the Ryder Cup) blue
+// FINGERPRINT_EMOJI_FONT — Windows has no flag emoji (🇺🇸 shows as "US") and older emoji sets, so on Windows/Linux
+// load Google's Noto Color Emoji and put it BEHIND the page's fonts: text looks the same, only emoji change.
+// Apple (iPhone/iPad/Mac) and Android keep their own emoji. Google Fonts only sends the emoji actually used.
+function gpEmojiSetup() {
+  if (typeof window === 'undefined' || document.getElementById('gp-emoji-font')) return;
+  const ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod|Macintosh|Mac OS X|Android/.test(ua)) return;
+  const link = document.createElement('link');
+  link.id = 'gp-emoji-font'; link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap';
+  document.head.appendChild(link);
+  const css = document.createElement('style');
+  css.id = 'gp-emoji-css';
+  const SANS = "'DM Sans','Noto Color Emoji',sans-serif", SERIF = "'Playfair Display','Noto Color Emoji',serif";
+  css.textContent = [
+    `body{font-family:${SANS}}`,
+    `[style*="font-family"]:not([style*="Playfair"]):not([style*="monospace"]):not([style*="Roboto"]):not([style*="apple-system"]){font-family:${SANS}!important}`,
+    `[style*="Playfair"]{font-family:${SERIF}!important}`,
+    `button:not([style*="font-family"]),input:not([style*="font-family"]),select,textarea{font-family:${SANS}}`,
+  ].join('\n');
+  document.head.appendChild(css);
+}
 const TEAM_COLOUR = { USA: '#c8102e', INT: '#1f4e9c' };
 // FINGERPRINT_V313_DARK — dark mode. The page sets colours inline everywhere, so rather than rewrite it, dark mode
 // is a LAYER: (1) the theme object gets dark backgrounds/borders, and (2) a <style> maps the page's common literal
@@ -1323,6 +1345,7 @@ export default function App(){
   const resetJoinGate = () => { try { localStorage.removeItem(`jc_${poolId}`); localStorage.removeItem(`jc_${poolId}_code`); } catch {} setJoinCodePassed(false); };
 
   const [tab,setTab]=useState('Standings');
+  useEffect(()=>{ gpEmojiSetup(); },[]);   // FINGERPRINT_EMOJI_FONT
   // FINGERPRINT_V313_DARK — Light · Dark · Auto (follows the device), saved per device; default Auto (V314)
   const [appearance,setAppearanceRaw]=useState('auto');
   const [sysDark,setSysDark]=useState(false);
