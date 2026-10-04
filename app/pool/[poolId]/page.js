@@ -1,5 +1,5 @@
 'use client';
-// build: playing-as-v302-20261004-1900
+// build: profile-menu-v303-20261004-2000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -446,6 +446,14 @@ const teamSessionsFor = (n) => /ryder/i.test(n || '')
 const TEAM_RESULT_PTS = { W: 1, H: 0.5, L: 0 };
 // FINGERPRINT_V263_TEAM_COLOURS — USA red; International (and Europe, for the Ryder Cup) blue
 const TEAM_COLOUR = { USA: '#c8102e', INT: '#1f4e9c' };
+// FINGERPRINT_V303 — notification types, shown in the profile's Notifications screen
+const NOTIF_GROUPS = [
+  ['Your pool',[['lockSoon','⏰ Pool locks in an hour — if you’re not in yet'],['poolOpen','📢 A new pool is open'],
+    ['cut','✂️ Cut report'],['recap','🏁 Round recaps'],['final','🏆 Final result']]],
+  ['Presidents Cup & Ryder Cup',[['picksOpen','Pairings are out'],['pickReminder','Picks closing soon (if you haven’t finished)']]],
+  ['Live action — can be frequent',[['leadChange','🔥 Sunday lead changes (max 1 an hour)'],['golferMoment','⛳ One of your golfers takes the lead']]],
+  ['Chat',[['chatMention','💬 Someone mentions your name']]],
+];
 // FINGERPRINT_V276_MULTI_COURSE — names for course codes on multi-course events (Dunhill Links, etc.)
 const COURSE_NAMES = { SA: 'Old Course, St Andrews', CN: 'Carnoustie', KB: 'Kingsbarns' };
 // FINGERPRINT_V279_SCORECARD_COURSE — a golfer's course for round n, shown only if his rounds used 2+ courses
@@ -1320,6 +1328,7 @@ export default function App(){
   const [acctErr,setAcctErr]=useState('');
   const [acctEditing,setAcctEditing]=useState(false);     // FINGERPRINT_V300 — editing name/cell
   const [acctPwView,setAcctPwView]=useState(false);       // FINGERPRINT_V300 — the change-password screen
+  const [acctNotifView,setAcctNotifView]=useState(false); // FINGERPRINT_V303 — the notifications screen
   const [providers,setProviders]=useState({google:false,apple:false});
   const [ownerAdmin,setOwnerAdmin]=useState(false);       // FINGERPRINT_V285_OWNER — Admin via your account
   const [myPools,setMyPools]=useState([]);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
@@ -1331,7 +1340,6 @@ export default function App(){
   const [pushHide,setPushHide]=useState(false);
   const [notifPrefs,setNotifPrefs]=useState(null);         // FINGERPRINT_V272 — this device's choices
   const [pushEndpoint,setPushEndpoint]=useState(null);
-  const [showNotif,setShowNotif]=useState(false);
   const [adminPush,setAdminPush]=useState(false);
   const [picks,setPicks]=useState({1:[],2:[],3:[]});
   const [search,setSearch]=useState('');
@@ -3234,7 +3242,7 @@ export default function App(){
     if(ownerAdmin){ setOwnerAdmin(false); setAdminOk(false); setAdminPw(''); } };
   const adoptEntry=(name,code)=>{ setChatName(name); setChatCode(code); setChatVerified(true);
     try{ localStorage.setItem(`chat_${poolId}_name`,name); localStorage.setItem(`chat_${poolId}_code`,code); }catch{} };
-  const openAcct=(mode)=>{ if(mode) setAcctMode(mode); setAcctErr(''); setAcctEditing(false); setAcctPwView(false);
+  const openAcct=(mode)=>{ if(mode) setAcctMode(mode); setAcctErr(''); setAcctEditing(false); setAcctPwView(false); setAcctNotifView(false);
     setAcctForm(f=>({...f,name:acct?.name||f.name,phone:acct?.phone||f.phone,password:'',current:'',code:''})); setShowAcct(true); };
   useEffect(()=>{
     let t=null; try{ t=localStorage.getItem('tgp_auth'); }catch{}
@@ -4485,8 +4493,7 @@ export default function App(){
       <button type="button" onClick={()=>openAcct(acct?null:'signin')} aria-label="Account" title={acct?`Signed in as ${acct.name}`:'Sign in'}
           style={{flex:'0 0 auto',padding:'0 10px',background:'transparent',border:'none',fontSize:17,cursor:'pointer',position:'relative'}}>👤
           {acct&&<span style={{position:'absolute',top:'50%',right:6,marginTop:-11,width:7,height:7,borderRadius:'50%',background:acct.needsPhone?'#e0a000':'#2d9a3e'}}/>}</button>
-        {pushState==='on'&&<button type="button" onClick={()=>setShowNotif(true)} aria-label="Notification settings" title="Notification settings"
-          style={{flex:'0 0 auto',padding:'0 12px',background:'transparent',border:'none',fontSize:17,cursor:'pointer'}}>🔔</button>}
+        
       </nav>
       {/* FINGERPRINT_V283_ACCOUNTS — the Account panel */}
       {showAcct&&(()=>{
@@ -4496,6 +4503,10 @@ export default function App(){
           style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:4,opacity:acctBusy?.6:1,...(primary?{}:{background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`})}}>{label}</button>;
         const link=(label,fn)=><button type="button" onClick={fn} style={{background:'none',border:'none',color:T.primary,fontSize:13,textDecoration:'underline',cursor:'pointer',padding:4}}>{label}</button>;
         const h=(t)=><div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase',margin:'14px 0 6px'}}>{t}</div>;
+        const navRow=(icon,label,sub,onClick)=><button key={label} type="button" onClick={onClick} style={{display:'flex',alignItems:'center',gap:12,width:'100%',textAlign:'left',padding:'12px 12px',background:'#fff',border:'none',borderTop:'1px solid #f0f0ea',cursor:'pointer'}}>
+          <span style={{fontSize:18,width:22,textAlign:'center'}}>{icon}</span>
+          <span style={{flex:1}}><span style={{display:'block',fontSize:14,fontWeight:700,color:'#2a3a1e'}}>{label}</span>{sub&&<span style={{display:'block',fontSize:12,color:'#8a9580'}}>{sub}</span>}</span>
+          <span style={{color:'#bbb',fontSize:18}}>›</span></button>;
         const fmtPhone=(ph)=>/^\+1\d{10}$/.test(ph||'')?`(${ph.slice(2,5)}) ${ph.slice(5,8)}-${ph.slice(8)}`:(ph||'');
         const row=(label,value)=><div style={{display:'flex',alignItems:'baseline',padding:'9px 0',borderTop:'1px solid #f0f0ea',fontSize:14}}>
           <span style={{width:56,flexShrink:0,color:'#8a9580',fontSize:12}}>{label}</span>
@@ -4522,11 +4533,32 @@ export default function App(){
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto',borderRadius:'16px 16px 0 0',padding:'16px 16px 28px',boxSizing:'border-box'}}>
             <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
               <div style={{flex:1,fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:800,color:T.primary}}>
-                {acct?(acctPwView?'🔒 Change password':'👤 Your account'):acctMode==='signup'?'Create your account':acctMode==='forgot'||acctMode==='reset'?'Reset your password':'Sign in'}</div>
+                {acct?(acctNotifView?'🔔 Notifications':acctPwView?'🔒 Change password':'👤 Your account'):acctMode==='signup'?'Create your account':acctMode==='forgot'||acctMode==='reset'?'Reset your password':'Sign in'}</div>
               <button type="button" onClick={()=>setShowAcct(false)} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
             </div>
             {acctErr&&<div style={{background:'#fdecea',color:'#b3261e',borderRadius:8,padding:'8px 10px',fontSize:13,marginBottom:10}}>{acctErr}</div>}
-            {acct ? (acctPwView ? <>
+            {acct ? (acctNotifView ? <>
+              {/* FINGERPRINT_V303 — notifications, inside the profile */}
+              <button type="button" onClick={()=>{setAcctNotifView(false);setAcctErr('');}} style={{background:'none',border:'none',color:T.primary,fontSize:13,fontWeight:700,cursor:'pointer',padding:'0 0 8px'}}>← Back</button>
+              {!chatVerified ? <p style={{fontSize:14,color:'#6b7c5e',lineHeight:1.5}}>Notifications follow your entry. Enter this week's pool first, then turn them on here.</p>
+              : pushState==='on' ? (!notifPrefs ? <div style={{fontSize:13,color:'#8a9580',padding:'12px 0'}}>Loading…</div> : <>
+                  <div style={{fontSize:12,color:'#8a9580',marginBottom:8}}>For {chatName} on this device.</div>
+                  {NOTIF_GROUPS.map(([g,rows])=><div key={g} style={{marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase',margin:'6px 0 4px'}}>{g}</div>
+                    {rows.map(([key,label])=>{const on=!!notifPrefs[key]; return <label key={key} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 2px',borderBottom:'1px solid #f0f0ea',cursor:'pointer'}}>
+                      <span style={{flex:1,fontSize:14,color:'#2a3a1e'}}>{label}</span>
+                      <span onClick={(e)=>{e.preventDefault();setNotifPref(key,!on);}} role="switch" aria-checked={on}
+                        style={{width:44,height:26,borderRadius:13,background:on?T.primary:'#d6d6cf',position:'relative',transition:'background .15s',flexShrink:0}}>
+                        <span style={{position:'absolute',top:3,left:on?21:3,width:20,height:20,borderRadius:'50%',background:'#fff',boxShadow:'0 1px 2px rgba(0,0,0,.25)',transition:'left .15s'}}/>
+                      </span></label>;})}
+                  </div>)}</>)
+              : pushState==='ios-browser' ? <p style={{fontSize:14,color:'#6b7c5e',lineHeight:1.5}}>On iPhone, notifications only work in the Home Screen app. Tap <b>Share → Add to Home Screen</b>, then open the pool from the new icon.</p>
+              : pushState==='denied' ? <p style={{fontSize:14,color:'#6b7c5e',lineHeight:1.5}}>Notifications are blocked for this site. Allow them in your device or browser settings, then come back here.</p>
+              : (pushState==='default'||pushState==='granted') && pushKey ? <>
+                  <p style={{fontSize:14,color:'#6b7c5e',lineHeight:1.5,marginTop:0}}>Get lock reminders, round recaps, the cut and results on this device. You choose which.</p>
+                  {pushState==='granted' ? <div style={{fontSize:13,color:'#8a9580'}}>Setting up…</div> : btn('Turn on notifications',enablePush)}</>
+              : <p style={{fontSize:14,color:'#6b7c5e',lineHeight:1.5}}>This browser doesn't support notifications. Try the Home Screen app on your phone.</p>}
+            </> : acctPwView ? <>
               {/* FINGERPRINT_V300_PROFILE — the change-password screen (email sign-ins only) */}
               <button type="button" onClick={()=>{setAcctPwView(false);setAcctErr('');}} style={{background:'none',border:'none',color:T.primary,fontSize:13,fontWeight:700,cursor:'pointer',padding:'0 0 8px'}}>← Back</button>
               <p style={{fontSize:13,color:'#6b7c5e',margin:'0 0 12px',lineHeight:1.45}}>Changing your password signs you out on your other devices.</p>
@@ -4573,6 +4605,13 @@ export default function App(){
               </div>
               {acct.hasPassword&&!acctEditing&&<div style={{textAlign:'right',marginTop:6}}>
                 {link('Change password',()=>{setAcctErr('');setAcctForm(f=>({...f,current:'',password:'',confirm:''}));setAcctPwView(true);})}</div>}
+              {/* FINGERPRINT_V303 — settings menu */}
+              <div style={{marginTop:12,border:`1px solid ${T.cardBorder}`,borderRadius:10,overflow:'hidden'}}>
+                <div style={{marginTop:-1}}>
+                  {navRow('🔔','Notifications',pushState==='on'?'On for this device':'Off',()=>{setAcctErr('');setAcctNotifView(true);})}
+                  {(ownerAdmin||adminOk)&&navRow('⚙️','Commissioner settings','Entries, payments, invites and more',()=>{setShowAcct(false);setTab('Admin');})}
+                </div>
+              </div>
               {/* FINGERPRINT_V302 — only when you have 2+ entries here: which one this device plays as */}
               {acctEntries.length>1&&<>{h('Playing as')}
                 <div style={{fontSize:12,color:'#8a9580',margin:'-2px 0 6px',lineHeight:1.4}}>You have {acctEntries.length} entries in this pool. Chat, picks and notifications use the one you choose.</div>
@@ -4634,37 +4673,7 @@ export default function App(){
           </div>
         </div>;
       })()}
-      {/* FINGERPRINT_V272_NOTIFY_SETTINGS — per-device choices */}
-      {showNotif&&(()=>{
-        const P=notifPrefs||{};
-        const groups=[
-          ['Your pool',[['lockSoon','⏰ Pool locks in an hour — if you’re not in yet'],['poolOpen','📢 A new pool is open'],
-            ['cut','✂️ Cut report'],['recap','🏁 Round recaps'],['final','🏆 Final result']]],
-          ['Presidents Cup & Ryder Cup',[['picksOpen','Pairings are out'],['pickReminder','Picks closing soon (if you haven’t finished)']]],
-          ['Live action — can be frequent',[['leadChange','🔥 Sunday lead changes (max 1 an hour)'],['golferMoment','⛳ One of your golfers takes the lead']]],
-          ['Chat',[['chatMention','💬 Someone mentions your name']]],
-        ];
-        return <div onClick={()=>setShowNotif(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:160,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
-          <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,maxHeight:'85vh',overflowY:'auto',borderRadius:'16px 16px 0 0',padding:'16px 16px 24px'}}>
-            <div style={{display:'flex',alignItems:'center',marginBottom:4}}>
-              <div style={{flex:1,fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary}}>🔔 Notifications</div>
-              <button type="button" onClick={()=>setShowNotif(false)} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
-            </div>
-            <div style={{fontSize:12,color:'#8a9580',marginBottom:10}}>For {chatName} on this device.</div>
-            {!notifPrefs&&<div style={{fontSize:13,color:'#8a9580',padding:'12px 0'}}>Loading…</div>}
-            {notifPrefs&&groups.map(([g,rows])=><div key={g} style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase',margin:'6px 0 4px'}}>{g}</div>
-              {rows.map(([key,label])=><label key={key} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 2px',borderBottom:'1px solid #f0f0ea',cursor:'pointer'}}>
-                <span style={{flex:1,fontSize:14,color:'#2a3a1e'}}>{label}</span>
-                <span onClick={(e)=>{e.preventDefault();setNotifPref(key,!P[key]);}} role="switch" aria-checked={!!P[key]}
-                  style={{width:44,height:26,borderRadius:13,background:P[key]?T.primary:'#d6d6cf',position:'relative',transition:'background .15s',flexShrink:0}}>
-                  <span style={{position:'absolute',top:3,left:P[key]?21:3,width:20,height:20,borderRadius:'50%',background:'#fff',boxShadow:'0 1px 2px rgba(0,0,0,.25)',transition:'left .15s'}}/>
-                </span>
-              </label>)}
-            </div>)}
-          </div>
-        </div>;
-      })()}
+
       {lastUp&&!picksHidden&&<div style={{padding:'4px 14px',background:T.navActive,borderBottom:`1px solid ${T.cardBorder}`,textAlign:'center'}}><span style={{fontSize:10,color:'#8a9580'}}>Scores update automatically · Last: {lastUp}</span></div>}
       {justActivated&&<div style={{background:'#d1fae5',padding:'10px 16px',fontSize:13,color:'#065f46',textAlign:'center',fontWeight:600}}>🎉 Your pool is live! Share this link with your friends to start entering picks.</div>}
       {status&&<div style={{background:'#fef3cd',padding:'8px 16px',fontSize:12,color:'#856404',textAlign:'center'}}>{status}</div>}
