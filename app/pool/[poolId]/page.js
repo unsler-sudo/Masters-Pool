@@ -1,5 +1,5 @@
 'use client';
-// build: signin-dark-v331-20261005-2100
+// build: festive-colours-v332-20261005-2130
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -484,6 +484,21 @@ const GP_FESTIVE = {
     stripes:'linear-gradient(180deg,#b33a1e,#d98c2b 35%,#8a5a2b 70%,#c0572b)', flags:['#b33a1e','#d98c2b','#8a5a2b','#c0572b','#e0a53a'], garland:['fallen-leaf','turkey','maple-leaf','corn','pie'] },
   christmas:    { label:'🎄 Christmas', dir:'down', falling:['snowflake'], left:['tree','gift'], right:['snowman','star'],
     stripes:'repeating-linear-gradient(45deg,#d42426 0 10px,#ffffff 10px 20px)', lights:['#ff3b30','#34c759','#ffcc00','#0a84ff','#ff9f0a'] },
+};
+// FINGERPRINT_V332_FESTIVE_COLOURS — while decorations are on, the whole page takes the holiday's colours
+const GP_FESTIVE_THEME = {
+  halloween: { primary:'#3d1a5b', dark:'#5b2a86', mid:'#7a3fb0', accent:'#ff7a00', accentLight:'#fff1e0',
+    navBg:'#fff', navActive:'#f3e8ff', navBorder:'#3d1a5b',
+    headerBg:'linear-gradient(170deg,#141414 0%,#3d1a5b 45%,#5b2a86 75%,#b8520a 120%)',
+    bg:'linear-gradient(180deg,#ffd6aa 0%,#fff3e6 300px)', bodyBg:'#fff3e6', cardBorder:'#f0c49a', inputBorder:'#e4b383', stripeBg:'#fff8f0', rowHl:'#ffe6cc' },
+  thanksgiving: { primary:'#6b2e14', dark:'#8a3b1a', mid:'#b3541e', accent:'#d98c2b', accentLight:'#fdf1de',
+    navBg:'#fff', navActive:'#f8ead6', navBorder:'#6b2e14',
+    headerBg:'linear-gradient(170deg,#5a2510 0%,#8a3b1a 35%,#b3541e 65%,#d98c2b 100%)',
+    bg:'linear-gradient(180deg,#efd2a6 0%,#fbf3e6 300px)', bodyBg:'#fbf3e6', cardBorder:'#e6c79a', inputBorder:'#d9b583', stripeBg:'#fdf7ec', rowHl:'#f6e2c2' },
+  christmas: { primary:'#14532d', dark:'#166534', mid:'#1f7a3f', accent:'#c8102e', accentLight:'#fdecec',
+    navBg:'#fff', navActive:'#e8f5ec', navBorder:'#14532d',
+    headerBg:'linear-gradient(170deg,#7f0f1e 0%,#b3152b 40%,#1a6b39 75%,#0f3d22 100%)',
+    bg:'linear-gradient(180deg,#d6ebdd 0%,#f6faf7 300px)', bodyBg:'#f6faf7', cardBorder:'#c9e0d0', inputBorder:'#b5d1bf', stripeBg:'#f2f8f4', rowHl:'#dcefe2' },
 };
 const gpArt = (name, size, extra) => <img src={`/festive/${name}.png`} alt="" width={size} height={size} draggable={false}
   style={{display:'block',width:size,height:size,userSelect:'none',...(extra||{})}}/>;
@@ -1644,10 +1659,11 @@ export default function App(){
       eventOverrides = PGATOUR_EVENT_THEMES[matchKey];
     }
   }
-  const T0 = { ...baseTheme, ...eventOverrides, ...scheduleOverrides };
-  const T = gpDark ? gpDarkTheme(T0) : T0;          // FINGERPRINT_V313_DARK
   // FINGERPRINT_V325_FESTIVE — PGA Tour and DP World pools, same themes for both (V327)
   const festiveSeason = (activeMajor==='pgatour'||activeMajor==='dpworld') ? (seasonPreview || gpSeasonFor(new Date())) : null;
+  const festiveOn = !!festiveSeason && !festiveOff;
+  const T0 = { ...baseTheme, ...eventOverrides, ...scheduleOverrides, ...(festiveOn ? GP_FESTIVE_THEME[festiveSeason] : {}) };   // V332 — holiday colours
+  const T = gpDark ? gpDarkTheme(T0) : T0;          // FINGERPRINT_V313_DARK
   // Detect if schedule data hasn't loaded yet — without this gate the UI can default to wrong state:
   // - pgatour: no teeTime default → "not started" mode → could allow late entries
   // - majors in 2027+: hardcoded teeTime is 2026 → "tournament is over" → blocks legitimate entries
