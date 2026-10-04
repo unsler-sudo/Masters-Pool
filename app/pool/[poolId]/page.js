@@ -1,5 +1,5 @@
 'use client';
-// build: pay-anywhere-v318-20261005-1400
+// build: venmo-app-link-v319-20261005-1430
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3372,13 +3372,22 @@ export default function App(){
     if(!fee) return null;
     const note=[poolMeta?.poolName,tcEventName||T?.eventName,name].filter(Boolean).join(' · ');
     const url=vu?`https://venmo.com/${encodeURIComponent(vu)}?txn=pay&amount=${fee}&note=${encodeURIComponent(note)}`:null;
+    // FINGERPRINT_V319_VENMO_APP — on phones open the Venmo app directly: its own link keeps the note's spaces
+    // (the web link hands the note over with every space as "+"). No app? fall back to the web link.
+    const mobile=typeof navigator!=='undefined'&&(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
+    const appUrl=vu?`venmo://paycharge?txn=pay&recipients=${encodeURIComponent(vu)}&amount=${fee}&note=${encodeURIComponent(note)}`:null;
+    const openVenmo=(ev)=>{ if(!mobile||!appUrl) return; ev.preventDefault();
+      const t=setTimeout(()=>{ if(document.visibilityState==='visible') window.location.href=url; },1500);
+      const left=()=>{ if(document.visibilityState==='hidden'){ clearTimeout(t); document.removeEventListener('visibilitychange',left); } };
+      document.addEventListener('visibilitychange',left);
+      window.location.href=appUrl; };
     return <div style={{marginTop:compact?0:8}}>
       {!compact&&<div style={{fontSize:12,fontWeight:700,color:'#c62828',marginBottom:6}}>Not paid yet — ${fee} entry</div>}
       <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
         {compact&&<span style={{fontSize:12,fontWeight:700,color:'#c62828',alignSelf:'center'}}>${fee} entry</span>}
         {/* FINGERPRINT_V317_VENMO_BRAND — Venmo's own white wordmark on Venmo Blue (#008CFF), per their guidelines:
             at least 40px wide, clear space = the height of its "V", never inside a sentence (the amount sits beside it) */}
-        {url&&<a href={url} target="_blank" rel="noopener noreferrer" aria-label={`Pay $${fee} with Venmo`}
+        {url&&<a href={url} onClick={openVenmo} target="_blank" rel="noopener noreferrer" aria-label={`Pay $${fee} with Venmo`}
             style={{background:'#008CFF',borderRadius:8,padding:compact?12:14,display:'inline-flex',alignItems:'center',textDecoration:'none',lineHeight:0}}>
             <img src="/brand/venmo-logo-white.png" alt="Venmo" height={compact?12:14} width={compact?63:74} style={{display:'block',height:compact?12:14,width:'auto'}}
               onError={e=>{const a=e.currentTarget.parentNode; e.currentTarget.remove(); a.textContent=`Pay $${fee} with Venmo`; Object.assign(a.style,{color:'#fff',fontWeight:'800',fontSize:'13px',padding:'9px 14px',lineHeight:'normal'});}}/>
