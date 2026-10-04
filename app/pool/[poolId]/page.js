@@ -1,5 +1,5 @@
 'use client';
-// build: admin-tidy-v299-20261004-1700
+// build: season-tab-v301-20261004-1830
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1318,6 +1318,8 @@ export default function App(){
   const [acctForm,setAcctForm]=useState({name:'',email:'',phone:'',password:'',current:'',code:''});
   const [acctBusy,setAcctBusy]=useState(false);
   const [acctErr,setAcctErr]=useState('');
+  const [acctEditing,setAcctEditing]=useState(false);     // FINGERPRINT_V300 — editing name/cell
+  const [acctPwView,setAcctPwView]=useState(false);       // FINGERPRINT_V300 — the change-password screen
   const [providers,setProviders]=useState({google:false,apple:false});
   const [ownerAdmin,setOwnerAdmin]=useState(false);       // FINGERPRINT_V285_OWNER — Admin via your account
   const [myPools,setMyPools]=useState([]);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
@@ -3232,7 +3234,7 @@ export default function App(){
     if(ownerAdmin){ setOwnerAdmin(false); setAdminOk(false); setAdminPw(''); } };
   const adoptEntry=(name,code)=>{ setChatName(name); setChatCode(code); setChatVerified(true);
     try{ localStorage.setItem(`chat_${poolId}_name`,name); localStorage.setItem(`chat_${poolId}_code`,code); }catch{} };
-  const openAcct=(mode)=>{ if(mode) setAcctMode(mode); setAcctErr('');
+  const openAcct=(mode)=>{ if(mode) setAcctMode(mode); setAcctErr(''); setAcctEditing(false); setAcctPwView(false);
     setAcctForm(f=>({...f,name:acct?.name||f.name,phone:acct?.phone||f.phone,password:'',current:'',code:''})); setShowAcct(true); };
   useEffect(()=>{
     let t=null; try{ t=localStorage.getItem('tgp_auth'); }catch{}
@@ -3283,9 +3285,9 @@ export default function App(){
   const doReset=async()=>{ const d=await acctCall({action:'reset-confirm',email:acctForm.email,code:acctForm.code,password:acctForm.password});
     if(d.ok){ applySession(d.token,d.user); setShowAcct(false); msg('Password reset ✓'); } };
   const doProfile=async()=>{ const d=await acctCall({action:'update-profile',auth:acctToken,name:acctForm.name,phone:acctForm.phone});
-    if(d.ok){ setAcct(d.user); msg('Saved ✓'); } };
+    if(d.ok){ setAcct(d.user); msg('Saved ✓'); } return !!d.ok; };
   const doPassword=async()=>{ const d=await acctCall({action:'change-password',auth:acctToken,current:acctForm.current,password:acctForm.password});
-    if(d.ok){ applySession(d.token,d.user); setAcctForm(f=>({...f,current:'',password:''})); msg('Password updated — other devices signed out'); } };
+    if(d.ok){ applySession(d.token,d.user); setAcctForm(f=>({...f,current:'',password:''})); msg('Password updated — other devices signed out'); } return !!d.ok; };
   const doSignoutAll=async()=>{ await acctCall({action:'signout-all',auth:acctToken}); signOutLocal(); setShowAcct(false); msg('Signed out on every device'); };
   // Google/Apple: open the sign-in in a new tab (opened inside the tap, so it isn't blocked), then poll for the hand-off
   const startOAuth=async(provider)=>{
@@ -4479,7 +4481,7 @@ export default function App(){
         : null)}
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
-        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
+        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t==='History'?'Season':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
       <button type="button" onClick={()=>openAcct(acct?null:'signin')} aria-label="Account" title={acct?`Signed in as ${acct.name}`:'Sign in'}
           style={{flex:'0 0 auto',padding:'0 10px',background:'transparent',border:'none',fontSize:17,cursor:'pointer',position:'relative'}}>👤
           {acct&&<span style={{position:'absolute',top:'50%',right:6,marginTop:-11,width:7,height:7,borderRadius:'50%',background:acct.needsPhone?'#e0a000':'#2d9a3e'}}/>}</button>
@@ -4494,6 +4496,10 @@ export default function App(){
           style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:4,opacity:acctBusy?.6:1,...(primary?{}:{background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`})}}>{label}</button>;
         const link=(label,fn)=><button type="button" onClick={fn} style={{background:'none',border:'none',color:T.primary,fontSize:13,textDecoration:'underline',cursor:'pointer',padding:4}}>{label}</button>;
         const h=(t)=><div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase',margin:'14px 0 6px'}}>{t}</div>;
+        const fmtPhone=(ph)=>/^\+1\d{10}$/.test(ph||'')?`(${ph.slice(2,5)}) ${ph.slice(5,8)}-${ph.slice(8)}`:(ph||'');
+        const row=(label,value)=><div style={{display:'flex',alignItems:'baseline',padding:'9px 0',borderTop:'1px solid #f0f0ea',fontSize:14}}>
+          <span style={{width:56,flexShrink:0,color:'#8a9580',fontSize:12}}>{label}</span>
+          <span style={{flex:1,minWidth:0,color:'#2a3a1e',fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{value}</span></div>;
         const social=(p)=>{ const up=acctMode==='signup', g=p==='google';
           const label=`${up?'Sign up':'Sign in'} with ${g?'Google':'Apple'}`;
           // FINGERPRINT_BRAND — official button specs. Google: white, 1px #747775 border, #1F1F1F Roboto Medium 14px,
@@ -4516,18 +4522,57 @@ export default function App(){
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto',borderRadius:'16px 16px 0 0',padding:'16px 16px 28px',boxSizing:'border-box'}}>
             <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
               <div style={{flex:1,fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:800,color:T.primary}}>
-                {acct?'👤 Your account':acctMode==='signup'?'Create your account':acctMode==='forgot'||acctMode==='reset'?'Reset your password':'Sign in'}</div>
+                {acct?(acctPwView?'🔒 Change password':'👤 Your account'):acctMode==='signup'?'Create your account':acctMode==='forgot'||acctMode==='reset'?'Reset your password':'Sign in'}</div>
               <button type="button" onClick={()=>setShowAcct(false)} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
             </div>
             {acctErr&&<div style={{background:'#fdecea',color:'#b3261e',borderRadius:8,padding:'8px 10px',fontSize:13,marginBottom:10}}>{acctErr}</div>}
-            {acct ? <>
-              <div style={{fontSize:14,color:'#2a3a1e'}}>Signed in as <b>{acct.name}</b></div>
-              <div style={{fontSize:12,color:'#8a9580',marginBottom:4}}>{acct.email}{acct.google?' · Google':''}{acct.apple?' · Apple':''}</div>
-              {acct.needsPhone&&<div style={{background:'#fff8e6',border:'1px solid #f0c060',borderRadius:8,padding:'8px 10px',fontSize:13,color:'#7a5500',margin:'8px 0'}}>📱 Add your cell number to finish setting up.</div>}
-              {h('Your details')}
-              {field('name','Your name','text','name')}
-              {field('phone','Cell number','tel','tel')}
-              {btn('Save',doProfile)}
+            {acct ? (acctPwView ? <>
+              {/* FINGERPRINT_V300_PROFILE — the change-password screen (email sign-ins only) */}
+              <button type="button" onClick={()=>{setAcctPwView(false);setAcctErr('');}} style={{background:'none',border:'none',color:T.primary,fontSize:13,fontWeight:700,cursor:'pointer',padding:'0 0 8px'}}>← Back</button>
+              <p style={{fontSize:13,color:'#6b7c5e',margin:'0 0 12px',lineHeight:1.45}}>Changing your password signs you out on your other devices.</p>
+              {field('current','Current password','password','current-password')}
+              {field('password','New password (8+ characters)','password','new-password')}
+              {field('confirm','Confirm new password','password','new-password')}
+              {btn('Change password',async()=>{
+                if((acctForm.password||'')!==(acctForm.confirm||'')) return setAcctErr("The new passwords don't match");
+                if(await doPassword()){ setAcctPwView(false); setAcctForm(f=>({...f,confirm:''})); }
+              })}
+            </> : <>
+              {/* FINGERPRINT_V300_PROFILE — who you are */}
+              <div style={{display:'flex',alignItems:'center',gap:12,margin:'2px 0 14px'}}>
+                <div style={{width:46,height:46,borderRadius:'50%',background:T.primary,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:800,flexShrink:0}}>{((acct.name||'?').trim()[0]||'?').toUpperCase()}</div>
+                <div style={{minWidth:0}}>
+                  <div style={{fontWeight:800,fontSize:16,color:'#2a3a1e'}}>{acct.name}</div>
+                  <div style={{fontSize:12,color:'#8a9580',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{acct.email}</div>
+                  <div style={{fontSize:11,color:'#8a9580',marginTop:2}}>Signs in with {[acct.hasPassword&&'email',acct.google&&'Google',acct.apple&&'Apple'].filter(Boolean).join(' · ')||'email'}</div>
+                </div>
+              </div>
+              {/* your details — read-only, with an Edit pencil */}
+              <div style={{border:`1px solid ${T.cardBorder}`,borderRadius:10,padding:'2px 12px 8px'}}>
+                <div style={{display:'flex',alignItems:'center',padding:'8px 0 6px'}}>
+                  <div style={{flex:1,fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase'}}>Your details</div>
+                  {!acctEditing&&<button type="button" onClick={()=>{setAcctErr('');setAcctForm(f=>({...f,name:acct.name||'',phone:acct.phone||''}));setAcctEditing(true);}}
+                    style={{background:'none',border:'none',color:T.primary,fontSize:13,fontWeight:700,cursor:'pointer',padding:0}}>✏️ Edit</button>}
+                </div>
+                {acctEditing ? <>
+                  <div style={{fontSize:12,color:'#8a9580',margin:'4px 0 4px'}}>Name</div>
+                  {field('name','Your name','text','name')}
+                  <div style={{fontSize:12,color:'#8a9580',margin:'2px 0 4px'}}>Cell</div>
+                  {field('phone','Cell number','tel','tel')}
+                  <div style={{fontSize:11,color:'#8a9580',margin:'-2px 0 8px'}}>Your email is your sign-in, so it can't be changed here.</div>
+                  <div style={{display:'flex',gap:8}}>
+                    {btn('Save',async()=>{ if(await doProfile()) setAcctEditing(false); })}
+                    {btn('Cancel',()=>{setAcctEditing(false);setAcctErr('');},false)}
+                  </div>
+                </> : <>
+                  {row('Name',acct.name)}
+                  {row('Email',acct.email)}
+                  {row('Cell',acct.phone?fmtPhone(acct.phone):<span onClick={()=>{setAcctErr('');setAcctForm(f=>({...f,name:acct.name||'',phone:''}));setAcctEditing(true);}}
+                    style={{color:'#b45309',cursor:'pointer',textDecoration:'underline'}}>📱 Add your cell number</span>)}
+                </>}
+              </div>
+              {acct.hasPassword&&!acctEditing&&<div style={{textAlign:'right',marginTop:6}}>
+                {link('Change password',()=>{setAcctErr('');setAcctForm(f=>({...f,current:'',password:'',confirm:''}));setAcctPwView(true);})}</div>}
               {acctEntries.length>0&&<>{h('Your entries in this pool')}
                 {acctEntries.map(e=><label key={e.name} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderBottom:'1px solid #f0f0ea',cursor:'pointer'}}>
                   <input type="radio" checked={chatName===e.name} onChange={()=>{adoptEntry(e.name,e.code);msg(`Now using ${e.name}`);}}/>
@@ -4542,14 +4587,9 @@ export default function App(){
                   {pl.owner&&<span style={{fontSize:10,fontWeight:800,color:'#7a5500',background:'#fff3d6',borderRadius:10,padding:'2px 8px'}}>COMMISSIONER</span>}
                   {pl.poolId===poolId?<span style={{fontSize:10,fontWeight:800,color:T.primary}}>HERE</span>:<span style={{color:'#bbb'}}>›</span>}
                 </a>)}</>}
-              {h(acct.hasPassword?'Change password':'Set a password')}
-              {acct.hasPassword&&field('current','Current password','password','current-password')}
-              {field('password','New password (8+ characters)','password','new-password')}
-              {btn(acct.hasPassword?'Change password':'Set password',doPassword,false)}
-              {h('Sign out')}
-              {btn('Sign out on this device',()=>{signOutLocal();setShowAcct(false);msg('Signed out');},false)}
+              <div style={{marginTop:18}}>{btn('Sign out',()=>{signOutLocal();setShowAcct(false);msg('Signed out');},false)}</div>
               <div style={{textAlign:'center',marginTop:6}}>{link('Sign out on every device',doSignoutAll)}</div>
-            </> : <>
+            </>) : <>
               {(acctMode==='signin'||acctMode==='signup')&&(providers.apple||providers.google)&&<>
                 <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@500&display=swap" rel="stylesheet"/>
                 {providers.apple&&social('apple')}
@@ -5658,9 +5698,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             {/* FINGERPRINT_V181_SCHEDULE — dropdown to switch between Past Results and the Schedule */}
             <div style={{display:'inline-flex',alignItems:'center',gap:8,marginBottom:10}}>
               <select value={historyView} onChange={e=>setHistoryView(e.target.value)} style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,border:`1.5px solid ${T.primary}33`,borderRadius:8,padding:'4px 30px 4px 12px',background:`${T.primary}08`,cursor:'pointer',appearance:'none',WebkitAppearance:'none',backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23${T.primary.replace('#','')}' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E")`,backgroundRepeat:'no-repeat',backgroundPosition:'right 10px center'}}>
-                <option value="season">🏆 Season Standings</option>
-                <option value="results">📚 Past Results</option>
                 <option value="schedule">📅 Schedule</option>
+                <option value="results">📚 Past Results</option>
+                <option value="season">🏆 Standings</option>
               </select>
             </div>
             <div style={{fontSize:12,color:'#8a9580'}}>{historyView==='season'?`Prize money won in this pool, ${seasonYear} season`:historyView==='results'?'Final standings from previous events':`${schedule&&schedule.length?new Date().getFullYear():''} ${isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} season schedule`}</div>
