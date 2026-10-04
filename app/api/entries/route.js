@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: claims-v217-20261004-2300
+// build: venmo-v218-20261005-1300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -1354,6 +1354,8 @@ async function getLocked(pid)      { try { return (await redis('GET',k(pid,'lock
 async function getPicksHidden(pid) { try { const r=await redis('GET',k(pid,'picks_hidden')); return r===null?true:r==='true'; } catch { return true; } }
 async function getPaymentsHidden(pid) { try { return (await redis('GET',k(pid,'payments_hidden')))==='true'; } catch { return false; } }
 async function getPayments(pid)    { try { const r=await redis('GET',k(pid,'payments')); return r?JSON.parse(r):{}; } catch { return {}; } }
+// FINGERPRINT_V218_VENMO — players who tapped "I've paid", waiting for the commissioner to confirm
+async function getPayPending(pid)  { try { const r=await redis('GET',k(pid,'paypending')); return r?JSON.parse(r):{}; } catch { return {}; } }
 async function savePayments(pid,p) { await redis('SET',k(pid,'payments'),JSON.stringify(p)); }
 async function getMajor(pid)       { try { const r=await redis('GET',k(pid,'major')); return VALID_MAJORS.includes(r)?r:'pga'; } catch { return 'pga'; } }
 async function getPoolMeta(pid)    { try { const r=await redis('GET',k(pid,'meta')); return r?JSON.parse(r):null; } catch { return null; } }
@@ -1588,7 +1590,7 @@ async function autoManage(poolId) {
           await Promise.all([
             redis('SET', k(poolId,'meta'),         JSON.stringify(meta)),
             redis('DEL', k(poolId,'entries')),
-            redis('DEL', k(poolId,'payments')),
+            redis('DEL', k(poolId,'payments')), redis('DEL', k(poolId,'paypending')),
             redis('SET', k(poolId,'locked'),       'true'),
             redis('SET', k(poolId,'picks_hidden'), 'true'),
           ]);
@@ -1706,7 +1708,7 @@ async function autoManage(poolId) {
       await Promise.all([
         redis('SET', k(poolId,'major'),        nextKey),
         redis('DEL', k(poolId,'entries')),
-        redis('DEL', k(poolId,'payments')),
+        redis('DEL', k(poolId,'payments')), redis('DEL', k(poolId,'paypending')),
         redis('SET', k(poolId,'locked'),       'true'),
         redis('SET', k(poolId,'picks_hidden'), 'true'),
       ]);
@@ -1933,7 +1935,8 @@ export async function GET(request) {
         }
       }
     }
-    return Response.json({ entries: srvPublicEntries(entries, await srvHidePicksNow(poolId, picksHidden, locked, meta)), locked, picksHidden, paymentsHidden, payments, major, meta: srvPublicMeta(meta), purses, teamMatches, teamPicks, teamPickCounts,
+    const payPending = Object.keys(await getPayPending(poolId));   // FINGERPRINT_V218
+    return Response.json({ payPending, entries: srvPublicEntries(entries, await srvHidePicksNow(poolId, picksHidden, locked, meta)), locked, picksHidden, paymentsHidden, payments, major, meta: srvPublicMeta(meta), purses, teamMatches, teamPicks, teamPickCounts,
       pushKey: process.env.VAPID_PUBLIC_KEY || null });   // FINGERPRINT_V193_PUSH (public by design)
   } catch (err) {
     return Response.json({ entries:[], locked:false, picksHidden:true, paymentsHidden:false, payments:{}, major:'pga', error:err.message });
@@ -2620,7 +2623,7 @@ export async function POST(request) {
       await Promise.all([
         redis('SET', k(poolId,'meta'),         JSON.stringify(meta)),
         redis('DEL', k(poolId,'entries')),
-        redis('DEL', k(poolId,'payments')),
+        redis('DEL', k(poolId,'payments')), redis('DEL', k(poolId,'paypending')),
         redis('SET', k(poolId,'locked'),       'true'),
         redis('SET', k(poolId,'picks_hidden'), 'true'),
       ]);
@@ -3401,7 +3404,7 @@ export async function POST(request) {
       await Promise.all([
         redis('SET', k(poolId,'major'), body.major),
         redis('DEL', k(poolId,'entries')),
-        redis('DEL', k(poolId,'payments')),
+        redis('DEL', k(poolId,'payments')), redis('DEL', k(poolId,'paypending')),
         redis('SET', k(poolId,'locked'), 'false'),
         redis('SET', k(poolId,'picks_hidden'), 'true'),
       ]);
@@ -3438,12 +3441,58 @@ export async function POST(request) {
       return Response.json({ ok:true, entries: srvPublicEntries(entries.filter(e=>e.name!==body.name), await srvHidePicksNow(poolId)) });
     }
 
+    // FINGERPRINT_V218_VENMO — commissioner: Venmo username + "trust I've paid"
+    if (body.action === 'set-venmo') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId);
+      if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
+      if (body.venmoUser !== undefined) {
+        const v = String(body.venmoUser || '').trim().replace(/^@/, '');
+        if (v && !/^[A-Za-z0-9_-]{5,30}$/.test(v)) return Response.json({ error:'That doesn’t look like a Venmo username (5–30 letters, numbers, - or _)' }, { status:400 });
+        if (v) meta.venmoUser = v; else delete meta.venmoUser;
+      }
+      if (body.trustPaid !== undefined) meta.trustPaid = !!body.trustPaid;
+      await redis('SET', k(poolId, 'meta'), JSON.stringify(meta));
+      return Response.json({ ok:true, venmoUser: meta.venmoUser || '', trustPaid: !!meta.trustPaid });
+    }
+    // player: "I've paid" — only for their OWN entry (name + its code, which their account hands the page)
+    if (body.action === 'i-paid') {
+      const entries = await getEntries(poolId);
+      const entry = entries.find(e => e.name.toLowerCase() === String(body.name || '').toLowerCase()
+        && e.editCode?.toUpperCase() === String(body.code || '').toUpperCase());
+      if (!entry) return Response.json({ error:'Sign in as this entry first' }, { status:401 });
+      const meta = await getPoolMeta(poolId), payments = await getPayments(poolId);
+      if (payments[entry.name]) return Response.json({ ok:true, status:'paid' });
+      if (meta?.trustPaid) {
+        payments[entry.name] = true; await savePayments(poolId, payments);
+        return Response.json({ ok:true, status:'paid' });
+      }
+      const pp = await getPayPending(poolId);
+      pp[entry.name] = { at: new Date().toISOString() };
+      await redis('SET', k(poolId, 'paypending'), JSON.stringify(pp));
+      try { await srvPushMany(poolId, [{ name: '__admin__', type: 'unpaid', payload: { title: `💵 ${entry.name} says they've paid`,
+        body: `$${meta?.entryFee || ''} — confirm it in Admin → Entries & Payments.`.replace('$ ', ''),
+        url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}?tab=admin`, tag: `paid-${poolId}` } }]); } catch {}
+      return Response.json({ ok:true, status:'pending' });
+    }
+    // commissioner: confirm (or not) a reported payment
+    if (body.action === 'confirm-paid') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const pp = await getPayPending(poolId);
+      delete pp[body.entryName];
+      await redis('SET', k(poolId, 'paypending'), JSON.stringify(pp));
+      const payments = await getPayments(poolId);
+      if (body.received) { payments[body.entryName] = true; await savePayments(poolId, payments); }
+      return Response.json({ ok:true, payments, payPending: Object.keys(pp) });
+    }
+
     if (body.action==='mark-paid'||body.action==='mark-unpaid') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       if (!body.entryName) return Response.json({ error:'entryName required' }, { status:400 });
       const payments = await getPayments(poolId);
       payments[body.entryName] = body.action==='mark-paid';
       await savePayments(poolId, payments);
+      { const pp = await getPayPending(poolId); if (pp[body.entryName]) { delete pp[body.entryName]; await redis('SET', k(poolId,'paypending'), JSON.stringify(pp)); } }
       return Response.json({ ok:true, payments });
     }
 
@@ -3711,7 +3760,7 @@ export async function POST(request) {
         redis('DEL', k(poolId,'entries')),
         redis('DEL', k(poolId,'locked')),
         redis('DEL', k(poolId,'picks_hidden')),
-        redis('DEL', k(poolId,'payments')),
+        redis('DEL', k(poolId,'payments')), redis('DEL', k(poolId,'paypending')),
       ]);
       return Response.json({ ok:true, entries:[], payments:{} });
     }
