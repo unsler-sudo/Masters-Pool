@@ -1,5 +1,5 @@
 'use client';
-// build: festive-same-v327-20261005-1845
+// build: festive-art-v329-20261005-2000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -468,29 +468,32 @@ function gpEmojiSetup() {
   document.head.appendChild(css);
 }
 // FINGERPRINT_V325_FESTIVE — holiday decorations for PGA Tour pools, around the EDGES of the screen.
-// Halloween Oct 15–Nov 1 · Thanksgiving Nov 2–30 · Christmas all December. Never blocks taps (pointer-events none),
+// Halloween Oct 1–Nov 1 · Thanksgiving Nov 2–30 · Christmas all December. Never blocks taps (pointer-events none),
 // corner pieces only on wide screens, still (no falling) for people who turned on "reduce motion".
 // Preview any time with ?season=halloween | thanksgiving | christmas.
 const gpSeasonFor = (d) => { const m = d.getMonth() + 1, day = d.getDate();
-  if ((m === 10 && day >= 15) || (m === 11 && day === 1)) return 'halloween';
+  if (m === 10 || (m === 11 && day === 1)) return 'halloween';
   if (m === 11) return 'thanksgiving';
   if (m === 12) return 'christmas';
   return null; };
+// Artwork: Microsoft Fluent Emoji (3D), MIT License © Microsoft — hosted in /public/festive (see CREDITS.txt there)
 const GP_FESTIVE = {
-  halloween:    { label:'🎃 Halloween', falling:['🦇','👻','🦇','🍬'], dir:'up', corners:['🕸️','🎃'],
-    stripes:'repeating-linear-gradient(45deg,#ff7a00 0 10px,#1a1a1a 10px 20px)', flags:['#ff7a00','#5b2a86','#1a1a1a','#ff7a00','#5b2a86'], garland:['🎃','🦇','👻','🕸️'] },
-  thanksgiving: { label:'🦃 Thanksgiving', falling:['🍂','🍁','🍂','🍁'], dir:'down', corners:['🦃','🌽'],
-    stripes:'linear-gradient(180deg,#b33a1e,#d98c2b 35%,#8a5a2b 70%,#c0572b)', flags:['#b33a1e','#d98c2b','#8a5a2b','#c0572b','#e0a53a'], garland:['🍂','🦃','🍁','🌽'] },
-  christmas:    { label:'🎄 Christmas', falling:['❄️','❄','❅','❄️'], dir:'down', corners:['🎄','🎁'],
+  halloween:    { label:'🎃 Halloween', dir:'up', falling:['bat','ghost','candy','bat'], left:['web'], right:['pumpkin'],
+    stripes:'repeating-linear-gradient(45deg,#ff7a00 0 10px,#1a1a1a 10px 20px)', flags:['#ff7a00','#5b2a86','#1a1a1a','#ff7a00','#5b2a86'], garland:['pumpkin','bat','ghost','candy'] },
+  thanksgiving: { label:'🦃 Thanksgiving', dir:'down', falling:['maple-leaf','fallen-leaf','maple-leaf','fallen-leaf'], left:['turkey','corn'], right:['pie'],
+    stripes:'linear-gradient(180deg,#b33a1e,#d98c2b 35%,#8a5a2b 70%,#c0572b)', flags:['#b33a1e','#d98c2b','#8a5a2b','#c0572b','#e0a53a'], garland:['fallen-leaf','turkey','maple-leaf','corn','pie'] },
+  christmas:    { label:'🎄 Christmas', dir:'down', falling:['snowflake'], left:['tree','gift'], right:['snowman','star'],
     stripes:'repeating-linear-gradient(45deg,#d42426 0 10px,#ffffff 10px 20px)', lights:['#ff3b30','#34c759','#ffcc00','#0a84ff','#ff9f0a'] },
 };
+const gpArt = (name, size, extra) => <img src={`/festive/${name}.png`} alt="" width={size} height={size} draggable={false}
+  style={{display:'block',width:size,height:size,userSelect:'none',...(extra||{})}}/>;
 function GpFestive({ season }) {
   const S = GP_FESTIVE[season]; if (!S) return null;
   const rnd = (i, k) => { const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };   // deterministic
   const parts = Array.from({ length: 16 }, (_, i) => {
     const side = i % 2 === 0, edge = rnd(i, 1) * 9;   // keep to the outer ~9% each side
-    return { left: side ? edge : 100 - edge - 3, size: 14 + Math.round(rnd(i, 2) * 12), dur: 9 + rnd(i, 3) * 9,
-      delay: -rnd(i, 4) * 18, sway: 10 + rnd(i, 5) * 25, ch: S.falling[i % S.falling.length] }; });
+    return { left: side ? edge : 100 - edge - 3, size: 18 + Math.round(rnd(i, 2) * 14), dur: 9 + rnd(i, 3) * 9,
+      delay: -rnd(i, 4) * 18, sway: 10 + rnd(i, 5) * 25, art: S.falling[i % S.falling.length] }; });
   const css = `
   @keyframes gpFall{0%{transform:translate(0,-12vh) rotate(0)}50%{transform:translate(var(--sw),48vh) rotate(180deg)}100%{transform:translate(0,112vh) rotate(360deg)}}
   @keyframes gpRise{0%{transform:translate(0,112vh)}50%{transform:translate(var(--sw),50vh)}100%{transform:translate(0,-12vh)}}
@@ -516,16 +519,16 @@ function GpFestive({ season }) {
         : <div style={{display:'flex',justifyContent:'space-between'}}>
             {Array.from({length:18},(_,i)=><span key={i} style={{position:'relative',width:26,height:30,display:'block'}}>
               <span style={{position:'absolute',inset:0,background:S.flags[i%S.flags.length],clipPath:'polygon(0 0,100% 0,50% 100%)',opacity:.9}}/>
-              <span className="gpf-bob" style={{position:'absolute',left:0,right:0,top:2,textAlign:'center',fontSize:12,animationDelay:`${(i%4)*0.4}s`}}>{S.garland[i%S.garland.length]}</span></span>)}
+              <span className="gpf-bob" style={{position:'absolute',left:0,right:0,top:1,display:'flex',justifyContent:'center',animationDelay:`${(i%4)*0.4}s`}}>{gpArt(S.garland[i%S.garland.length],16)}</span></span>)}
           </div>}
     </div>
     {/* edges, falling pieces and corners — fixed, behind the tabs and every popup, never taking a tap */}
     <div aria-hidden="true" style={{position:'fixed',inset:0,pointerEvents:'none',zIndex:3,overflow:'hidden'}}>
       <div style={{position:'absolute',top:0,bottom:0,left:0,width:7,background:S.stripes,opacity:.9}}/>
       <div style={{position:'absolute',top:0,bottom:0,right:0,width:7,background:S.stripes,opacity:.9}}/>
-      {parts.map((pt,i)=><span key={i} className={`gpf-part ${S.dir}`} style={{left:`${pt.left}%`,fontSize:pt.size,animationDuration:`${pt.dur}s`,animationDelay:`${pt.delay}s`,['--sw']:`${i%2?-pt.sway:pt.sway}px`}}>{pt.ch}</span>)}
-      <span className="gpf-corner" style={{position:'absolute',left:14,bottom:10,fontSize:46}}>{S.corners[0]}</span>
-      <span className="gpf-corner" style={{position:'absolute',right:14,bottom:10,fontSize:46}}>{S.corners[1]}</span>
+      {parts.map((pt,i)=><span key={i} className={`gpf-part ${S.dir}`} style={{left:`${pt.left}%`,animationDuration:`${pt.dur}s`,animationDelay:`${pt.delay}s`,['--sw']:`${i%2?-pt.sway:pt.sway}px`}}>{gpArt(pt.art,pt.size)}</span>)}
+      <span className="gpf-corner" style={{position:'absolute',left:16,bottom:10}}><span style={{display:'flex',alignItems:'flex-end',gap:2}}>{S.left.map((n,i)=><span key={n}>{gpArt(n,i?40:60)}</span>)}</span></span>
+      <span className="gpf-corner" style={{position:'absolute',right:16,bottom:10}}><span style={{display:'flex',alignItems:'flex-end',gap:2}}>{S.right.map((n,i)=><span key={n}>{gpArt(n,i?40:60)}</span>)}</span></span>
     </div>
   </>;
 }
