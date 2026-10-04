@@ -231,7 +231,7 @@ export default function LandingPage() {
             <button type="button" onClick={()=>{signOut();setStep('home');}} style={{background:'none',border:'none',color:'#6b7280',cursor:'pointer',fontSize:13,textDecoration:'underline'}}>Sign out</button>
           </div>
           <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:800,color:'#1a2a5c',margin:'4px 0 2px'}}>My pools</h2>
-          <p style={{color:'#6b7280',fontSize:13,margin:'0 0 16px'}}>Signed in as <b>{acct.name}</b> · {acct.email}</p>
+          <p style={{color:'#6b7280',fontSize:13,margin:'0 0 16px',display:'flex',alignItems:'center',gap:8}}>{acct.photo&&<img src={acct.photo} alt="" referrerPolicy="no-referrer" onError={e=>{e.currentTarget.style.display='none';}} style={{width:24,height:24,borderRadius:'50%',objectFit:'cover'}}/>}<span>Signed in as <b>{acct.name}</b> · {acct.email}</span></p>
           {runs.length>0&&<><div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:'#9ca3af',textTransform:'uppercase',margin:'8px 0 2px'}}>Pools you run</div>{runs.map(row)}</>}
           {plays.length>0&&<><div style={{fontSize:11,fontWeight:700,letterSpacing:1,color:'#9ca3af',textTransform:'uppercase',margin:'18px 0 2px'}}>Pools you play in</div>{plays.map(row)}</>}
           {myPools.length===0&&<div style={{textAlign:'center',padding:'20px 0',color:'#6b7280',fontSize:14}}>No pools yet. Create one, or open a pool link a friend sent you — it'll show up here.</div>}
@@ -304,6 +304,7 @@ export default function LandingPage() {
       </div>}
       {acct&&<div style={{maxWidth:520,margin:'0 auto',padding:'16px 20px 0'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,fontSize:13,color:'rgba(255,255,255,.75)',marginBottom:10}}>
+          {acct.photo&&<img src={acct.photo} alt="" referrerPolicy="no-referrer" onError={e=>{e.currentTarget.style.display='none';}} style={{width:28,height:28,borderRadius:'50%',objectFit:'cover'}}/>}
           <span style={{flex:1}}>Signed in as <b style={{color:'#fff'}}>{acct.name}</b></span>
           <button type="button" onClick={()=>setStep('mypools')} style={{background:'#fff',color:'#1a2a5c',border:'none',borderRadius:8,padding:'7px 12px',fontWeight:700,fontSize:13,cursor:'pointer'}}>My pools →</button>
           <button type="button" onClick={signOut} style={{background:'none',border:'none',color:'rgba(255,255,255,.75)',textDecoration:'underline',cursor:'pointer',fontSize:13}}>Sign out</button>
