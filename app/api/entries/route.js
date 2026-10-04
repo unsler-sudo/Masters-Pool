@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: login-link-v215-20261004-2130
+// build: my-record-v216-20261004-2200
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -417,7 +417,7 @@ async function srvSeason(poolId, yearIn) {
     do {
       const res = await redis('SCAN', cursor, 'MATCH', k(poolId, 'archive:*-*'), 'COUNT', 100);
       if (!Array.isArray(res) || res.length !== 2) break;
-      cursor = res[0]; (res[1] || []).forEach(x => keys.push(x));
+      cursor = res[0]; (res[1] || []).forEach(x => { if (!x.endsWith(':recap')) keys.push(x); });
     } while (cursor !== '0');
   } catch {}
   const raws = keys.length ? await redis('MGET', ...keys) : [];
@@ -505,7 +505,8 @@ async function srvSendRecap(poolId, archiveKey) {
   const res = srvArchiveResults(a, meta);
   const pts = a.scoring === 'points' || a.scoring === 'matchpicks';
   if (!res.length || (!pts && !res.some(r => r.total > 0))) return 0;   // nothing real to report yet
-  if (!(await redis('SET', `${archiveKey}:recap`, '1', 'NX', 'EX', String(60 * 86400)))) return 0;   // once only
+  // FINGERPRINT_V216 — marker lives OUTSIDE the pool's archive:* names, so History searches never pick it up
+  if (!(await redis('SET', `recapsent:${archiveKey}`, '1', 'NX', 'EX', String(60 * 86400)))) return 0;   // once only
   const label = a.eventName || SRV_MAJOR_LABEL[a.major] || 'the tournament';
   const poolName = meta?.poolName || 'Your pool';
   const poolUrl = `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`;
@@ -549,6 +550,62 @@ async function srvSendRecap(poolId, archiveKey) {
   const sent = await srvResendBatch(out);
   console.log(`[recap] ${poolId} ${label}: ${sent} sent`);
   return sent;
+}
+
+// FINGERPRINT_V216_MY_RECORD — a player's whole history: every finished week, in every pool they've played,
+// found by account or by the email they entered with, ranked with History's exact rules (srvArchiveResults).
+async function srvLoadArchives(poolId) {
+  const keys = [];
+  for (const m of ['players', 'masters', 'pga', 'usopen', 'open']) for (let y = 2024; y <= new Date().getFullYear() + 1; y++) keys.push(k(poolId, `archive:${m}_${y}`));
+  try {
+    let cursor = '0';
+    do {
+      const res = await redis('SCAN', cursor, 'MATCH', k(poolId, 'archive:*-*'), 'COUNT', 200);
+      if (!Array.isArray(res) || res.length !== 2) break;
+      cursor = res[0]; (res[1] || []).forEach(x => { if (!x.endsWith(':recap')) keys.push(x); });
+    } while (cursor !== '0');
+  } catch {}
+  const raws = keys.length ? await redis('MGET', ...keys) : [];
+  return raws.map(r => { try { return r ? JSON.parse(r) : null; } catch { return null; } }).filter(a => a && Array.isArray(a.entries));
+}
+async function srvMyRecord(user, extraPoolId) {
+  const pools = new Set((await redis('SMEMBERS', `user:${user.uid}:pools`)) || []);
+  if (extraPoolId) pools.add(extraPoolId);
+  const email = String(user.email || '').toLowerCase().trim();
+  const rows = [];
+  for (const pid of pools) {
+    const meta = await getPoolMeta(pid);
+    if (!meta) continue;
+    for (const a of await srvLoadArchives(pid)) {
+      const res = srvArchiveResults(a, meta);
+      const pts = a.scoring === 'points' || a.scoring === 'matchpicks';
+      const kind = pts ? 'cup' : a.major === 'dpworld' ? 'dpworld' : (a.major === 'pgatour' || a.major === 'players') ? 'pgatour' : 'majors';
+      for (const r of res) {
+        const mine = r.entry.uid === user.uid || (email && String(r.entry.email || '').toLowerCase().trim() === email);
+        if (!mine) continue;
+        rows.push({
+          poolId: pid, poolName: meta.poolName || 'Golf pool', event: a.eventName || SRV_MAJOR_LABEL[a.major] || a.major,
+          year: +a.year || null, kind, date: a.tournamentDate || a.archivedAt || '', entry: r.entry.name,
+          place: r.place, field: res.length, total: r.total, pts, prize: Math.round((r.prize || 0) * 100) / 100,
+          picks: pts ? [] : (r.entry.picks || []).map(p => ({ name: p, earned: +(a.earnings || {})[p] || 0 })).sort((x, y) => y.earned - x.earned),
+        });
+      }
+    }
+  }
+  rows.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  // career summary
+  const n = rows.length, wins = rows.filter(r => r.place === 1).length, top3 = rows.filter(r => r.place <= 3).length;
+  const won = Math.round(rows.reduce((t, r) => t + r.prize, 0) * 100) / 100;
+  const best = n ? Math.min(...rows.map(r => r.place)) : null;
+  const avg = n ? Math.round(rows.reduce((t, r) => t + r.place, 0) / n) : null;
+  const count = {}; let bestPick = null;
+  for (const r of rows) for (const p of r.picks) {
+    count[p.name] = (count[p.name] || 0) + 1;
+    if (!bestPick || p.earned > bestPick.earned) bestPick = { name: p.name, earned: p.earned, event: r.event, year: r.year };
+  }
+  const fav = Object.entries(count).sort((x, y) => y[1] - x[1])[0];
+  return { rows, summary: { entries: n, wins, top3, won, best, avg,
+    favorite: fav ? { name: fav[0], times: fav[1] } : null, bestPick: bestPick && bestPick.earned > 0 ? bestPick : null } };
 }
 
 async function srvNotifyTick() {
@@ -1883,6 +1940,17 @@ export async function POST(request) {
       return Response.json({ ok:true, joinCode: am?.joinCode || '', hasPassword: !!am?.adminPassword, ownedPool: !!am?.ownerUid });   // FINGERPRINT_V198/V214 — Admin only
     }
 
+    // FINGERPRINT_V216_MY_RECORD — the signed-in player's own record across all their pools (cached 10 min)
+    if (body.action === 'my-record') {
+      const user = await verifyToken(body.auth);
+      if (!user) return Response.json({ error:'Please sign in', signedOut:true }, { status:401 });
+      const ck = `myrecord:${user.uid}`;
+      if (!body.fresh) { try { const c = await redis('GET', ck); if (c) return Response.json({ ok:true, cached:true, ...JSON.parse(c) }); } catch {} }
+      const rec = await srvMyRecord(user, poolId);
+      try { await redis('SETEX', ck, 600, JSON.stringify(rec)); } catch {}
+      return Response.json({ ok:true, ...rec });
+    }
+
     // FINGERPRINT_V198_PRIVACY — your own picks (read-only, works after lock), for when picks are hidden
     if (body.action === 'my-entry') {
       const entries = await getEntries(poolId);
@@ -2207,7 +2275,7 @@ export async function POST(request) {
           const res = await redis('SCAN', cursor, 'MATCH', pat, 'COUNT', '100');
           if (Array.isArray(res) && res.length === 2) {
             cursor = res[0];
-            (res[1] || []).forEach(key => keysToCheck.push(key));
+            (res[1] || []).forEach(key => { if (!key.endsWith(':recap')) keysToCheck.push(key); });
           } else break;
         } while (cursor !== '0');
 
@@ -3458,6 +3526,7 @@ export async function POST(request) {
           if (Array.isArray(res) && res.length === 2) {
             cursor = res[0];
             for (const archiveKey of res[1] || []) {
+              if (archiveKey.endsWith(':recap')) continue;   // FINGERPRINT_V216 — old recap markers aren't weeks
               try {
                 const r = await redis('GET', archiveKey);
                 if (r) archives.push({ ...JSON.parse(r), payments:{} });
