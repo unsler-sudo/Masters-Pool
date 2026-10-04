@@ -155,9 +155,9 @@ export default function LandingPage() {
           <a href={result.poolUrl} style={{display:'block',textAlign:'center',color:'#1a2a5c',fontSize:14,fontWeight:600,textDecoration:'none',marginTop:8}}>
             Go to your pool →
           </a>
-          <div style={{marginTop:20,padding:12,background:'#fef3cd',borderRadius:8,fontSize:12,color:'#856404',textAlign:'left'}}>
-            <b>Save your admin password:</b> <code style={{background:'#fff',padding:'1px 6px',borderRadius:4}}>{form.adminPassword}</code><br/>
-            You'll need this to manage entries and settings.
+          <div style={{marginTop:20,padding:12,background:'#f0f9ff',borderRadius:8,fontSize:12,color:'#0c4a6e',textAlign:'left',lineHeight:1.5}}>
+            You run this pool from your account — open it any time from <b>My pools</b>, and tap your profile for <b>Commissioner settings</b>.
+            {form.adminPassword?.trim()&&<><br/><b>Backup admin password</b> (for a co-commissioner): <code style={{background:'#fff',padding:'1px 6px',borderRadius:4}}>{form.adminPassword}</code></>}
           </div>
         </div>
       </div>
@@ -347,20 +347,24 @@ export default function LandingPage() {
       </div>
       <div style={{maxWidth:760,margin:'0 auto',padding:'0 20px 16px',textAlign:'center'}}>
         <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,marginBottom:6}}>Everything your pool needs</h2>
-        <div style={{fontSize:13,opacity:.6,marginBottom:22}}>No app to download, no accounts — players just open your link.</div>
+        <div style={{fontSize:13,opacity:.6,marginBottom:22}}>Players open your link, sign up free in seconds, and they're in — no codes to remember.</div>
       </div>
       <div style={{maxWidth:760,margin:'0 auto',padding:'0 20px 60px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12}}>
         {[
           { emoji:'💰', title:'Live Money Leaderboard', desc:'Real prize-money earnings, updated every 60 seconds and calculated from each event\'s official payout structure' },
           { emoji:'🎯', title:'Tiered Picks', desc:'Favorites, contenders and longshots — everyone gets a few stars and has to find some sleepers' },
-          { emoji:'🌍', title:'Majors, PGA Tour & DP World', desc:'All five majors plus any weekly PGA Tour or DP World Tour event, each branded automatically' },
-          { emoji:'🇺🇸', title:'Presidents Cup & Ryder Cup', desc:'A match pick\'em with auto-posted pairings, daily picks, pick splits and a live cup score' },
+          { emoji:'🌍', title:'Majors, PGA Tour & DP World', desc:'All four majors and the Players, plus any weekly PGA Tour or DP World Tour event — branded automatically, purses filled in for you' },
+          { emoji:'🇺🇸', title:'Presidents Cup & Ryder Cup', desc:'A match pick\'em with auto-posted pairings, matches that lock at their own tee time, pick splits and a live cup score' },
+          { emoji:'🏆', title:'Season Standings', desc:'Season-long races for the majors, PGA Tour and DP World — plus every player\'s own career record' },
+          { emoji:'👤', title:'One Account', desc:'Players sign in once with Google, Apple or email — their entries, history and winnings follow them' },
+          { emoji:'🔔', title:'Notifications & Recaps', desc:'Lock reminders, the cut, round recaps and final results — by phone notification and email' },
+          { emoji:'📲', title:'Works Like an App', desc:'Add it to your Home Screen for one-tap access, notifications and dark mode' },
+          { emoji:'💸', title:'Pay with Venmo', desc:'Players pay the entry fee in a tap — Venmo opens with the amount and note filled in' },
           { emoji:'📋', title:'Scorecards & Pairings', desc:'Tap any golfer for his photo and hole-by-hole card. Tee times show in your own timezone' },
-          { emoji:'💬', title:'Pool Chat', desc:'Built-in trash talk with reactions, unread counts and read receipts' },
+          { emoji:'💬', title:'Pool Chat', desc:'Built-in trash talk with reactions, @mentions, unread counts and read receipts' },
           { emoji:'📸', title:'Share the Standings', desc:'One tap turns the leaderboard into an image for your group chat' },
-          { emoji:'⚡', title:'Runs Itself', desc:'Locks at the first tee, rotates to the next event, and archives the results' },
-          { emoji:'🔒', title:'Commissioner Tools', desc:'Private link and password, join codes, payment tracking and invites for past players' },
-          { emoji:'📧', title:'Email Updates', desc:'Entry codes, reminders, and alerts when picks open' },
+          { emoji:'⚡', title:'Runs Itself', desc:'Locks at the first tee, rotates to the next event, archives the results and emails everyone a recap' },
+          { emoji:'🔒', title:'Commissioner Tools', desc:'Run it from your account — join codes, payment tracking, late entries, invites and a co-commissioner password' },
           { emoji:'📚', title:'History', desc:'Every event\'s final standings and payouts, archived season by season' },
         ].map(f=>(
           <div key={f.title} style={{background:'rgba(255,255,255,.07)',borderRadius:12,padding:'18px 16px',backdropFilter:'blur(10px)',border:'1px solid rgba(255,255,255,.1)'}}>
@@ -375,8 +379,8 @@ export default function LandingPage() {
           <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,marginBottom:28}}>How it works</h2>
           <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:20,textAlign:'center'}}>
             {[
-              { n:'1', title:'Create your pool', desc:'Name it, set a password, and choose majors, PGA Tour or DP World Tour' },
-              { n:'2', title:'Share the link', desc:'Friends open it, enter their name and make their picks — no account needed' },
+              { n:'1', title:'Create your pool', desc:'Sign in, name it, and choose majors, PGA Tour or DP World Tour' },
+              { n:'2', title:'Share the link', desc:'Friends open it, sign up free in seconds and make their picks' },
               { n:'3', title:'Watch & win', desc:'The leaderboard updates live, then the pool rolls on to the next event' },
             ].map(s=>(
               <div key={s.n}>
