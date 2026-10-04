@@ -1,5 +1,5 @@
 'use client';
-// build: profile-menu-v303-20261004-2000
+// build: backup-pw-v305-20261004-2100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1315,6 +1315,7 @@ export default function App(){
   const [entryEmail,setEntryEmail]=useState('');
   const [editMode,setEditMode]=useState(false);
   const [addAnother,setAddAnother]=useState(false);
+  const [newAdminPw,setNewAdminPw]=useState('');          // FINGERPRINT_V305 — backup admin password field
   const [ownPicks,setOwnPicks]=useState(null);            // FINGERPRINT_V280 — your picks while picks are hidden
   const [hsTick,setHsTick]=useState(0);
   // FINGERPRINT_V283_ACCOUNTS — signed-in account (token kept on this device for 90 days)
@@ -3272,7 +3273,7 @@ export default function App(){
       if(d.owner){
         const pw='acct:'+acctToken;
         const v=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'verify-admin',password:pw})}).then(r=>r.json()).catch(()=>null);
-        if(v?.ok){ setAdminPw(pw); setAdminOk(true); setOwnerAdmin(true); setPoolMeta(prev=>({...(prev||{}),joinCode:v.joinCode||''})); }
+        if(v?.ok){ setAdminPw(pw); setAdminOk(true); setOwnerAdmin(true); setPoolMeta(prev=>({...(prev||{}),joinCode:v.joinCode||'',hasAdminPassword:!!v.hasPassword,ownedPool:!!v.ownedPool})); }
       }
     }catch{} })();
   },[acctToken,poolId]);
@@ -4455,9 +4456,6 @@ export default function App(){
               :<div style={{position:'absolute',top:8,left:'50%',transform:'translateX(-50%)',background:'#fff',borderRadius:8,padding:'5px 10px',boxShadow:'0 3px 8px rgba(0,0,0,.4)',pointerEvents:'none'}}><img src={logoSrc} alt="Pool logo" style={{height:logoHeight,width:'auto',display:'block'}} onError={onLogoError}/></div>;
           })()}
           <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,position:'relative'}}>
-            <button type="button" onClick={()=>setTab('Admin')} aria-label="Admin settings" style={{position:'absolute',top:-8,right:-4,background:'#ffffff18',border:'1px solid #ffffff20',borderRadius:'50%',width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',padding:0,backdropFilter:'blur(4px)'}}>
-              <span style={{fontSize:14,filter:'grayscale(.3)'}}>⚙</span>
-            </button>
             <div style={{background:'#ffffff18',borderRadius:10,padding:'2px 8px',fontSize:10,fontWeight:600,backdropFilter:'blur(4px)',border:'1px solid #ffffff15',whiteSpace:'nowrap',marginTop:24}}>{entries.length} {entries.length===1?'entry':'entries'}</div>
             {countdown&&<div style={{fontSize:10,opacity:.7}}>⏱ {countdownShort}</div>}
             {lastUp&&!countdown&&<div style={{display:'flex',alignItems:'center',gap:4}}><div style={{width:6,height:6,borderRadius:'50%',background:'#4ade80',animation:'glow 2s infinite'}}/><span style={{fontSize:9,opacity:.5}}>Live · {lastUp}</span></div>}
@@ -5976,13 +5974,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               <input style={inp} type="password" placeholder="Password" value={adminPw} onChange={e=>{setAdminPw(e.target.value);setAdminAuthError('');}} onKeyDown={async e=>{
                 if(e.key==='Enter'){
                   const d=await adminAction('verify-admin',{});
-                  if(d?.ok){setAdminOk(true);setPoolMeta(prev=>({...(prev||{}),joinCode:d.joinCode||''}));}
+                  if(d?.ok){setAdminOk(true);setPoolMeta(prev=>({...(prev||{}),joinCode:d.joinCode||'',hasAdminPassword:!!d.hasPassword,ownedPool:!!d.ownedPool}));}
                   else setAdminAuthError('Wrong password');
                 }
               }}/>
               <button type="button" style={{...pri,padding:'10px 24px',minWidth:80}} onClick={async()=>{
                 const d=await adminAction('verify-admin',{});
-                if(d?.ok){setAdminOk(true);setPoolMeta(prev=>({...(prev||{}),joinCode:d.joinCode||''}));}
+                if(d?.ok){setAdminOk(true);setPoolMeta(prev=>({...(prev||{}),joinCode:d.joinCode||'',hasAdminPassword:!!d.hasPassword,ownedPool:!!d.ownedPool}));}
                 else setAdminAuthError('Wrong password');
               }}>Enter</button>
             </div>
@@ -6311,6 +6309,24 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </div>
               </div>
             </div>
+            {/* FINGERPRINT_V305_BACKUP_PW — set, change or remove the backup admin password */}
+            <div style={sec}><h3 style={stl}>🔑 Backup admin password</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>Lets a co-commissioner run this pool without your account — they use the <b>Commissioner login</b> link at the bottom of the page.{poolMeta?.ownedPool?' You never need it yourself.':''}</p>
+              <div style={{fontSize:13,marginBottom:8}}>Status: <b style={{color:poolMeta?.hasAdminPassword?'#2d7a1e':'#8a9580'}}>{poolMeta?.hasAdminPassword?'Set':'Not set'}</b></div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                <input style={{...inp,marginBottom:0,minWidth:160}} type="password" autoComplete="new-password" placeholder={poolMeta?.hasAdminPassword?'New password (6+ characters)':'Choose a password (6+ characters)'} value={newAdminPw} onChange={e=>setNewAdminPw(e.target.value)}/>
+                <button type="button" disabled={newAdminPw.trim().length<6} onClick={async()=>{
+                    const np=newAdminPw.trim(); const d=await adminAction('set-admin-password',{newPassword:np});
+                    if(d?.ok){ if(!String(adminPw).startsWith('acct:')) setAdminPw(np); setPoolMeta(prev=>({...(prev||{}),hasAdminPassword:true})); setNewAdminPw(''); msg('Backup password saved ✓'); }
+                    else msg(d?.error||'Could not save');
+                  }} style={{...pri,opacity:newAdminPw.trim().length<6?.5:1}}>{poolMeta?.hasAdminPassword?'Change':'Set'}</button>
+              </div>
+              {poolMeta?.hasAdminPassword&&poolMeta?.ownedPool&&<button type="button" onClick={async()=>{
+                  if(!confirm('Remove the backup password? Only your account will be able to open Admin.')) return;
+                  const d=await adminAction('set-admin-password',{newPassword:''});
+                  if(d?.ok){ setPoolMeta(prev=>({...(prev||{}),hasAdminPassword:false})); msg('Backup password removed'); } else msg(d?.error||'Could not remove');
+                }} style={{background:'none',border:'none',color:'#a03030',fontSize:12,textDecoration:'underline',cursor:'pointer',padding:0,marginTop:10}}>Remove backup password</button>}
+            </div>
             <div style={sec}><h3 style={stl}>🎨 Custom Pool Logo</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Override the major's default logo with your own. Paste a public image URL (PNG/JPG). Leave blank to use the default major logo.</p>
               <input style={{...inp,marginBottom:6}} type="url" placeholder="https://example.com/my-logo.png" id="customLogoInput" defaultValue={poolMeta?.customLogoUrl||''}/>
@@ -6432,6 +6448,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           {isTeamPool ? 'Pick the winner of every match · 1 pt per correct pick' : TIERS.map(t=>`${t.picks} ${t.name}`).join(' · ')}
         </div>
         <div>{isTeamPool ? 'Most points wins · a halved match is worth ½' : 'Highest combined earnings wins'}</div>
+        {/* FINGERPRINT_V304 — the way into Admin for co-commissioners (the pool's owner uses the profile menu) */}
+        {tab!=='Admin'&&<div style={{marginTop:12}}>
+          <button type="button" onClick={()=>{setTab('Admin');try{window.scrollTo(0,0);}catch{}}}
+            style={{background:'none',border:'none',color:'#a3ac98',fontSize:10,textDecoration:'underline',cursor:'pointer',padding:0}}>Commissioner login</button>
+        </div>}
       </footer>
     </div>
   );
