@@ -1,5 +1,5 @@
 'use client';
-// build: venmo-brand-v317-20261005-1330
+// build: pay-anywhere-v318-20261005-1400
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1390,6 +1390,7 @@ export default function App(){
   const [ownerAdmin,setOwnerAdmin]=useState(false);
   const [payPending,setPayPending]=useState([]);          // FINGERPRINT_V316_VENMO — said "I've paid", awaiting confirmation
   const [venmoInput,setVenmoInput]=useState(null);
+  const [payFor,setPayFor]=useState(null);                // FINGERPRINT_V318 — payment panel for one of your entries
   const [photoBroken,setPhotoBroken]=useState(false);     // FINGERPRINT_V311 — Google photo failed to load       // FINGERPRINT_V285_OWNER — Admin via your account
   const [myPools,setMyPools]=useState([]);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
   const [editCode,setEditCode]=useState('');
@@ -3361,6 +3362,7 @@ export default function App(){
     else if(d?.status==='pending'){ setPayPending(l=>[...new Set([...(l||[]),name])]); msg('Thanks — your commissioner will confirm it'); }
     else msg(d?.error||'Could not update — try again');
   };
+  const isMine=(name)=>(acctEntries||[]).some(x=>x.name===name)||(chatVerified&&chatName===name);
   const payRow=(name,compact)=>{
     if(paymentsHidden||!name) return null;
     const fee=+poolMeta?.entryFee||0, paid=!!payments[name], pending=(payPending||[]).includes(name), vu=poolMeta?.venmoUser;
@@ -4642,6 +4644,16 @@ export default function App(){
             <button type="button" onClick={hidePush} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
           </div>
         : null)}
+      {/* FINGERPRINT_V318 — payment panel from your own Unpaid badge */}
+      {payFor&&<div onClick={()=>setPayFor(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:175,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,borderRadius:'16px 16px 0 0',padding:'16px 16px 26px',textAlign:'center'}}>
+          <div style={{display:'flex',alignItems:'center',marginBottom:4}}>
+            <div style={{flex:1,textAlign:'left',fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary}}>💵 Entry fee — {payFor}</div>
+            <button type="button" onClick={()=>setPayFor(null)} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
+          </div>
+          {payments[payFor]?<div style={{fontSize:14,fontWeight:700,color:'#2d7a1e',padding:'12px 0'}}>Paid ✓ — thanks!</div>:payRow(payFor,false)}
+        </div>
+      </div>}
       {gpDark&&<style>{gpDarkCss(T)}</style>}{/* FINGERPRINT_V313_DARK — the dark layer, only while dark */}
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
@@ -4830,6 +4842,16 @@ export default function App(){
                   <div style={{fontSize:11,color:'#8a9580',marginTop:2}}>Signs in with {[acct.hasPassword&&'email',acct.google&&'Google',acct.apple&&'Apple'].filter(Boolean).join(' · ')||'email'}</div>
                 </div>
               </div>
+              {/* FINGERPRINT_V318 — your entry fee, while unpaid */}
+              {(()=>{
+                if(paymentsHidden||!((+poolMeta?.entryFee||0)>0)) return null;
+                const mine=[...new Set([...(acctEntries||[]).map(x=>x.name),...(chatVerified&&chatName?[chatName]:[])])].filter(n=>entries.some(e=>e.name===n)&&!payments[n]);
+                if(!mine.length) return null;
+                return <div style={{border:'1px solid #f0c060',background:'#fff8e6',borderRadius:10,padding:'10px 12px',marginBottom:12,textAlign:'center'}}>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#7a5500',textTransform:'uppercase',marginBottom:2}}>💵 Entry fee</div>
+                  {mine.map(n=><div key={n} style={{padding:'4px 0'}}>{mine.length>1&&<div style={{fontSize:13,fontWeight:700,color:'#2a3a1e'}}>{n}</div>}{payRow(n,false)}</div>)}
+                </div>;
+              })()}
               {/* your details — read-only, with an Edit pencil */}
               <div style={{border:`1px solid ${T.cardBorder}`,borderRadius:10,padding:'2px 12px 8px'}}>
                 <div style={{display:'flex',alignItems:'center',padding:'8px 0 6px'}}>
@@ -5107,11 +5129,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       {/* FINGERPRINT_V193_UNPAID_BLINK — nag unpaid entries once R1 is in the books */}
                       {!paymentsHidden&&(()=>{
                         const nag = !paid && (isTeamPool ? firstSessionDone : roundOneComplete);
-                        return <span title={nag?'Still owes the pot':undefined} style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,
+                        const pend = !paid && (payPending||[]).includes(e.name), canPay = !paid && !pend && isMine(e.name) && (+poolMeta?.entryFee||0) > 0;   // FINGERPRINT_V318
+                        if (pend) return <span title="Says they've paid — awaiting the commissioner" style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,background:'#fff8e6',color:'#9a6a00',border:'1px solid #f0c060'}}>⏳ Confirming</span>;
+                        return <span title={canPay?'Tap to pay':nag?'Still owes the pot':undefined} onClick={canPay?(ev)=>{ev.stopPropagation();setPayFor(e.name);}:undefined} style={{cursor:canPay?'pointer':'default',fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,
                           background:paid?'#e8f5e8':(nag?'#fdeaea':'#f5f5f5'),
                           color:paid?'#2d7a1e':(nag?'#c62828':'#aaa'),
                           border:`1px solid ${paid?'#2d7a1e30':(nag?'#c6282866':'#ddd')}`,
-                          animation:nag?'glow 1.1s ease-in-out infinite':'none'}}>{paid?'✓ Paid':'Unpaid'}</span>;
+                          animation:nag?'glow 1.1s ease-in-out infinite':'none'}}>{paid?'✓ Paid':canPay?'Unpaid · Pay ›':'Unpaid'}</span>;
                       })()}
                     </div>
                     <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Picks locked in':'Tap to '+(op?'collapse':'expand')}</div>
