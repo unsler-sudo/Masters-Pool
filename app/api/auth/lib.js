@@ -85,6 +85,7 @@ export async function newUser({ name, email, phone = '', pw = '', google = '', a
   if (!(await redis('SET', `user:email:${email}`, uid, 'NX'))) return null;      // email already has an account
   const u = { uid, name: cleanName(name) || email.split('@')[0], email, phone, pw, google, apple, tv: 0, created: new Date().toISOString() };
   await saveUser(u);
+  try { await redis('SADD', 'users:index', uid); } catch {}       // master list for Platform Admin
   if (google) await redis('SET', `user:google:${google}`, uid);
   if (apple) await redis('SET', `user:apple:${apple}`, uid);
   return u;
@@ -101,6 +102,10 @@ export async function tooMany(key, max, secs) {
   return n > max;
 }
 export const sixDigits = () => String(randomInt(0, 1e6)).padStart(6, '0');
+
+// ── announcement unsubscribe (signed, so nobody can unsubscribe someone else) ──
+export const unsubSig = (email) => createHmac('sha256', SECRET()).update('unsub|' + normEmail(email)).digest('base64url').slice(0, 22);
+export const unsubUrl = (email) => `${BASE_URL}/api/auth?unsub=${encodeURIComponent(normEmail(email))}&s=${unsubSig(email)}`;
 
 // ── email (Resend) ─────────────────────────────────────────────────────────
 export async function sendEmail(to, subject, html) {
