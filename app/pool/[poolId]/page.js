@@ -1,5 +1,5 @@
 'use client';
-// build: record-years-v308-20261004-2230
+// build: claims-v309-20261004-2300
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1335,6 +1335,8 @@ export default function App(){
   const [recKind,setRecKind]=useState('all');
   const [recYear,setRecYear]=useState('all');
   const [recOpen,setRecOpen]=useState(null);
+  const [claimList,setClaimList]=useState(null);           // FINGERPRINT_V309 — entries you can claim
+  const [adminClaims,setAdminClaims]=useState([]);        // FINGERPRINT_V309 — requests for the commissioner
   const [providers,setProviders]=useState({google:false,apple:false});
   const [ownerAdmin,setOwnerAdmin]=useState(false);       // FINGERPRINT_V285_OWNER — Admin via your account
   const [myPools,setMyPools]=useState([]);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
@@ -3288,10 +3290,20 @@ export default function App(){
   },[showAcct,acctToken]);
   useEffect(()=>{
     if(!acctRecordView||!acctToken) return;
-    setRecord(null); setRecOpen(null);
+    setRecord(null); setRecOpen(null); setClaimList(null);
     fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'my-record',auth:acctToken})})
       .then(r=>r.json()).then(d=>setRecord(d?.ok?d:{error:d?.error||'Could not load'})).catch(()=>setRecord({error:'Connection problem'}));
   },[acctRecordView,acctToken,poolId]);
+  const loadClaims=()=>fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'claim-candidates',auth:acctToken})})
+    .then(r=>r.json()).then(d=>setClaimList(d?.ok?d.candidates:[])).catch(()=>setClaimList([]));
+  const claimIt=async(c)=>{
+    const d=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId:c.poolId,action:'claim-entry',auth:acctToken,archiveId:c.archiveId,entryName:c.entryName})}).then(r=>r.json()).catch(()=>null);
+    if(d?.ok){ msg('Request sent — your commissioner will approve it'); setClaimList(l=>(l||[]).map(x=>x===c?{...x,requested:true}:x)); } else msg(d?.error||'Could not send the request');
+  };
+  useEffect(()=>{
+    if(tab!=='Admin'||!adminOk||!adminPw) return;
+    adminAction('claims-list').then(d=>{ if(d?.ok) setAdminClaims(d.claims||[]); }).catch(()=>{});
+  },[tab,adminOk,adminPw]);
   const acctCall=async(body)=>{ setAcctBusy(true); setAcctErr('');
     try{ const d=await authPost(body); if(d.error) setAcctErr(d.error); return d; }
     catch{ setAcctErr('Connection problem — try again'); return {}; }
@@ -4614,6 +4626,24 @@ export default function App(){
                       </div>}
                       </div>
                     </div>;})}
+                  {/* FINGERPRINT_V309_CLAIMS — entries saved without an email/account that the player can claim */}
+                  <div style={{marginTop:18,paddingTop:12,borderTop:`1px dashed ${T.cardBorder}`}}>
+                    {claimList===null
+                      ? <button type="button" onClick={()=>{setClaimList('loading');loadClaims();}} style={{background:'none',border:'none',color:T.primary,fontSize:13,fontWeight:700,cursor:'pointer',padding:0}}>Missing an event? Find your older entries →</button>
+                      : claimList==='loading' ? <div style={{fontSize:13,color:'#8a9580'}}>Looking…</div>
+                      : <>
+                          <div style={{fontSize:12,color:'#6b7c5e',lineHeight:1.45,marginBottom:8}}>These finished entries aren't linked to anyone. If one was yours, tap <b>This was me</b> — your commissioner approves it, then it joins your record.</div>
+                          {claimList.length===0&&<div style={{fontSize:13,color:'#8a9580'}}>No unclaimed entries in your pools.</div>}
+                          {claimList.map((c,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderTop:'1px solid #f0f0ea'}}>
+                            <span style={{flex:1,minWidth:0}}>
+                              <span style={{display:'block',fontSize:13,fontWeight:700,color:'#2a3a1e'}}>“{c.entryName}” · {c.event}{c.year?` ${c.year}`:''}</span>
+                              <span style={{display:'block',fontSize:11,color:'#8a9580'}}>{ord(c.place)} of {c.field} · {c.pts?`${c.total} pts`:big(c.total)} · {c.poolName}</span>
+                            </span>
+                            {c.requested ? <span style={{fontSize:12,color:'#2d7a1e',fontWeight:700,whiteSpace:'nowrap'}}>Requested ✓</span>
+                              : <button type="button" onClick={()=>claimIt(c)} style={{...pri,padding:'6px 10px',fontSize:12,whiteSpace:'nowrap'}}>This was me</button>}
+                          </div>)}
+                        </>}
+                  </div>
                 </>;
               })()}
             </> : acctNotifView ? <>
@@ -6256,6 +6286,20 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             {/* FINGERPRINT_V299_ADMIN_GROUPS */}
             <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>Players</div>
+            {/* FINGERPRINT_V309_CLAIMS — players asking to claim older entries */}
+            {adminClaims.length>0&&<div style={{...sec,borderColor:'#f0c060'}}><h3 style={stl}>🙋 Entry claims ({adminClaims.length})</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>Players asking to link a past entry (saved without an email) to their account. Approving adds it to their record and the season standings.</p>
+              {adminClaims.map(c=><div key={c.id} style={{padding:'8px 0',borderTop:'1px solid #f0f0ea'}}>
+                <div style={{fontSize:13,color:'#2a3a1e',lineHeight:1.45}}><b>{c.accountName}</b> <span style={{color:'#8a9580'}}>({c.email})</span> says <b>“{c.entryName}”</b> in the {c.event}{c.year?` ${c.year}`:''}{c.place?` (${c.place}${['th','st','nd','rd'][((c.place%100)-20)%10]||['th','st','nd','rd'][c.place%100]||'th'})`:''} was theirs.</div>
+                <div style={{display:'flex',gap:8,marginTop:6}}>
+                  {[[true,'Approve'],[false,'Reject']].map(([ok,label])=><button key={label} type="button" onClick={async()=>{
+                      const d=await adminAction('claim-decide',{claimId:c.id,approve:ok});
+                      if(d?.ok){ setAdminClaims(l=>l.filter(x=>x.id!==c.id)); msg(ok?`Linked to ${c.accountName} ✓`:'Request rejected'); }
+                      else { msg(d?.error||'Could not update'); setAdminClaims(l=>l.filter(x=>x.id!==c.id)); }
+                    }} style={ok?{...pri,padding:'6px 14px',fontSize:12}:{background:'#fff',color:'#8b2020',border:'1px solid #8b202060',borderRadius:7,padding:'6px 14px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{label}</button>)}
+                </div>
+              </div>)}
+            </div>}
             {/* FINGERPRINT_V141_INVITE_UI */}
             <div style={sec}><h3 style={stl}>📧 Invite Past Players</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Email everyone who's entered a past pool (and left an email) to join this week's event. Great to run after the pool rotates to a new tournament. Each person gets a personal invite with a link to make their picks.</p>
