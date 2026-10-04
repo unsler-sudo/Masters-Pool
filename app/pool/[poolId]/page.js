@@ -1,5 +1,5 @@
 'use client';
-// build: dark-borders-v315-20261005-1200
+// build: venmo-brand-v317-20261005-1330
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1388,6 +1388,8 @@ export default function App(){
   const [adminClaims,setAdminClaims]=useState([]);        // FINGERPRINT_V309 — requests for the commissioner
   const [providers,setProviders]=useState({google:false,apple:false});
   const [ownerAdmin,setOwnerAdmin]=useState(false);
+  const [payPending,setPayPending]=useState([]);          // FINGERPRINT_V316_VENMO — said "I've paid", awaiting confirmation
+  const [venmoInput,setVenmoInput]=useState(null);
   const [photoBroken,setPhotoBroken]=useState(false);     // FINGERPRINT_V311 — Google photo failed to load       // FINGERPRINT_V285_OWNER — Admin via your account
   const [myPools,setMyPools]=useState([]);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
   const [editCode,setEditCode]=useState('');
@@ -1709,6 +1711,7 @@ export default function App(){
       if(d.picksHidden!==undefined)setServerPicksHidden(d.picksHidden);
       if(d.paymentsHidden!==undefined)setPaymentsHidden(d.paymentsHidden);
       if(d.payments)setPayments(d.payments);
+      if(Array.isArray(d.payPending))setPayPending(d.payPending);
       if(d.meta){setPoolMeta(d.meta);poolMetaRef.current=d.meta;}
       if(d.purses){setDynamicPurses(d.purses); dynamicPursesRef.current=d.purses;}
       if(d.teamPoints){setTeamPoints(d.teamPoints); teamPointsRef.current=d.teamPoints;}
@@ -3351,6 +3354,38 @@ export default function App(){
     fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'my-record',auth:acctToken})})
       .then(r=>r.json()).then(d=>setRecord(d?.ok?d:{error:d?.error||'Could not load'})).catch(()=>setRecord({error:'Connection problem'}));
   },[acctRecordView,acctToken,poolId]);
+  // FINGERPRINT_V316_VENMO — "Pay with Venmo" (pre-filled to the commissioner) + "I've paid"
+  const iPaid=async(name)=>{
+    const d=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'i-paid',name,code:chatCode})}).then(r=>r.json()).catch(()=>null);
+    if(d?.status==='paid'){ setPayments(p=>({...(p||{}),[name]:true})); msg('Marked paid ✓'); }
+    else if(d?.status==='pending'){ setPayPending(l=>[...new Set([...(l||[]),name])]); msg('Thanks — your commissioner will confirm it'); }
+    else msg(d?.error||'Could not update — try again');
+  };
+  const payRow=(name,compact)=>{
+    if(paymentsHidden||!name) return null;
+    const fee=+poolMeta?.entryFee||0, paid=!!payments[name], pending=(payPending||[]).includes(name), vu=poolMeta?.venmoUser;
+    if(paid) return compact?null:<div style={{fontSize:12,fontWeight:700,color:'#2d7a1e',marginTop:4}}>Paid ✓</div>;
+    if(pending) return <div style={{fontSize:12,fontWeight:700,color:'#9a6a00',marginTop:compact?0:4}}>⏳ Paid — awaiting confirmation</div>;
+    if(!fee&&!compact) return <div style={{fontSize:12,fontWeight:700,color:'#c62828',marginTop:4}}>Not paid yet</div>;
+    if(!fee) return null;
+    const note=[poolMeta?.poolName,tcEventName||T?.eventName,name].filter(Boolean).join(' · ');
+    const url=vu?`https://venmo.com/${encodeURIComponent(vu)}?txn=pay&amount=${fee}&note=${encodeURIComponent(note)}`:null;
+    return <div style={{marginTop:compact?0:8}}>
+      {!compact&&<div style={{fontSize:12,fontWeight:700,color:'#c62828',marginBottom:6}}>Not paid yet — ${fee} entry</div>}
+      <div style={{display:'flex',gap:8,justifyContent:'center',flexWrap:'wrap'}}>
+        {compact&&<span style={{fontSize:12,fontWeight:700,color:'#c62828',alignSelf:'center'}}>${fee} entry</span>}
+        {/* FINGERPRINT_V317_VENMO_BRAND — Venmo's own white wordmark on Venmo Blue (#008CFF), per their guidelines:
+            at least 40px wide, clear space = the height of its "V", never inside a sentence (the amount sits beside it) */}
+        {url&&<a href={url} target="_blank" rel="noopener noreferrer" aria-label={`Pay $${fee} with Venmo`}
+            style={{background:'#008CFF',borderRadius:8,padding:compact?12:14,display:'inline-flex',alignItems:'center',textDecoration:'none',lineHeight:0}}>
+            <img src="/brand/venmo-logo-white.png" alt="Venmo" height={compact?12:14} width={compact?63:74} style={{display:'block',height:compact?12:14,width:'auto'}}
+              onError={e=>{const a=e.currentTarget.parentNode; e.currentTarget.remove(); a.textContent=`Pay $${fee} with Venmo`; Object.assign(a.style,{color:'#fff',fontWeight:'800',fontSize:'13px',padding:'9px 14px',lineHeight:'normal'});}}/>
+          </a>}
+        <button type="button" onClick={()=>iPaid(name)} style={{background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`,borderRadius:8,padding:compact?'6px 12px':'8px 14px',fontWeight:700,fontSize:compact?12:13,cursor:'pointer',whiteSpace:'nowrap'}}>I've paid</button>
+      </div>
+      {url&&!compact&&<div style={{fontSize:11,color:'#8a9580',marginTop:6}}>Opens Venmo to @{vu} with ${fee} and a note filled in.</div>}
+    </div>;
+  };
   const loadClaims=()=>fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'claim-candidates',auth:acctToken})})
     .then(r=>r.json()).then(d=>setClaimList(d?.ok?d.candidates:[])).catch(()=>setClaimList([]));
   const claimIt=async(c)=>{
@@ -5254,7 +5289,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   style={{...pri,width:'100%',padding:12,fontSize:15,opacity:on?1:.45}}>{text}</button>;
                 if(chatVerified) return <div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:6}}>
                   <div style={{display:'flex',alignItems:'center',fontSize:12,marginBottom:8,color:'#3a4a2e'}}>
-                    <span style={{flex:1}}>Picking as <b>{chatName}</b></span>
+                    <span style={{flex:1}}>Picking as <b>{chatName}</b>{(()=>{const r=payRow(chatName,true); return r?<span style={{display:'block',marginTop:6}}>{r}</span>:null;})()}</span>
                     <button type="button" onClick={()=>openAcct()} style={{background:'none',border:'none',color:T.primary,fontWeight:700,fontSize:12,cursor:'pointer'}}>Not you? Switch</button>
                   </div>
                   {canSave&&bigBtn(dirty?`💾 Save ${label} picks`:(picked?`✓ ${label} picks saved`:'Tap your picks above'),savePicks,dirty)}
@@ -5281,7 +5316,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={{textAlign:'center',padding:'6px 0 12px'}}>
               <div style={{fontSize:34,lineHeight:1}}>✅</div>
               <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800,color:T.primary,marginTop:6}}>You're in, {myEntry.name}</div>
-              {!paymentsHidden&&<div style={{fontSize:12,marginTop:4,fontWeight:700,color:paid?'#2d7a1e':'#c62828'}}>{paid?'Paid ✓':'Not paid yet'}</div>}
+              {payRow(myEntry.name,false)}
             </div>
             {byTier.map(({t,names})=><div key={t.id} style={{marginBottom:9}}>
               <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:t.color,textTransform:'uppercase',marginBottom:4}}>{t.label}</div>
@@ -6301,6 +6336,17 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   return <span style={{background:'#e8f5e8',color:'#2d7a1e',borderRadius:8,padding:'2px 10px',fontSize:11,fontWeight:700}}>{paidCount}/{total} paid · {pct}%</span>;
                 })()}
               </div>
+              {/* FINGERPRINT_V316_VENMO — said "I've paid", awaiting your confirmation */}
+              {payPending.length>0&&<div style={{background:'#fff8e6',border:'1px solid #f0c060',borderRadius:9,padding:'8px 12px',marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:800,color:'#7a5500',marginBottom:4}}>⏳ Waiting for confirmation — check your Venmo</div>
+                {payPending.map(n=><div key={n} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderTop:'1px solid #f5e3b8'}}>
+                  <span style={{flex:1,fontSize:13,fontWeight:700,color:'#2a3a1e'}}>{n}</span>
+                  {[[true,'Confirm'],[false,'Not received']].map(([ok,l])=><button key={l} type="button" onClick={async()=>{
+                      const d=await adminAction('confirm-paid',{entryName:n,received:ok});
+                      if(d?.ok){ setPayments(d.payments||{}); setPayPending(d.payPending||[]); msg(ok?`${n} marked paid ✓`:`${n} back to unpaid`); } else msg(d?.error||'Could not update');
+                    }} style={ok?{...pri,padding:'5px 12px',fontSize:12}:{background:'#fff',color:'#8b2020',border:'1px solid #8b202060',borderRadius:7,padding:'5px 10px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{l}</button>)}
+                </div>)}
+              </div>}
               {entries.length===0?<p style={{color:'#8a9580',fontSize:12}}>No entries yet</p>:
                 <div style={{border:'1px solid #f0ebe0',borderRadius:8,overflow:'hidden'}}>
                   <div style={{display:'flex',padding:'8px 10px',background:'#fafaf6',borderBottom:'1px solid #f0ebe0',fontSize:10,fontWeight:700,color:'#888',letterSpacing:.5}}>
@@ -6352,6 +6398,25 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             {/* FINGERPRINT_V299_ADMIN_GROUPS */}
             <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>Money</div>
+            {/* FINGERPRINT_V316_VENMO — commissioner's Venmo + trust switch */}
+            <div style={sec}><h3 style={stl}>💸 Venmo</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>Players get a <b>Pay with Venmo</b> button that opens Venmo to you, with the entry fee and a note filled in. They tap <b>I've paid</b> afterwards.</p>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <span style={{fontSize:14,color:'#6b7c5e'}}>@</span>
+                <input style={{...inp,marginBottom:0,flex:'1 1 160px',width:'auto'}} placeholder="your-venmo-username" value={venmoInput??(poolMeta?.venmoUser||'')} onChange={e=>setVenmoInput(e.target.value)}/>
+                <button type="button" onClick={async()=>{const d=await adminAction('set-venmo',{venmoUser:venmoInput??(poolMeta?.venmoUser||'')});
+                    if(d?.ok){setPoolMeta(prev=>({...(prev||{}),venmoUser:d.venmoUser}));setVenmoInput(null);msg(d.venmoUser?`Venmo set to @${d.venmoUser} ✓`:'Venmo removed');} else msg(d?.error||'Could not save');}} style={pri}>Save</button>
+              </div>
+              <label style={{display:'flex',alignItems:'center',gap:10,marginTop:12,cursor:'pointer'}}>
+                <span style={{flex:1,fontSize:13,color:'#2a3a1e',lineHeight:1.45}}>Trust "I've paid"
+                  <span style={{display:'block',fontSize:11,color:'#8a9580',marginTop:2}}>On: players are marked paid the moment they tap it. Off: you confirm each one below in Entries & Payments.</span></span>
+                <span role="switch" aria-checked={!!poolMeta?.trustPaid} onClick={async(e)=>{e.preventDefault();const on=!poolMeta?.trustPaid;const d=await adminAction('set-venmo',{trustPaid:on});
+                    if(d?.ok){setPoolMeta(prev=>({...(prev||{}),trustPaid:d.trustPaid}));msg(on?'Trusting "I\'ve paid"':'You\'ll confirm payments');}}}
+                  style={{width:44,height:26,borderRadius:13,background:poolMeta?.trustPaid?T.primary:'#d6d6cf',position:'relative',transition:'background .15s',flexShrink:0}}>
+                  <span style={{position:'absolute',top:3,left:poolMeta?.trustPaid?21:3,width:20,height:20,borderRadius:'50%',background:'#fff',boxShadow:'0 1px 2px rgba(0,0,0,.25)',transition:'left .15s'}}/>
+                </span>
+              </label>
+            </div>
             <div style={sec}>
               <h3 style={stl}>💵 Entry Fee & Payouts</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10}}>Set entry fee to display payouts in header. 3rd = 1× fee, 2nd = 2× fee, 1st = rest.</p>
