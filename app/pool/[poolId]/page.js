@@ -1,5 +1,5 @@
 'use client';
-// build: stay-signed-in-v291-20261003-1100
+// build: brand-buttons-v296-20261003-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3079,9 +3079,9 @@ export default function App(){
       if(d.entries)setEntries(d.entries);
       setEntryName('');setEntryEmail('');setPicks({1:[],2:[],3:[]});setSearch('');
       setEditMode(false);setEditCode('');
-      if(isTeamPool){ setChatName(entryName.trim()); msg("You're in! Check your email for your code, then sign in below to pick 📧"); }
+      if(isTeamPool){ if(d.editCode&&d.name) adoptEntry(d.name,d.editCode); else setChatName(entryName.trim()); msg("You're in! ✓ Now make your picks"); }
       else { if(!editMode&&d.editCode&&d.name){ adoptEntry(d.name,d.editCode); setAcctEntries(x=>[...x.filter(e=>e.name!==d.name),{name:d.name,code:d.editCode}]); }
-        msg(editMode?'Picks updated!':(acct?"You're in! ✓":'Entry submitted! Check email for edit code 📧')); setAddAnother(false); setTab('Standings'); }
+        msg(editMode?'Picks updated!':"You're in! ✓"); setAddAnother(false); setTab('Standings'); }
     }catch(e){msg('Error submitting — check connection');}
     setSubmitting(false);
   };
@@ -3110,27 +3110,7 @@ export default function App(){
     }catch{msg('Error');return false;}
   };
 
-  const resendCode=async(name,email)=>{
-    try{
-      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({poolId,action:'resend-code',name,email})});
-      const d=await r.json();
-      if(d.error){msg(d.error);return;}
-      msg('Code resent — check your email 📧');
-    }catch{msg('Error');}
-  };
 
-  const claimEntry=async(name,email)=>{
-    try{
-      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({poolId,action:'claim-entry',name,email})});
-      const d=await r.json();
-      if(d.error){msg(d.error);return false;}
-      loadEntries();
-      msg('Email added! Check inbox for edit code 📧');
-      return true;
-    }catch{msg('Error');return false;}
-  };
 
   // ─── CHAT ─────────────────────────────────────────────────────────────
   const fetchChat=async()=>{
@@ -3147,27 +3127,6 @@ export default function App(){
     }catch{}
   };
 
-  const verifyChat=async()=>{
-    if(!chatName||!chatCode)return msg('Enter your name and code');
-    setChatVerifying(true);
-    try{
-      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({poolId,action:'chat-verify',name:chatName,code:chatCode})});
-      const d=await r.json();
-      if(d.error){msg(d.error);setChatVerifying(false);return;}
-      // Save verification to localStorage
-      if(typeof window!=='undefined'){
-        localStorage.setItem(`chat_${poolId}_name`,d.verifiedName);
-        localStorage.setItem(`chat_${poolId}_code`,chatCode.toUpperCase());
-      }
-      setChatName(d.verifiedName);
-      setChatCode(chatCode.toUpperCase());
-      setChatVerified(true);
-      msg('Verified! You can chat now ✓');
-      fetchChat();
-    }catch{msg('Error verifying');}
-    setChatVerifying(false);
-  };
 
   const sendChatMessage=async()=>{
     if(!chatInput.trim())return;
@@ -3238,8 +3197,7 @@ export default function App(){
           if(r.status===404){
             try{ localStorage.removeItem(`chat_${poolId}_name`); localStorage.removeItem(`chat_${poolId}_code`); }catch{}
             setChatVerified(false); setChatCode('');
-            let hasAcct=false; try{ hasAcct=!!localStorage.getItem('tgp_auth'); }catch{}
-            if(!hasAcct) msg(`Please sign in again, ${savedName} — each week's entry has a new code (it's in your email)`);
+            // a finished week's entry — cleared quietly; your account picks up your new one
           } else if(r.ok){
             const d=await r.json().catch(()=>null);
             if(d?.verifiedName&&d.verifiedName!==savedName){ setChatName(d.verifiedName); try{ localStorage.setItem(`chat_${poolId}_name`,d.verifiedName); }catch{} }
@@ -3432,7 +3390,7 @@ export default function App(){
           try{ localStorage.setItem(`chat_${poolId}_name`,d.name); localStorage.setItem(`chat_${poolId}_code`,d.code); }catch{}
           setChatName(d.name); setChatCode(d.code); setChatVerified(true);
           msg(`Signed in as ${d.name} ✓`);
-        } else msg(d.error||'That sign-in link has expired — sign in with your name and code');
+        } else msg(d.error||'That link has expired — sign in to your account instead');
       }catch{}
     })();
   },[poolId]);
@@ -4145,29 +4103,6 @@ export default function App(){
 
       {toast&&<div style={{position:'fixed',top:12,left:'50%',transform:'translateX(-50%)',background:'#1a2e0a',color:'#faf6ed',padding:'8px 20px',borderRadius:9,fontSize:13,fontWeight:600,zIndex:200,animation:'sd .25s ease',boxShadow:'0 4px 14px rgba(0,0,0,.2)',maxWidth:'90%',textAlign:'center'}}>{toast}</div>}
 
-      {showEditModal&&(()=>{
-        const entryToEdit=entries.find(e=>e.name===showEditModal);
-        const handleSubmit=async()=>{
-          const code=document.getElementById('editCodeInput').value.trim();
-          if(!code)return msg('Enter your edit code');
-          await startEdit(showEditModal,code);
-        };
-        return(
-          <div onClick={()=>setShowEditModal(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:150,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:24,maxWidth:380,width:'100%',animation:'su .25s ease'}}>
-              <div style={{textAlign:'center',marginBottom:16}}>
-                <div style={{fontSize:36,marginBottom:6}}>✏️</div>
-                <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,marginBottom:4}}>Edit {showEditModal}'s Picks</h3>
-                <p style={{fontSize:12,color:'#888'}}>Enter the edit code from your email</p>
-              </div>
-              <input id="editCodeInput" autoFocus style={{...inp,textAlign:'center',letterSpacing:6,fontSize:20,fontWeight:700,textTransform:'uppercase',width:'100%',marginBottom:10}} placeholder="XXXXXX" maxLength={6} onKeyDown={e=>e.key==='Enter'&&handleSubmit()}/>
-              <button type="button" onClick={handleSubmit} style={{...pri,width:'100%',padding:12,borderRadius:9,marginBottom:8}}>Unlock Picks →</button>
-              {entryToEdit?.hasEmail&&<button type="button" onClick={()=>{resendCode(showEditModal);setShowEditModal(null);}} style={{background:'transparent',border:'none',color:T.primary,fontSize:12,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline'}}>Resend code to {entryToEdit.emailHint}</button>}
-              <button type="button" onClick={()=>setShowEditModal(null)} style={{background:'transparent',border:'none',color:'#888',fontSize:12,width:'100%',padding:8,cursor:'pointer'}}>Cancel</button>
-            </div>
-          </div>
-        );
-      })()}
 
       {customEmojiFor&&(()=>{
         const handleEmojiSubmit=()=>{
@@ -4205,30 +4140,6 @@ export default function App(){
         );
       })()}
 
-      {showClaimModal&&(()=>{
-        const handleSubmit=async()=>{
-          const email=document.getElementById('claimEmailInput').value.trim();
-          if(!email)return msg('Enter your email');
-          if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return msg('Invalid email format');
-          const ok=await claimEntry(showClaimModal,email);
-          if(ok)setShowClaimModal(null);
-        };
-        return(
-          <div onClick={()=>setShowClaimModal(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:150,display:'flex',alignItems:'center',justifyContent:'center',padding:20}}>
-            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:14,padding:24,maxWidth:380,width:'100%',animation:'su .25s ease'}}>
-              <div style={{textAlign:'center',marginBottom:16}}>
-                <div style={{fontSize:36,marginBottom:6}}>📧</div>
-                <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,marginBottom:4}}>Add email to {showClaimModal}'s Entry</h3>
-                <p style={{fontSize:12,color:'#888'}}>This entry was submitted without an email. Add yours to enable picks editing.</p>
-              </div>
-              <input id="claimEmailInput" autoFocus type="email" style={{...inp,fontSize:14,width:'100%',marginBottom:10}} placeholder="your@email.com" onKeyDown={e=>e.key==='Enter'&&handleSubmit()}/>
-              <button type="button" onClick={handleSubmit} style={{...pri,width:'100%',padding:12,borderRadius:9,marginBottom:8}}>Send Edit Code →</button>
-              <p style={{fontSize:10,color:'#aaa',textAlign:'center',marginBottom:8}}>⚠️ Only do this if this is YOUR entry. The pool commissioner can see all emails.</p>
-              <button type="button" onClick={()=>setShowClaimModal(null)} style={{background:'transparent',border:'none',color:'#888',fontSize:12,width:'100%',padding:8,cursor:'pointer'}}>Cancel</button>
-            </div>
-          </div>
-        );
-      })()}
 
       {selectedPlayer&&(()=>{
         const p=selectedPlayer;
@@ -4577,8 +4488,24 @@ export default function App(){
           style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:4,opacity:acctBusy?.6:1,...(primary?{}:{background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`})}}>{label}</button>;
         const link=(label,fn)=><button type="button" onClick={fn} style={{background:'none',border:'none',color:T.primary,fontSize:13,textDecoration:'underline',cursor:'pointer',padding:4}}>{label}</button>;
         const h=(t)=><div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase',margin:'14px 0 6px'}}>{t}</div>;
-        const social=(p,label,bg,fg)=><button key={p} type="button" disabled={acctBusy} onClick={()=>startOAuth(p)}
-          style={{width:'100%',padding:12,borderRadius:9,border:'1px solid #d6d6cf',background:bg,color:fg,fontSize:15,fontWeight:700,marginBottom:8,cursor:'pointer',opacity:acctBusy?.6:1}}>{label}</button>;
+        const social=(p)=>{ const up=acctMode==='signup', g=p==='google';
+          const label=`${up?'Sign up':'Sign in'} with ${g?'Google':'Apple'}`;
+          // FINGERPRINT_BRAND — official button specs. Google: white, 1px #747775 border, #1F1F1F Roboto Medium 14px,
+          // full-colour G. Apple: black, white logo + white system-font title at ~43% of the 44px height. The logos are
+          // Google's and Apple's OWN files, from their official kits, saved in public/brand/ (.svg or .png).
+          const logo=g
+            // Google's own light 40x40 button tile (PNG — its SVG gradient doesn't render in Safari images): show its centre 20x20 = the G
+            ? <span style={{width:20,height:20,overflow:'hidden',display:'block',flexShrink:0}}><img src="/brand/google-g.png" alt="" width={40} height={40}
+                style={{display:'block',margin:-10,maxWidth:'none'}} onError={e=>{e.currentTarget.parentNode.style.display='none';}}/></span>
+            // Apple's own logo-only tile ("White" = white logo on black), 44x44: show the 18x20 around the logo,
+            // which renders it 15x19 — matching the 19px title, per Apple's guidelines
+            : <span style={{width:18,height:20,overflow:'hidden',display:'block',flexShrink:0}}><img src="/brand/apple-logo-white.png" alt="" width={44} height={44}
+                style={{display:'block',margin:'-10px 0 0 -13px',maxWidth:'none'}} onError={e=>{e.currentTarget.parentNode.style.display='none';}}/></span>;
+          return <button key={p} type="button" disabled={acctBusy} onClick={()=>startOAuth(p)} aria-label={label}
+            style={g
+              ? {display:'flex',alignItems:'center',justifyContent:'center',gap:10,width:'100%',height:44,padding:'0 12px',marginBottom:10,borderRadius:4,border:'1px solid #747775',background:'#FFFFFF',color:'#1F1F1F',fontFamily:"Roboto,Arial,sans-serif",fontWeight:500,fontSize:14,letterSpacing:'0.25px',cursor:'pointer',opacity:acctBusy?.6:1,boxSizing:'border-box'}
+              : {display:'flex',alignItems:'center',justifyContent:'center',gap:6,width:'100%',height:44,padding:'0 12px',marginBottom:10,borderRadius:8,border:'none',background:'#000000',color:'#FFFFFF',fontFamily:"-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Helvetica,Arial,sans-serif",fontWeight:500,fontSize:19,cursor:'pointer',opacity:acctBusy?.6:1,boxSizing:'border-box'}}>
+            {logo}{label}</button>; };
         return <div onClick={()=>setShowAcct(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:170,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
           <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,maxHeight:'90vh',overflowY:'auto',borderRadius:'16px 16px 0 0',padding:'16px 16px 28px',boxSizing:'border-box'}}>
             <div style={{display:'flex',alignItems:'center',marginBottom:8}}>
@@ -4618,8 +4545,9 @@ export default function App(){
               <div style={{textAlign:'center',marginTop:6}}>{link('Sign out on every device',doSignoutAll)}</div>
             </> : <>
               {(acctMode==='signin'||acctMode==='signup')&&(providers.apple||providers.google)&&<>
-                {providers.apple&&social('apple',' Continue with Apple','#000','#fff')}
-                {providers.google&&social('google','Continue with Google','#fff','#2a3a1e')}
+                <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@500&display=swap" rel="stylesheet"/>
+                {providers.apple&&social('apple')}
+                {providers.google&&social('google')}
                 <div style={{textAlign:'center',fontSize:12,color:'#aaa',margin:'6px 0 10px'}}>or with email</div>
               </>}
               {acctMode==='signin'&&<>
@@ -4867,10 +4795,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     </div>
                     <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Picks locked in':'Tap to '+(op?'collapse':'expand')}</div>
                   </div>
-                  {!locked&&(e.hasEmail?
-                    <button type="button" onClick={(ev)=>{ev.stopPropagation();setShowEditModal(e.name);}} style={{background:'transparent',border:`1px solid ${T.primary}30`,color:T.primary,padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>✏️ Edit</button>
-                    :<button type="button" onClick={(ev)=>{ev.stopPropagation();setShowClaimModal(e.name);}} style={{background:'transparent',border:`1px solid #c9a84c80`,color:'#7a5500',padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap'}}>📧 Add email</button>
-                  )}
+                  {!locked&&acct&&acctEntries.some(x=>x.name===e.name)&&!isTeamPool&&
+                    <button type="button" onClick={(ev)=>{ev.stopPropagation();const me=acctEntries.find(x=>x.name===e.name);startEdit(e.name,me.code);setTab('Enter Pool');}} style={{background:'transparent',border:`1px solid ${T.primary}30`,color:T.primary,padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:700,cursor:'pointer'}}>✏️ Edit</button>}
                   {!picksHidden&&<div style={{textAlign:'right'}}>
                     <div style={{fontWeight:800,fontSize:17,color:T.primary}}>{fmtE(tot)}</div>
                     {isTeamPool&&(()=>{const pr=projE(e); return pr!==tot
@@ -4932,7 +4858,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           // sit right above Save. A successful save remembers them (same browser identity as chat),
           // and "Switch" forgets it so a shared device or the commissioner can save as someone else.
           const savePicks=async()=>{
-            if(!chatName.trim()||!chatCode.trim()) return msg('Enter your entry name and the code from your email');
+            if(!chatName.trim()||!chatCode.trim()){ if(!acct){ openAcct('signin'); return msg('Sign in to save your picks'); } return msg("Join this week's pool first, then save your picks"); }
             try{
               const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({poolId,action:'team-picks',name:chatName.trim(),code:chatCode.trim(),sessionKey:active,picks:mine})});
@@ -4960,7 +4886,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               if(d.editCode) setAcctEntries(x=>[...x.filter(e=>e.name!==nm),{name:nm,code:String(d.editCode).toUpperCase()}]);
               if(d.entries) setEntries(d.entries);
               setEntryName(''); setEntryEmail('');
-              if(!d.editCode){ setChatName(nm); setSubmitting(false); return msg("You're in! Check your email for your code to save picks 📧"); }
+              if(!d.editCode){ setChatName(nm); setSubmitting(false); return msg("You're in! ✓"); }
               const cd=String(d.editCode).toUpperCase();
               try{ localStorage.setItem(`chat_${poolId}_name`,nm); localStorage.setItem(`chat_${poolId}_code`,cd); }catch{}
               setChatName(nm); setChatCode(cd); setChatVerified(true);
@@ -4970,25 +4896,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   body:JSON.stringify({poolId,action:'team-picks',name:nm,code:cd,sessionKey:active,picks:draft})});
                 const d2=await r2.json();
                 if(d2.ok){ setMyTeamPicks(d2.myPicks||{}); setPickDraft(prev=>{const n={...prev};delete n[active];return n;});
-                  msg(`You're in — ${label} picks saved ✓ (your code ${cd} is also emailed)`); }
+                  msg(`You're in — ${label} picks saved ✓`); }
                 else msg(d2.error||'Joined, but picks didn\'t save — tap Save');
               } else {
-                msg(`You're in! Now tap your picks and save (your code ${cd} is also emailed)`);
+                msg(`You're in! Now tap your picks and save`);
               }
             }catch{ msg('Error joining — check connection'); }
             setSubmitting(false);
-          };
-          const signIn=async()=>{
-            const nm=(chatName||'').trim(), cd=(chatCode||'').trim().toUpperCase();
-            if(!nm||!cd) return msg('Enter your entry name and the code from your email');
-            try{
-              const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-                body:JSON.stringify({poolId,action:'team-picks-get',name:nm,code:cd})});
-              const d=await r.json(); if(d.error) return msg(d.error);
-              try{ localStorage.setItem(`chat_${poolId}_name`,d.name); localStorage.setItem(`chat_${poolId}_code`,cd); }catch{}
-              setChatName(d.name); setChatCode(cd); setChatVerified(true); setMyTeamPicks(d.myPicks||{});
-              msg(`Signed in as ${d.name} ✓`);
-            }catch{ msg('Error signing in — check connection'); }
           };
           const switchEntry=()=>{
             try{ localStorage.removeItem(`chat_${poolId}_name`); localStorage.removeItem(`chat_${poolId}_code`); }catch{}
@@ -5055,27 +4969,18 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 if(chatVerified) return <div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:6}}>
                   <div style={{display:'flex',alignItems:'center',fontSize:12,marginBottom:8,color:'#3a4a2e'}}>
                     <span style={{flex:1}}>Picking as <b>{chatName}</b></span>
-                    <button type="button" onClick={switchEntry} style={{background:'none',border:'none',color:T.primary,fontWeight:700,fontSize:12,cursor:'pointer'}}>Not you? Switch</button>
+                    <button type="button" onClick={()=>openAcct()} style={{background:'none',border:'none',color:T.primary,fontWeight:700,fontSize:12,cursor:'pointer'}}>Not you? Switch</button>
                   </div>
                   {canSave&&bigBtn(dirty?`💾 Save ${label} picks`:(picked?`✓ ${label} picks saved`:'Tap your picks above'),savePicks,dirty)}
                 </div>;
                 return <div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:6}}>
-                  {!locked&&<div style={{display:'flex',gap:4,padding:3,borderRadius:8,background:'#f0f0ea',marginBottom:10}}>
-                    {tog('new','New entry')}{tog('back','Already joined')}
-                  </div>}
-                  {mode==='new'
-                    ? <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
                         <input style={inp} placeholder="Your name" value={entryName} onChange={e=>setEntryName(e.target.value)}/>
                         {acct
                           ? <div style={{fontSize:12,color:'#6b7c5e'}}>Joining as <b>{acct.name}</b> · {acct.email}</div>
                           : <div style={{fontSize:12,color:'#6b7c5e'}}>You'll need an account to join — <span onClick={()=>openAcct('signup')} style={{color:T.primary,textDecoration:'underline',cursor:'pointer'}}>create one</span> or <span onClick={()=>openAcct('signin')} style={{color:T.primary,textDecoration:'underline',cursor:'pointer'}}>sign in</span>.</div>}
                         {bigBtn(submitting?'Joining…':(canSave&&dirty?'Join & save picks':'Join'),joinTeam)}
                       </div>
-                    : <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                        <input style={inp} placeholder="Entry name" value={chatName} onChange={e=>setChatName(e.target.value)}/>
-                        <input style={inp} placeholder="Code from your email" value={chatCode} onChange={e=>setChatCode(e.target.value.toUpperCase())}/>
-                        {canSave&&dirty ? bigBtn(`💾 Save ${label} picks`,savePicks) : bigBtn('Sign in',signIn)}
-                      </div>}
                 </div>;
               })()}
             </div>
@@ -5147,7 +5052,6 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <span style={{fontSize:18,fontWeight:800}}>{totalPicked}</span><span style={{fontSize:9,opacity:.6}}>/{TOTAL_PICKS_REQ}</span>
               </div>
             </div>
-            {!editMode&&!acct&&<input style={{...inp,marginBottom:10,width:'100%'}} type="email" placeholder="Your Email (for edit code)" value={entryEmail} onChange={e=>setEntryEmail(e.target.value)}/>}
             {!editMode&&acct&&<div style={{fontSize:12,color:'#6b7c5e',margin:'-2px 0 10px'}}>Entering as <b>{acct.name}</b> · {acct.email}</div>}
             {totalPicked>0&&<div style={{background:`${T.primary}10`,borderRadius:9,padding:10,marginBottom:10,border:`1px solid ${T.primary}1a`}}>
               <div style={{fontSize:10,fontWeight:700,color:T.primary,marginBottom:5,letterSpacing:1}}>YOUR PICKS</div>
@@ -5592,35 +5496,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             ?<div style={{background:'#fff',borderRadius:11,padding:24,border:`1px solid ${T.cardBorder}`,textAlign:'center'}}>
               <div style={{fontSize:36,marginBottom:10}}>💬</div>
               <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,marginBottom:6}}>Join the chat</h3>
-              <p style={{fontSize:12,color:'#888',marginBottom:16}}>Verify with your edit code to start the trash talk.</p>
-              <select value={chatName} onChange={e=>setChatName(e.target.value)}
-                style={{...inp,width:'100%',marginBottom:8,cursor:'pointer'}}>
-                <option value="">Select your name...</option>
-                {entries.map(e=><option key={e.name} value={e.name}>{e.name}</option>)}
-              </select>
-              <input type="text" placeholder="Edit code (XXXXXX)" maxLength={6} value={chatCode}
-                onChange={e=>setChatCode(e.target.value.toUpperCase())}
-                onKeyDown={e=>e.key==='Enter'&&verifyChat()}
-                style={{...inp,width:'100%',marginBottom:10,textAlign:'center',letterSpacing:6,fontSize:16,fontWeight:700,textTransform:'uppercase'}}/>
-              <button type="button" onClick={verifyChat} disabled={chatVerifying}
-                style={{...pri,width:'100%',padding:12,borderRadius:9,opacity:chatVerifying?.5:1}}>
-                {chatVerifying?'Verifying...':'Join Chat →'}
-              </button>
-              {chatName&&(()=>{
-                const entry=entries.find(e=>e.name===chatName);
-                if(entry?.hasEmail){
-                  return <button type="button" onClick={()=>{resendCode(chatName);}}
-                    style={{background:'transparent',border:'none',color:T.primary,fontSize:11,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline',marginTop:4}}>
-                    Lost your code? Resend to {entry.emailHint}
-                  </button>;
-                }
-                return <button type="button" onClick={()=>setShowClaimModal(chatName)}
-                  style={{background:'transparent',border:'none',color:'#7a5500',fontSize:11,width:'100%',padding:8,cursor:'pointer',textDecoration:'underline',marginTop:4}}>
-                  📧 No email on file? Add yours to get a code
-                </button>;
-              })()}
-              <p style={{fontSize:10,color:'#aaa',marginTop:10}}>Your code was emailed to you when you submitted your entry.</p>
+              {acct
+                ? <><p style={{fontSize:13,color:'#6b7c5e',marginBottom:14}}>The chat is for this week's players — enter the pool to join in.</p>
+                    <button type="button" onClick={()=>setTab('Enter Pool')} style={{...pri,width:'100%',padding:12}}>Enter this week's pool</button></>
+                : <><p style={{fontSize:13,color:'#6b7c5e',marginBottom:14}}>Sign in to your account to start the trash talk.</p>
+                    <button type="button" onClick={()=>openAcct('signin')} style={{...pri,width:'100%',padding:12}}>Sign in</button>
+                    <button type="button" onClick={()=>openAcct('signup')} style={{background:'none',border:'none',color:T.primary,fontSize:13,marginTop:8,textDecoration:'underline',cursor:'pointer'}}>Create an account</button>
+                  </>}
             </div>
+
             :<div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,padding:'8px 14px',background:`${T.primary}0a`,borderRadius:9}}>
                 <span style={{fontSize:12,color:T.primary,fontWeight:600}}>💬 Chatting as <b>{chatName} ✓</b></span>
