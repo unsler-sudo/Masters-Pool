@@ -1,5 +1,5 @@
 'use client';
-// build: season-tab-v301-20261004-1830
+// build: playing-as-v302-20261004-1900
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -4573,11 +4573,15 @@ export default function App(){
               </div>
               {acct.hasPassword&&!acctEditing&&<div style={{textAlign:'right',marginTop:6}}>
                 {link('Change password',()=>{setAcctErr('');setAcctForm(f=>({...f,current:'',password:'',confirm:''}));setAcctPwView(true);})}</div>}
-              {acctEntries.length>0&&<>{h('Your entries in this pool')}
-                {acctEntries.map(e=><label key={e.name} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 2px',borderBottom:'1px solid #f0f0ea',cursor:'pointer'}}>
-                  <input type="radio" checked={chatName===e.name} onChange={()=>{adoptEntry(e.name,e.code);msg(`Now using ${e.name}`);}}/>
-                  <span style={{flex:1,fontSize:14}}>{e.name}</span>{chatName===e.name&&<span style={{fontSize:11,color:'#2d7a1e',fontWeight:700}}>IN USE</span>}
-                </label>)}</>}
+              {/* FINGERPRINT_V302 — only when you have 2+ entries here: which one this device plays as */}
+              {acctEntries.length>1&&<>{h('Playing as')}
+                <div style={{fontSize:12,color:'#8a9580',margin:'-2px 0 6px',lineHeight:1.4}}>You have {acctEntries.length} entries in this pool. Chat, picks and notifications use the one you choose.</div>
+                {acctEntries.map(e=>{const on=chatName===e.name; return <button key={e.name} type="button" onClick={()=>{if(!on){adoptEntry(e.name,e.code);msg(`Now playing as ${e.name}`);}}}
+                  style={{display:'flex',alignItems:'center',gap:10,width:'100%',textAlign:'left',padding:'10px 12px',marginBottom:6,borderRadius:9,cursor:on?'default':'pointer',
+                    border:`1.5px solid ${on?T.primary:'#e5e5dc'}`,background:on?`${T.primary}0f`:'#fff'}}>
+                  <span style={{flex:1,fontSize:14,fontWeight:on?800:600,color:'#2a3a1e'}}>{e.name}</span>
+                  {on?<span style={{fontSize:12,fontWeight:800,color:T.primary}}>✓ Playing as</span>:<span style={{fontSize:12,color:'#8a9580'}}>Switch</span>}
+                </button>;})}</>}
               {myPools.length>0&&<>{h('My pools')}
                 {myPools.map(pl=><a key={pl.poolId} href={`/pool/${pl.poolId}`} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 2px',borderBottom:'1px solid #f0f0ea',textDecoration:'none',color:'#2a3a1e'}}>
                   <span style={{flex:1,minWidth:0}}>
@@ -4585,7 +4589,7 @@ export default function App(){
                     {pl.event&&<span style={{display:'block',fontSize:11,color:'#8a9580'}}>{pl.event}</span>}
                   </span>
                   {pl.owner&&<span style={{fontSize:10,fontWeight:800,color:'#7a5500',background:'#fff3d6',borderRadius:10,padding:'2px 8px'}}>COMMISSIONER</span>}
-                  {pl.poolId===poolId?<span style={{fontSize:10,fontWeight:800,color:T.primary}}>HERE</span>:<span style={{color:'#bbb'}}>›</span>}
+                  {pl.poolId===poolId?<span style={{fontSize:10,fontWeight:800,color:T.primary,whiteSpace:'nowrap'}}>VIEWING NOW</span>:<span style={{color:'#bbb'}}>›</span>}
                 </a>)}</>}
               <div style={{marginTop:18}}>{btn('Sign out',()=>{signOutLocal();setShowAcct(false);msg('Signed out');},false)}</div>
               <div style={{textAlign:'center',marginTop:6}}>{link('Sign out on every device',doSignoutAll)}</div>
