@@ -1,5 +1,5 @@
 'use client';
-// build: makecut-v297-20261004-1000
+// build: recap-link-v298-20261004-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3396,6 +3396,7 @@ export default function App(){
     window.history.replaceState({}, '', u.pathname + (u.searchParams.toString()?'?'+u.searchParams.toString():'') + u.hash);
     if(openTab==='picks') setTab('Enter Pool');
     else if(openTab==='admin') setTab('Admin');          // FINGERPRINT_V287 — "Manage" from My pools
+    else if(openTab==='history') setTab('History');      // FINGERPRINT_V298 — "See full results" in the recap email
     if(!t) return;
     (async()=>{
       try{
