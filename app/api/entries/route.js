@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: my-record-v216-20261004-2200
+// build: claims-v217-20261004-2300
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -566,7 +566,9 @@ async function srvLoadArchives(poolId) {
     } while (cursor !== '0');
   } catch {}
   const raws = keys.length ? await redis('MGET', ...keys) : [];
-  return raws.map(r => { try { return r ? JSON.parse(r) : null; } catch { return null; } }).filter(a => a && Array.isArray(a.entries));
+  const pre = k(poolId, 'archive:');
+  return raws.map((r, i) => { try { const a = r ? JSON.parse(r) : null; if (a && typeof a === 'object') Object.defineProperty(a, '_id', { value: keys[i].slice(pre.length), enumerable: false }); return a; } catch { return null; } })
+    .filter(a => a && Array.isArray(a.entries));
 }
 async function srvMyRecord(user, extraPoolId) {
   const pools = new Set((await redis('SMEMBERS', `user:${user.uid}:pools`)) || []);
@@ -606,6 +608,33 @@ async function srvMyRecord(user, extraPoolId) {
   const fav = Object.entries(count).sort((x, y) => y[1] - x[1])[0];
   return { rows, summary: { entries: n, wins, top3, won, best, avg,
     favorite: fav ? { name: fav[0], times: fav[1] } : null, bestPick: bestPick && bestPick.earned > 0 ? bestPick : null } };
+}
+
+// FINGERPRINT_V217_CLAIMS — players claim History entries saved without an email/account (e.g. weeks rebuilt by
+// hand); the commissioner approves. Only entries with NO email and NO account can be claimed, and placeholder
+// entries with no picks are skipped. Claims live in pool:{id}:claims (newest first, capped at 200).
+const srvUnclaimed = (e) => !e.uid && !String(e.email || '').trim() && Array.isArray(e.picks) && e.picks.length > 0;
+async function srvClaims(poolId) { try { const r = await redis('GET', k(poolId, 'claims')); return r ? JSON.parse(r) : []; } catch { return []; } }
+async function srvClaimCandidates(user, extraPoolId) {
+  const pools = new Set((await redis('SMEMBERS', `user:${user.uid}:pools`)) || []);
+  if (extraPoolId) pools.add(extraPoolId);
+  const out = [];
+  for (const pid of pools) {
+    const meta = await getPoolMeta(pid);
+    if (!meta) continue;
+    const claims = await srvClaims(pid);
+    for (const a of await srvLoadArchives(pid)) {
+      const res = srvArchiveResults(a, meta);
+      for (const r of res) {
+        if (!srvUnclaimed(r.entry)) continue;
+        const mine = claims.find(c => c.uid === user.uid && c.archiveId === a._id && c.entryName === r.entry.name && c.status === 'pending');
+        out.push({ poolId: pid, poolName: meta.poolName || 'Golf pool', archiveId: a._id, event: a.eventName || SRV_MAJOR_LABEL[a.major] || a.major,
+          year: +a.year || null, date: a.tournamentDate || a.archivedAt || '', entryName: r.entry.name, place: r.place, field: res.length,
+          total: r.total, pts: a.scoring === 'points' || a.scoring === 'matchpicks', requested: !!mine });
+      }
+    }
+  }
+  return out.sort((x, y) => String(y.date).localeCompare(String(x.date)) || x.place - y.place);
 }
 
 async function srvNotifyTick() {
@@ -1938,6 +1967,56 @@ export async function POST(request) {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const am = await getPoolMeta(poolId);
       return Response.json({ ok:true, joinCode: am?.joinCode || '', hasPassword: !!am?.adminPassword, ownedPool: !!am?.ownerUid });   // FINGERPRINT_V198/V214 — Admin only
+    }
+
+    // FINGERPRINT_V217_CLAIMS — player: list unclaimed entries in my pools / ask to claim one
+    if (body.action === 'claim-candidates' || body.action === 'claim-entry') {
+      const user = await verifyToken(body.auth);
+      if (!user) return Response.json({ error:'Please sign in', signedOut:true }, { status:401 });
+      if (body.action === 'claim-candidates') return Response.json({ ok:true, candidates: await srvClaimCandidates(user, poolId) });
+      const archiveId = String(body.archiveId || ''), entryName = String(body.entryName || '');
+      if (!/^[a-z0-9_-]+$/.test(archiveId) || !entryName) return Response.json({ error:'Bad request' }, { status:400 });
+      const raw = await redis('GET', k(poolId, `archive:${archiveId}`));
+      const a = raw ? JSON.parse(raw) : null;
+      const e = a && (a.entries || []).find(x => x.name === entryName);
+      if (!e || !srvUnclaimed(e)) return Response.json({ error:'That entry can’t be claimed (it may already belong to someone)' }, { status:409 });
+      const claims = await srvClaims(poolId);
+      if (claims.some(c => c.uid === user.uid && c.archiveId === archiveId && c.entryName === entryName && c.status === 'pending'))
+        return Response.json({ ok:true, already:true });
+      const meta = await getPoolMeta(poolId);
+      const res = srvArchiveResults(a, meta), row = res.find(r => r.entry.name === entryName);
+      claims.unshift({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), uid: user.uid, accountName: user.name, email: user.email,
+        archiveId, entryName, event: a.eventName || SRV_MAJOR_LABEL[a.major] || a.major, year: +a.year || null,
+        place: row?.place || null, field: res.length, at: new Date().toISOString(), status: 'pending' });
+      await redis('SET', k(poolId, 'claims'), JSON.stringify(claims.slice(0, 200)));
+      try { await srvPushMany(poolId, [{ name: '__admin__', type: 'newEntry', payload: { title: `🙋 ${user.name} claims an old entry`,
+        body: `"${entryName}" in ${a.eventName || SRV_MAJOR_LABEL[a.major] || a.major} ${a.year || ''} — approve it in Admin.`,
+        url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}?tab=admin`, tag: `claim-${poolId}` } }]); } catch {}
+      return Response.json({ ok:true });
+    }
+    // FINGERPRINT_V217_CLAIMS — commissioner: see and decide claims
+    if (body.action === 'claims-list') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      return Response.json({ ok:true, claims: (await srvClaims(poolId)).filter(c => c.status === 'pending') });
+    }
+    if (body.action === 'claim-decide') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const claims = await srvClaims(poolId), c = claims.find(x => x.id === body.claimId && x.status === 'pending');
+      if (!c) return Response.json({ error:'That request has already been handled' }, { status:404 });
+      if (body.approve) {
+        const key = k(poolId, `archive:${c.archiveId}`), raw = await redis('GET', key), a = raw ? JSON.parse(raw) : null;
+        const e = a && (a.entries || []).find(x => x.name === c.entryName);
+        if (!e || !srvUnclaimed(e)) { c.status = 'void'; await redis('SET', k(poolId, 'claims'), JSON.stringify(claims));
+          return Response.json({ error:'That entry already belongs to someone — request closed' }, { status:409 }); }
+        e.uid = c.uid; e.email = c.email;
+        await redis('SET', key, JSON.stringify(a));                       // everything else (picks, money, prizes, lock) untouched
+        try { await redis('SADD', `user:${c.uid}:pools`, poolId); await redis('DEL', `myrecord:${c.uid}`); } catch {}
+        // other pending requests for the same entry are now void
+        claims.forEach(x => { if (x !== c && x.status === 'pending' && x.archiveId === c.archiveId && x.entryName === c.entryName) x.status = 'void'; });
+      }
+      c.status = body.approve ? 'approved' : 'rejected'; c.decidedAt = new Date().toISOString();
+      await redis('SET', k(poolId, 'claims'), JSON.stringify(claims));
+      return Response.json({ ok:true, status: c.status });
     }
 
     // FINGERPRINT_V216_MY_RECORD — the signed-in player's own record across all their pools (cached 10 min)
