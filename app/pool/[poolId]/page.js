@@ -1,5 +1,5 @@
 'use client';
-// build: venmo-app-link-v319-20261005-1430
+// build: pay-after-entry-v320-20261005-1500
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1391,6 +1391,7 @@ export default function App(){
   const [payPending,setPayPending]=useState([]);          // FINGERPRINT_V316_VENMO — said "I've paid", awaiting confirmation
   const [venmoInput,setVenmoInput]=useState(null);
   const [payFor,setPayFor]=useState(null);                // FINGERPRINT_V318 — payment panel for one of your entries
+  const [payJustEntered,setPayJustEntered]=useState(false); // FINGERPRINT_V320 — opened straight after entering
   const [photoBroken,setPhotoBroken]=useState(false);     // FINGERPRINT_V311 — Google photo failed to load       // FINGERPRINT_V285_OWNER — Admin via your account
   const [myPools,setMyPools]=useState([]);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
   const [editCode,setEditCode]=useState('');
@@ -3175,7 +3176,8 @@ export default function App(){
       setEntryName('');setEntryEmail('');setPicks({1:[],2:[],3:[]});setSearch('');
       setEditMode(false);setEditCode('');
       if(isTeamPool){ if(d.editCode&&d.name) adoptEntry(d.name,d.editCode); else setChatName(entryName.trim()); msg("You're in! ✓ Now make your picks"); }
-      else { if(!editMode&&d.editCode&&d.name){ adoptEntry(d.name,d.editCode); setAcctEntries(x=>[...x.filter(e=>e.name!==d.name),{name:d.name,code:d.editCode}]); }
+      else { if(!editMode&&d.editCode&&d.name){ adoptEntry(d.name,d.editCode); setAcctEntries(x=>[...x.filter(e=>e.name!==d.name),{name:d.name,code:d.editCode}]);
+          if(!paymentsHidden&&(+poolMeta?.entryFee||0)>0){ setPayJustEntered(true); setPayFor(d.name); } }   // FINGERPRINT_V320
         msg(editMode?'Picks updated!':"You're in! ✓"); setAddAnother(false); setTab('Standings'); }
     }catch(e){msg('Error submitting — check connection');}
     setSubmitting(false);
@@ -4654,13 +4656,15 @@ export default function App(){
           </div>
         : null)}
       {/* FINGERPRINT_V318 — payment panel from your own Unpaid badge */}
-      {payFor&&<div onClick={()=>setPayFor(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:175,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+      {payFor&&<div onClick={()=>{setPayFor(null);setPayJustEntered(false);}} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:175,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
         <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,borderRadius:'16px 16px 0 0',padding:'16px 16px 26px',textAlign:'center'}}>
           <div style={{display:'flex',alignItems:'center',marginBottom:4}}>
-            <div style={{flex:1,textAlign:'left',fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary}}>💵 Entry fee — {payFor}</div>
-            <button type="button" onClick={()=>setPayFor(null)} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
+            <div style={{flex:1,textAlign:'left',fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary}}>{payJustEntered?`💵 You're in, ${payFor}!`:`💵 Entry fee — ${payFor}`}</div>
+            <button type="button" onClick={()=>{setPayFor(null);setPayJustEntered(false);}} style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
           </div>
+          {payJustEntered&&!payments[payFor]&&<div style={{fontSize:13,color:'#6b7c5e',textAlign:'left',margin:'0 0 6px',lineHeight:1.45}}>Pay your ${+poolMeta?.entryFee||0} entry now — or any time later from your <b>Unpaid</b> badge.</div>}
           {payments[payFor]?<div style={{fontSize:14,fontWeight:700,color:'#2d7a1e',padding:'12px 0'}}>Paid ✓ — thanks!</div>:payRow(payFor,false)}
+          {payJustEntered&&!payments[payFor]&&<button type="button" onClick={()=>{setPayFor(null);setPayJustEntered(false);}} style={{background:'none',border:'none',color:'#8a9580',fontSize:13,textDecoration:'underline',cursor:'pointer',marginTop:12}}>Pay later</button>}
         </div>
       </div>}
       {gpDark&&<style>{gpDarkCss(T)}</style>}{/* FINGERPRINT_V313_DARK — the dark layer, only while dark */}
@@ -5140,7 +5144,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         const nag = !paid && (isTeamPool ? firstSessionDone : roundOneComplete);
                         const pend = !paid && (payPending||[]).includes(e.name), canPay = !paid && !pend && isMine(e.name) && (+poolMeta?.entryFee||0) > 0;   // FINGERPRINT_V318
                         if (pend) return <span title="Says they've paid — awaiting the commissioner" style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,background:'#fff8e6',color:'#9a6a00',border:'1px solid #f0c060'}}>⏳ Confirming</span>;
-                        return <span title={canPay?'Tap to pay':nag?'Still owes the pot':undefined} onClick={canPay?(ev)=>{ev.stopPropagation();setPayFor(e.name);}:undefined} style={{cursor:canPay?'pointer':'default',fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,
+                        return <span title={canPay?'Tap to pay':nag?'Still owes the pot':undefined} onClick={canPay?(ev)=>{ev.stopPropagation();setPayJustEntered(false);setPayFor(e.name);}:undefined} style={{cursor:canPay?'pointer':'default',fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:10,
                           background:paid?'#e8f5e8':(nag?'#fdeaea':'#f5f5f5'),
                           color:paid?'#2d7a1e':(nag?'#c62828':'#aaa'),
                           border:`1px solid ${paid?'#2d7a1e30':(nag?'#c6282866':'#ddd')}`,
