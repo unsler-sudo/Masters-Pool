@@ -1,5 +1,5 @@
 'use client';
-// build: brand-buttons-v296-20261003-1500
+// build: makecut-v297-20261004-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -2753,6 +2753,7 @@ export default function App(){
           thru:thruHoles!=null&&thruHoles>0?String(thruHoles):'',
           r1:match.R1??match.round1??null,r2:match.R2??match.round2??null,
           r3:match.R3??match.round3??null,r4:match.R4??match.round4??null,
+          liveMakeCut:match.make_cut??null,          // FINGERPRINT_V297_MAKECUT
         };
       }
       return f;
@@ -2793,6 +2794,7 @@ export default function App(){
           teeTime: null, startHole: null, teeRoundNum: null, allRoundsTees: null,
           pairingTeeTime: null, pairingStartHole: null, pairingRoundNum: null,
           pos: p.current_pos!=null&&p.current_pos!=='--'?String(p.current_pos):'-',
+          liveMakeCut: p.make_cut ?? null,          // FINGERPRINT_V297_MAKECUT
           score: total!=null?(total===0?'E':(total>0?`+${total}`:String(total))):'E',
           today: '',
           thru: thruHoles!=null&&thruHoles>0?String(thruHoles):'',
@@ -2842,6 +2844,20 @@ export default function App(){
         if (r1Done && r2Done && r3NotStarted && noR3Tee && notAlreadyMarked) {
           p.pos = 'CUT';
         }
+      });
+    }
+
+    // FINGERPRINT_V297_MAKECUT — DataGolf's live make-cut % settles to exactly 100% / 0% the moment the cut is
+    // decided, often well before anyone is labelled CUT. Once EVERY golfer is at exactly 0% or 100% (no one in
+    // between = nothing left to decide), anyone at exactly 0% who has finished their round has missed the cut.
+    // Works whichever round the cut follows (R2 normally, R3 at the Dunhill); no-cut events sit at 100%.
+    {
+      const mcOf = (p) => { const v = p.liveMakeCut; if (v == null || v === '' || isNaN(+v)) return null; const n = +v; return n > 1 ? n / 100 : n; };
+      const live = updated.filter(p => !/WD|DQ/i.test(p.pos || '') && mcOf(p) != null);
+      const settled = live.length >= 30 && live.every(p => mcOf(p) === 0 || mcOf(p) >= 0.9999);
+      if (settled) updated.forEach(p => {
+        const t = parseInt(p.thru, 10), midRound = t >= 1 && t <= 17;
+        if (mcOf(p) === 0 && !midRound && !/CUT|WD|DQ|MC/i.test(p.pos || '')) p.pos = 'CUT';
       });
     }
 
