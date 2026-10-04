@@ -37,7 +37,7 @@ export async function GET(request) {
     const info = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: `Bearer ${tok.access_token}` } }).then(r => r.json());
     if (!info.sub) throw new Error('no account id');
     if (!info.email || info.email_verified === false) throw new Error('Your Google account’s email isn’t verified');
-    const user = await finishOAuth({ provider: 'google', sub: info.sub, email: info.email, name: info.name, loginId: state });
+    const user = await finishOAuth({ provider: 'google', sub: info.sub, email: info.email, name: info.name, loginId: state, picture: info.picture });
     return doneHtml(true, `Welcome, ${user.name}! Go back to Tuna Golf Pool — you’re signed in there now.`);
   } catch (e) {
     console.error('[auth/google]', e.message);
