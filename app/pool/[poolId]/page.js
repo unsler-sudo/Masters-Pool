@@ -1,5 +1,5 @@
 'use client';
-// build: install-v310-20261005-0900
+// build: google-photo-v311-20261005-0930
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1338,7 +1338,8 @@ export default function App(){
   const [claimList,setClaimList]=useState(null);           // FINGERPRINT_V309 — entries you can claim
   const [adminClaims,setAdminClaims]=useState([]);        // FINGERPRINT_V309 — requests for the commissioner
   const [providers,setProviders]=useState({google:false,apple:false});
-  const [ownerAdmin,setOwnerAdmin]=useState(false);       // FINGERPRINT_V285_OWNER — Admin via your account
+  const [ownerAdmin,setOwnerAdmin]=useState(false);
+  const [photoBroken,setPhotoBroken]=useState(false);     // FINGERPRINT_V311 — Google photo failed to load       // FINGERPRINT_V285_OWNER — Admin via your account
   const [myPools,setMyPools]=useState([]);                  // FINGERPRINT_V278 — re-render once extra photos arrive        // FINGERPRINT_V275 — deliberately making a 2nd entry
   const [editCode,setEditCode]=useState('');
   const [showEditModal,setShowEditModal]=useState(null);
@@ -4559,9 +4560,14 @@ export default function App(){
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
         {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t==='History'?'Season':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
-      <button type="button" onClick={()=>openAcct(acct?null:'signin')} aria-label="Account" title={acct?`Signed in as ${acct.name}`:'Sign in'}
-          style={{flex:'0 0 auto',padding:'0 10px',background:'transparent',border:'none',fontSize:17,cursor:'pointer',position:'relative'}}>👤
-          {acct&&<span style={{position:'absolute',top:'50%',right:6,marginTop:-11,width:7,height:7,borderRadius:'50%',background:acct.needsPhone?'#e0a000':'#2d9a3e'}}/>}</button>
+      <button type="button" onClick={()=>openAcct(acct?null:'signin')} aria-label="Your profile" title={acct?`${acct.name} — your profile`:'Sign in'}
+          style={{flex:'0 0 auto',padding:'0 10px',background:'transparent',border:'none',fontSize:17,cursor:'pointer',position:'relative',display:'flex',alignItems:'center'}}>
+          {/* FINGERPRINT_V311_PHOTO — your Google photo IS the profile button (amber ring = cell number missing) */}
+          {acct?.photo&&!photoBroken
+            ? <img src={acct.photo} alt="" referrerPolicy="no-referrer" onError={()=>setPhotoBroken(true)}
+                style={{width:28,height:28,borderRadius:'50%',objectFit:'cover',display:'block',boxShadow:`0 0 0 2px ${acct.needsPhone?'#e0a000':'rgba(255,255,255,.85)'}`}}/>
+            : <>👤{acct&&<span style={{position:'absolute',top:'50%',right:6,marginTop:-11,width:7,height:7,borderRadius:'50%',background:acct.needsPhone?'#e0a000':'#2d9a3e'}}/>}</>}
+        </button>
         
       </nav>
       {/* FINGERPRINT_V283_ACCOUNTS — the Account panel */}
@@ -4729,7 +4735,9 @@ export default function App(){
             </> : <>
               {/* FINGERPRINT_V300_PROFILE — who you are */}
               <div style={{display:'flex',alignItems:'center',gap:12,margin:'2px 0 14px'}}>
-                <div style={{width:46,height:46,borderRadius:'50%',background:T.primary,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:800,flexShrink:0}}>{((acct.name||'?').trim()[0]||'?').toUpperCase()}</div>
+                {acct.photo&&!photoBroken
+                  ? <img src={acct.photo} alt="" referrerPolicy="no-referrer" onError={()=>setPhotoBroken(true)} style={{width:46,height:46,borderRadius:'50%',objectFit:'cover',flexShrink:0}}/>
+                  : <div style={{width:46,height:46,borderRadius:'50%',background:T.primary,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,fontWeight:800,flexShrink:0}}>{((acct.name||'?').trim()[0]||'?').toUpperCase()}</div>}
                 <div style={{minWidth:0}}>
                   <div style={{fontWeight:800,fontSize:16,color:'#2a3a1e'}}>{acct.name}</div>
                   <div style={{fontSize:12,color:'#8a9580',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{acct.email}</div>
