@@ -48,6 +48,47 @@ export default function AdminDashboard() {
   const [error, setError]       = useState('');
   const [loading, setLoading]   = useState(false);
   const [pgaTourEvent, setPgaTourEvent] = useState(null);
+  // FINGERPRINT_PLAYERS — master list of player accounts
+  const [users, setUsers] = useState(null);
+  const [userQ, setUserQ] = useState('');
+  // FINGERPRINT_BROADCAST — announcements
+  const [bInfo, setBInfo] = useState(null);
+  const [bf, setBf] = useState({ audience:'everyone', subject:'', message:'', buttonText:'', buttonUrl:'', test:'' });
+  const [bBusy, setBBusy] = useState(false);
+  const [bNote, setBNote] = useState('');
+  const loadBInfo = () => fetch('/api/admin-pools', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password, action:'broadcast-info' }) })
+    .then(r => r.json()).then(d => { if (d?.ok) setBInfo(d); }).catch(() => {});
+  useEffect(() => { if (authed) loadBInfo(); }, [authed]);
+  const sendB = async (test) => {
+    if (!test) {
+      const n = bInfo?.counts?.[bf.audience] ?? 0;
+      const who = { commissioners:'commissioners', players:'players', everyone:'people' }[bf.audience];
+      if (!window.confirm(`Send "${bf.subject}" to ${n} ${who}?\n\nThis can't be undone.`)) return;
+    }
+    setBBusy(true); setBNote('');
+    try {
+      const d = await fetch('/api/admin-pools', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ password, action:'broadcast', ...bf, test: test ? bf.test : undefined }) }).then(r => r.json());
+      if (d.error) setBNote('⚠️ ' + d.error);
+      else if (test) setBNote(d.sent ? `✓ Test sent to ${bf.test}` : '⚠️ The test didn’t send');
+      else { setBNote(`✓ Sent to ${d.sent}${d.skipped ? ` (${d.skipped} unsubscribed, skipped)` : ''}`); setBf(f => ({ ...f, subject:'', message:'', buttonText:'', buttonUrl:'' })); loadBInfo(); }
+    } catch { setBNote('⚠️ Connection problem — try again'); }
+    setBBusy(false);
+  };
+  useEffect(() => {
+    if (!authed) return;
+    fetch('/api/admin-pools', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password, action:'list-users' }) })
+      .then(r => r.json()).then(d => setUsers(d?.ok ? d.users : [])).catch(() => setUsers([]));
+  }, [authed]);
+  const exportUsers = () => {
+    const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [['Name','Email','Cell','Sign-in','Joined','Last on','Pools run','Pools played']].concat((users || []).map(u => [
+      u.name, u.email, u.phone, [u.password&&'Password', u.google&&'Google', u.apple&&'Apple'].filter(Boolean).join(' + '),
+      u.created ? u.created.slice(0,10) : '', u.seen ? u.seen.slice(0,10) : '',
+      u.pools.filter(x => x.owner).map(x => x.name).join('; '), u.pools.filter(x => !x.owner).map(x => x.name).join('; ')]));
+    const blob = new Blob([rows.map(r => r.map(cell).join(',')).join('\n')], { type:'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `tuna-golf-pool-players-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  };
 
   // Auto-fetch current PGA Tour event for purse helper
   useEffect(() => {
@@ -250,6 +291,76 @@ export default function AdminDashboard() {
               </tbody>
             </table>
           }
+        </div>
+
+        {/* FINGERPRINT_BROADCAST — email commissioners, players, or everyone */}
+        <div style={{background:'#fff',borderRadius:12,padding:20,marginTop:20,boxShadow:'0 1px 3px rgba(0,0,0,.08)'}}>
+          <h2 style={{color:'#1a2a5c',fontSize:18,fontWeight:800,margin:'0 0 12px'}}>📣 Email</h2>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+            {[['commissioners','Commissioners'],['players','All players'],['everyone','Everyone']].map(([k,l]) =>
+              <button key={k} type="button" onClick={()=>setBf(f=>({...f,audience:k}))} style={{padding:'8px 14px',borderRadius:20,fontSize:13,fontWeight:700,cursor:'pointer',
+                border:`1.5px solid ${bf.audience===k?'#1a2a5c':'#d1d5db'}`,background:bf.audience===k?'#1a2a5c':'#fff',color:bf.audience===k?'#fff':'#374151'}}>
+                {l}{bInfo?` · ${bInfo.counts[k]}`:''}</button>)}
+          </div>
+          <input value={bf.subject} onChange={e=>setBf(f=>({...f,subject:e.target.value}))} placeholder="Subject" style={{...inp,marginBottom:8}}/>
+          <textarea value={bf.message} onChange={e=>setBf(f=>({...f,message:e.target.value}))} placeholder={"Message — starts with \"Hi [first name],\" automatically"} rows={6} style={{...inp,marginBottom:8,resize:'vertical',lineHeight:1.5}}/>
+          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+            <input value={bf.buttonText} onChange={e=>setBf(f=>({...f,buttonText:e.target.value}))} placeholder="Button text (optional)" style={{...inp,flex:'1 1 160px',width:'auto'}}/>
+            <input value={bf.buttonUrl} onChange={e=>setBf(f=>({...f,buttonUrl:e.target.value}))} placeholder="Button link — https://…" style={{...inp,flex:'2 1 240px',width:'auto'}}/>
+          </div>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+            <input value={bf.test} onChange={e=>setBf(f=>({...f,test:e.target.value}))} placeholder="Your email, for a test" style={{...inp,flex:'1 1 200px',width:'auto'}}/>
+            <button type="button" disabled={bBusy||!bf.test||!bf.subject||!bf.message} onClick={()=>sendB(true)}
+              style={{...pri,background:'#fff',color:'#1a2a5c',border:'1.5px solid #1a2a5c',padding:'10px 16px',opacity:(bBusy||!bf.test||!bf.subject||!bf.message)?.5:1}}>Send test</button>
+            <button type="button" disabled={bBusy||!bf.subject||!bf.message} onClick={()=>sendB(false)}
+              style={{...pri,padding:'10px 16px',opacity:(bBusy||!bf.subject||!bf.message)?.5:1}}>{bBusy?'Sending…':`Send to ${bInfo?.counts?.[bf.audience] ?? '…'}`}</button>
+          </div>
+          {bNote&&<div style={{marginTop:10,fontSize:13,color:bNote.startsWith('✓')?'#15803d':'#b91c1c'}}>{bNote}</div>}
+          <div style={{fontSize:11,color:'#9ca3af',marginTop:10,lineHeight:1.5}}>Everyone gets their own copy with an unsubscribe link at the bottom.
+            {bInfo?.unsubscribed?` ${bInfo.unsubscribed} ${bInfo.unsubscribed===1?'person has':'people have'} unsubscribed and will be skipped.`:''} Unsubscribing only stops these announcements — never pool emails.</div>
+          {bInfo?.log?.length>0&&<div style={{marginTop:14}}>
+            <div style={{fontSize:11,fontWeight:700,letterSpacing:.5,color:'#6b7280',textTransform:'uppercase',marginBottom:4}}>Recent</div>
+            {bInfo.log.map((l,i)=><div key={i} style={{fontSize:13,color:'#374151',padding:'5px 0',borderTop:'1px solid #f3f4f6'}}>
+              <span style={{color:'#6b7280'}}>{new Date(l.at).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span> · <b>{l.subject}</b> · {{commissioners:'Commissioners',players:'All players',everyone:'Everyone'}[l.audience]} · {l.sent} sent</div>)}
+          </div>}
+        </div>
+
+        {/* FINGERPRINT_PLAYERS — every player account */}
+        <div style={{background:'#fff',borderRadius:12,padding:20,marginTop:20,boxShadow:'0 1px 3px rgba(0,0,0,.08)'}}>
+          {(() => {
+            const q = userQ.trim().toLowerCase();
+            const list = (users || []).filter(u => !q || [u.name,u.email,u.phone,...u.pools.map(x=>x.name)].join(' ').toLowerCase().includes(q));
+            const day = (iso) => iso ? new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+            const ago = (iso) => { if (!iso) return '—'; const d = (Date.now() - Date.parse(iso)) / 864e5; return d < 1 ? 'today' : d < 2 ? 'yesterday' : d < 30 ? `${Math.floor(d)} days ago` : day(iso); };
+            const fmtPhone = (p) => /^\+1\d{10}$/.test(p) ? `(${p.slice(2,5)}) ${p.slice(5,8)}-${p.slice(8)}` : p;
+            return <>
+              <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:12}}>
+                <h2 style={{color:'#1a2a5c',fontSize:18,fontWeight:800,margin:0,flex:1}}>👥 Players {users ? `(${users.length})` : ''}</h2>
+                <input value={userQ} onChange={e=>setUserQ(e.target.value)} placeholder="Search name, email, cell or pool" style={{...inp,width:260}}/>
+                <button type="button" onClick={exportUsers} disabled={!users?.length} style={{...pri,padding:'10px 16px',opacity:users?.length?1:.5}}>⬇ Export CSV</button>
+              </div>
+              {!users ? <div style={{color:'#6b7280',fontSize:14,padding:'12px 0'}}>Loading players…</div>
+              : list.length === 0 ? <div style={{color:'#6b7280',fontSize:14,padding:'12px 0'}}>{users.length ? 'No players match that search.' : 'No player accounts yet.'}</div>
+              : <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                    <thead><tr style={{textAlign:'left',color:'#6b7280',fontSize:11,textTransform:'uppercase',letterSpacing:.5}}>
+                      {['Player','Cell','Sign-in','Joined','Last on','Pools'].map(h=><th key={h} style={{padding:'8px 10px',borderBottom:'2px solid #e5e7eb',whiteSpace:'nowrap'}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>{list.map(u => <tr key={u.uid} style={{borderBottom:'1px solid #f3f4f6',verticalAlign:'top'}}>
+                      <td style={{padding:'10px'}}><div style={{fontWeight:700,color:'#1a2a5c'}}>{u.name}</div><a href={`mailto:${u.email}`} style={{color:'#6b7280',textDecoration:'none'}}>{u.email}</a></td>
+                      <td style={{padding:'10px',whiteSpace:'nowrap'}}>{u.phone ? <a href={`tel:${u.phone}`} style={{color:'#374151',textDecoration:'none'}}>{fmtPhone(u.phone)}</a> : <span style={{color:'#d97706'}}>missing</span>}</td>
+                      <td style={{padding:'10px',whiteSpace:'nowrap',color:'#374151'}}>{[u.password&&'Password',u.google&&'Google',u.apple&&'Apple'].filter(Boolean).join(' · ')||'—'}</td>
+                      <td style={{padding:'10px',whiteSpace:'nowrap',color:'#374151'}}>{day(u.created)}</td>
+                      <td style={{padding:'10px',whiteSpace:'nowrap',color:'#374151'}}>{ago(u.seen)}</td>
+                      <td style={{padding:'10px'}}>{u.pools.length ? u.pools.map(x => <a key={x.poolId} href={`/pool/${x.poolId}`} target="_blank" rel="noreferrer"
+                          style={{display:'inline-block',margin:'0 4px 4px 0',padding:'2px 8px',borderRadius:10,fontSize:11,fontWeight:700,textDecoration:'none',
+                            background:x.owner?'#fff3d6':'#eef2ff',color:x.owner?'#7a5500':'#1a2a5c'}}>{x.owner?'★ ':''}{x.name}</a>) : <span style={{color:'#9ca3af'}}>—</span>}</td>
+                    </tr>)}</tbody>
+                  </table>
+                  <div style={{fontSize:11,color:'#9ca3af',marginTop:8}}>★ = runs that pool. "Last on" updates at most every few hours.</div>
+                </div>}
+            </>;
+          })()}
         </div>
       </div>
     </div>
