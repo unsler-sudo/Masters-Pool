@@ -91,7 +91,7 @@ export async function newUser({ name, email, phone = '', pw = '', google = '', a
   return u;
 }
 export const publicUser = (u) => u && ({
-  uid: u.uid, name: u.name, email: u.email, phone: u.phone || '', photo: u.photo || '',
+  uid: u.uid, name: u.name, nickname: u.nickname || '', email: u.email, phone: u.phone || '', photo: u.photo || '',
   hasPassword: !!u.pw, google: !!u.google, apple: !!u.apple, needsPhone: !u.phone,
 });
 
