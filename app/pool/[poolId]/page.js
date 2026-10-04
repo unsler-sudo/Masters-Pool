@@ -1,5 +1,5 @@
 'use client';
-// build: my-record-v307-20261004-2200
+// build: record-years-v308-20261004-2230
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -4556,17 +4556,28 @@ export default function App(){
                 const usd=(n)=>'$'+(Number.isInteger(n)?n.toLocaleString('en-US'):n.toFixed(2));
                 const ord=(n)=>n+(['th','st','nd','rd'][((n%100)-20)%10]||['th','st','nd','rd'][n%100]||'th');
                 const last=(nm)=>String(nm||'').split(',')[0];
-                const S=record.summary||{}, rows=record.rows||[];
+                const rows=record.rows||[];
+                // FINGERPRINT_V308 — the summary follows the filters; the list is grouped by year
+                const summarize=(rs)=>{const n=rs.length; if(!n) return {entries:0,wins:0,top3:0,won:0};
+                  const cnt={}; let bp=null;
+                  rs.forEach(r=>r.picks.forEach(p=>{cnt[p.name]=(cnt[p.name]||0)+1; if(!bp||p.earned>bp.earned) bp={name:p.name,earned:p.earned,event:r.event,year:r.year};}));
+                  const fav=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];
+                  return {entries:n,wins:rs.filter(r=>r.place===1).length,top3:rs.filter(r=>r.place<=3).length,
+                    won:Math.round(rs.reduce((t,r)=>t+r.prize,0)*100)/100,best:Math.min(...rs.map(r=>r.place)),
+                    avg:Math.round(rs.reduce((t,r)=>t+r.place,0)/n),favorite:fav?{name:fav[0],times:fav[1]}:null,bestPick:bp&&bp.earned>0?bp:null};};
                 if(!rows.length) return <div style={{textAlign:'center',padding:'24px 6px',color:'#6b7c5e',fontSize:14,lineHeight:1.5}}><div style={{fontSize:34}}>📊</div>No finished events yet — your record builds as you play.</div>;
                 const KINDS=[['all','All'],['majors','Majors'],['pgatour','PGA Tour'],['dpworld','DP World'],['cup','Cups']].filter(([k2])=>k2==='all'||rows.some(r=>r.kind===k2));
                 const years=[...new Set(rows.map(r=>r.year).filter(Boolean))].sort((a,b)=>b-a);
                 const list=rows.filter(r=>(recKind==='all'||r.kind===recKind)&&(recYear==='all'||r.year===+recYear));
+                const S=summarize(list);
+                const scope=(recYear==='all'?'Career':recYear)+(recKind==='all'?'':` · ${({majors:'Majors',pgatour:'PGA Tour',dpworld:'DP World',cup:'Cups'})[recKind]}`);
                 const stat=(v,l)=><div style={{flex:1,textAlign:'center',padding:'8px 2px'}}><div style={{fontSize:18,fontWeight:800,color:T.primary}}>{v}</div><div style={{fontSize:10,color:'#8a9580',textTransform:'uppercase',letterSpacing:.6}}>{l}</div></div>;
                 return <>
                   <div style={{border:`1px solid ${T.cardBorder}`,borderRadius:10,padding:'4px 6px 10px',marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase',textAlign:'center',paddingTop:6}}>{scope}</div>
                     <div style={{display:'flex'}}>{stat(S.entries,'Events')}{stat(S.wins,'Wins')}{stat(S.top3,'Top 3')}{stat(usd(S.won||0),'Won')}</div>
                     <div style={{fontSize:12,color:'#6b7c5e',textAlign:'center',lineHeight:1.6,padding:'0 6px'}}>
-                      {S.best?`Best finish ${ord(S.best)} · Average ${ord(S.avg)}`:''}
+                      {S.entries?`Best finish ${ord(S.best)} · Average ${ord(S.avg)}`:'Nothing for this filter yet.'}
                       {S.favorite&&<div>Most-picked golfer: <b>{last(S.favorite.name)}</b> ({S.favorite.times} time{S.favorite.times===1?'':'s'})</div>}
                       {S.bestPick&&<div>Best pick: <b>{last(S.bestPick.name)}</b> — {big(S.bestPick.earned)} at the {S.bestPick.event}{S.bestPick.year?` ${S.bestPick.year}`:''}</div>}
                     </div>
@@ -4579,7 +4590,14 @@ export default function App(){
                   </div>
                   {list.length===0&&<div style={{fontSize:13,color:'#8a9580',padding:'10px 0'}}>Nothing here for that filter.</div>}
                   {list.map((r,i)=>{const open=recOpen===i, icon=r.place===1?'🏆':r.place===2?'🥈':r.place===3?'🥉':'⛳';
-                    return <div key={i} style={{borderTop:'1px solid #f0f0ea'}}>
+                    const newYear=i===0||list[i-1].year!==r.year;
+                    const ys=newYear?summarize(list.filter(x=>x.year===r.year)):null;
+                    return <div key={i}>
+                      {newYear&&<div style={{display:'flex',alignItems:'baseline',gap:8,margin:i?'16px 0 4px':'2px 0 4px',paddingBottom:4,borderBottom:`2px solid ${T.primary}30`}}>
+                        <span style={{fontSize:15,fontWeight:800,color:T.primary}}>{r.year||'Earlier'}</span>
+                        <span style={{fontSize:11,color:'#8a9580'}}>{ys.entries} event{ys.entries===1?'':'s'}{ys.wins?` · ${ys.wins} win${ys.wins===1?'':'s'}`:''}{ys.won?` · ${usd(ys.won)} won`:''}</span>
+                      </div>}
+                      <div style={{borderTop:newYear?'none':'1px solid #f0f0ea'}}>
                       <button type="button" onClick={()=>setRecOpen(open?null:i)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',textAlign:'left',background:'none',border:'none',padding:'10px 2px',cursor:'pointer'}}>
                         <span style={{fontSize:18,width:22,textAlign:'center'}}>{icon}</span>
                         <span style={{flex:1,minWidth:0}}>
@@ -4594,6 +4612,7 @@ export default function App(){
                           : r.picks.map(p=><div key={p.name} style={{display:'flex',fontSize:12,padding:'2px 0',color:p.earned>0?'#2a3a1e':'#a3ac98'}}>
                               <span style={{flex:1}}>{last(p.name)}</span><span>{p.earned>0?big(p.earned):'—'}</span></div>)}
                       </div>}
+                      </div>
                     </div>;})}
                 </>;
               })()}
