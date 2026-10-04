@@ -1,5 +1,5 @@
 'use client';
-// build: claims-v309-20261004-2300
+// build: install-v310-20261005-0900
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1346,6 +1346,12 @@ export default function App(){
   const [pushKey,setPushKey]=useState(null);              // FINGERPRINT_V271_PUSH
   const [pushState,setPushState]=useState('unknown');     // unsupported | ios-browser | default | granted | on | denied
   const [pushHide,setPushHide]=useState(false);
+  // FINGERPRINT_V310_INSTALL — "Get the app": Android/desktop get the browser's own install prompt; iPhone/iPad
+  // (where Apple allows no install button) get a visual guide with an arrow pointing at Safari's Share button.
+  const [installEvt,setInstallEvt]=useState(null);
+  const [installEnv,setInstallEnv]=useState({standalone:true,iosSafari:false,ipad:false});
+  const [installHide,setInstallHide]=useState(true);
+  const [iosGuide,setIosGuide]=useState(false);
   const [notifPrefs,setNotifPrefs]=useState(null);         // FINGERPRINT_V272 — this device's choices
   const [pushEndpoint,setPushEndpoint]=useState(null);
   const [adminPush,setAdminPush]=useState(false);
@@ -3404,6 +3410,22 @@ export default function App(){
     }catch{ msg('Could not turn on notifications'); }
   };
   const hidePush=()=>{ setPushHide(true); try{ localStorage.setItem('push_hide','1'); }catch{} };
+  useEffect(()=>{
+    if(typeof window==='undefined') return;
+    const ua=navigator.userAgent||'';
+    const ipad=/iPad/.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+    const ios=ipad||/iPhone|iPod/.test(ua);
+    const safari=ios&&!/CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(ua);      // other iPhone browsers can't add to Home Screen the same way
+    const standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches)||window.navigator.standalone===true;
+    setInstallEnv({standalone,iosSafari:safari,ipad});
+    try{ setInstallHide(localStorage.getItem('install_hide')==='1'); }catch{ setInstallHide(false); }
+    const onPrompt=(e)=>{ e.preventDefault(); setInstallEvt(e); };
+    const onInstalled=()=>{ setInstallEvt(null); setInstallHide(true); };
+    window.addEventListener('beforeinstallprompt',onPrompt);
+    window.addEventListener('appinstalled',onInstalled);
+    return ()=>{ window.removeEventListener('beforeinstallprompt',onPrompt); window.removeEventListener('appinstalled',onInstalled); };
+  },[]);
+  const hideInstall=()=>{ setInstallHide(true); try{ localStorage.setItem('install_hide','1'); }catch{} };
   // FINGERPRINT_V290 — when Admin opens, ask whether this device already gets commissioner alerts
   useEffect(()=>{
     if(tab!=='Admin'||!adminOk||!adminPw||typeof navigator==='undefined'||!('serviceWorker' in navigator)) return;
@@ -4493,18 +4515,44 @@ export default function App(){
         <div style={{flex:1,fontSize:13,lineHeight:1.35,color:'#3a4a2e'}}>Add your cell number to finish setting up your account.</div>
         <button type="button" onClick={()=>openAcct()} style={{background:T.primary,color:'#fff',border:'none',borderRadius:7,padding:'8px 12px',fontWeight:700,fontSize:13,cursor:'pointer'}}>Add</button>
       </div>}
+      {/* FINGERPRINT_V310_INSTALL — Get the app */}
+      {!installHide&&!installEnv.standalone&&(installEvt||installEnv.iosSafari)&&<div style={{display:'flex',alignItems:'center',gap:10,margin:'8px 10px',padding:'10px 12px',borderRadius:10,background:'#f2f6fb',border:'1px solid #c9d6ea'}}>
+        <span style={{fontSize:20}}>📲</span>
+        <div style={{flex:1,fontSize:13,lineHeight:1.35,color:'#2a3a4e'}}><b>Get the Golf Pool app</b> — notifications, and one tap from your Home Screen.</div>
+        {installEvt
+          ? <button type="button" onClick={async()=>{ try{ installEvt.prompt(); await installEvt.userChoice; }catch{} setInstallEvt(null); }}
+              style={{background:'#1f4e9c',color:'#fff',border:'none',borderRadius:7,padding:'8px 12px',fontWeight:700,fontSize:13,cursor:'pointer',whiteSpace:'nowrap'}}>Install</button>
+          : <button type="button" onClick={()=>setIosGuide(true)}
+              style={{background:'#1f4e9c',color:'#fff',border:'none',borderRadius:7,padding:'8px 12px',fontWeight:700,fontSize:13,cursor:'pointer',whiteSpace:'nowrap'}}>Show me how</button>}
+        <button type="button" onClick={hideInstall} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
+      </div>}
+      {iosGuide&&(()=>{
+        const share=<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{verticalAlign:'-4px'}} aria-hidden="true"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M6 11v9h12v-9"/></svg>;
+        const add=<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2a3a4e" strokeWidth="2" strokeLinecap="round" style={{verticalAlign:'-4px'}} aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>;
+        const step=(n,body)=><div style={{display:'flex',gap:12,alignItems:'flex-start',padding:'10px 0',borderTop:n>1?'1px solid #eef1f5':'none'}}>
+          <span style={{width:24,height:24,borderRadius:'50%',background:'#1f4e9c',color:'#fff',fontSize:13,fontWeight:800,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{n}</span>
+          <div style={{fontSize:15,lineHeight:1.45,color:'#1f2937'}}>{body}</div></div>;
+        const arrowPos=installEnv.ipad?{top:6,right:84}:{bottom:'calc(env(safe-area-inset-bottom, 0px) + 10px)',left:'50%',marginLeft:-22};
+        return <div onClick={()=>setIosGuide(false)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',zIndex:190}}>
+          <style>{`@keyframes gpBob{0%,100%{transform:translateY(0)}50%{transform:translateY(${installEnv.ipad?'-':''}12px)}}`}</style>
+          <div onClick={e=>e.stopPropagation()} style={{position:'absolute',left:16,right:16,top:installEnv.ipad?90:'14%',maxWidth:420,margin:'0 auto',background:'#fff',borderRadius:16,padding:'18px 18px 12px',boxShadow:'0 10px 30px rgba(0,0,0,.25)'}}>
+            <div style={{display:'flex',alignItems:'center',marginBottom:6}}>
+              <div style={{flex:1,fontWeight:800,fontSize:17,color:'#1f2937'}}>Add Golf Pool to your Home Screen</div>
+              <button type="button" onClick={()=>setIosGuide(false)} aria-label="Close" style={{background:'none',border:'none',fontSize:20,color:'#999',cursor:'pointer'}}>✕</button>
+            </div>
+            {step(1,<>Tap the <b>Share</b> button {share} in Safari's toolbar{installEnv.ipad?' (top right)':' (at the bottom)'}.<div style={{fontSize:12,color:'#6b7280',marginTop:2}}>Don't see it? Tap <b>···</b> first, then <b>Share</b>.</div></>)}
+            {step(2,<>Scroll down and tap <b>Add to Home Screen</b> {add}.</>)}
+            {step(3,<>Tap <b>Add</b>, then open the pool from the new <b>Golf Pool</b> icon — you'll be able to turn on notifications there.</>)}
+          </div>
+          <div aria-hidden="true" style={{position:'absolute',...arrowPos,width:44,textAlign:'center',fontSize:40,lineHeight:1,color:'#fff',textShadow:'0 2px 8px rgba(0,0,0,.5)',animation:'gpBob 1s ease-in-out infinite'}}>{installEnv.ipad?'⬆':'⬇'}</div>
+        </div>;
+      })()}
       {/* FINGERPRINT_V271_PUSH — one tap to turn notifications on (team events, signed-in entries) */}
       {chatVerified&&!pushHide&&(pushState==='default'&&pushKey
         ? <div style={{display:'flex',alignItems:'center',gap:10,margin:'8px 10px',padding:'10px 12px',borderRadius:10,background:'#fff8e6',border:'1px solid #f0c060'}}>
             <span style={{fontSize:20}}>🔔</span>
             <div style={{flex:1,fontSize:13,lineHeight:1.35,color:'#3a4a2e'}}><b>Get notified</b> — lock reminders, round recaps, the cut and results. You choose which.</div>
             <button type="button" onClick={enablePush} style={{background:T.primary,color:'#fff',border:'none',borderRadius:7,padding:'8px 12px',fontWeight:700,fontSize:13,cursor:'pointer',whiteSpace:'nowrap'}}>Turn on</button>
-            <button type="button" onClick={hidePush} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
-          </div>
-        : pushState==='ios-browser'
-        ? <div style={{display:'flex',alignItems:'center',gap:10,margin:'8px 10px',padding:'10px 12px',borderRadius:10,background:'#f2f6fb',border:'1px solid #c9d6ea'}}>
-            <span style={{fontSize:20}}>📲</span>
-            <div style={{flex:1,fontSize:13,lineHeight:1.35,color:'#2a3a4e'}}>Want notifications? Tap <b>Share → Add to Home Screen</b>, then open the pool from the new icon.</div>
             <button type="button" onClick={hidePush} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
           </div>
         : null)}
