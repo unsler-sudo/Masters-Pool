@@ -1,5 +1,5 @@
 'use client';
-// build: headshot-guard-v333-20261005-2200
+// build: no-floaters-v334-20261005-2230
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -504,20 +504,10 @@ const gpArt = (name, size, extra) => <img src={`/festive/${name}.png`} alt="" wi
   style={{display:'block',width:size,height:size,userSelect:'none',...(extra||{})}}/>;
 function GpFestive({ season }) {
   const S = GP_FESTIVE[season]; if (!S) return null;
-  const rnd = (i, k) => { const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };   // deterministic
-  const parts = Array.from({ length: 16 }, (_, i) => {
-    const side = i % 2 === 0, edge = rnd(i, 1) * 9;   // keep to the outer ~9% each side
-    return { left: side ? edge : 100 - edge - 3, size: 18 + Math.round(rnd(i, 2) * 14), dur: 9 + rnd(i, 3) * 9,
-      delay: -rnd(i, 4) * 18, sway: 10 + rnd(i, 5) * 25, art: S.falling[i % S.falling.length] }; });
   const css = `
-  @keyframes gpFall{0%{transform:translate(0,-12vh) rotate(0)}50%{transform:translate(var(--sw),48vh) rotate(180deg)}100%{transform:translate(0,112vh) rotate(360deg)}}
-  @keyframes gpRise{0%{transform:translate(0,112vh)}50%{transform:translate(var(--sw),50vh)}100%{transform:translate(0,-12vh)}}
   @keyframes gpTwinkle{0%,100%{opacity:1;filter:brightness(1.15)}50%{opacity:.45;filter:brightness(.8)}}
   @keyframes gpBob{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
-  .gpf-part{position:absolute;top:0;opacity:.8;will-change:transform}
-  @media (prefers-reduced-motion: no-preference){ .gpf-part.down{animation:gpFall linear infinite} .gpf-part.up{animation:gpRise linear infinite}
-    .gpf-bulb{animation:gpTwinkle 1.6s ease-in-out infinite} .gpf-bob{animation:gpBob 2.4s ease-in-out infinite} }
-  @media (prefers-reduced-motion: reduce){ .gpf-part{display:none} }
+  @media (prefers-reduced-motion: no-preference){ .gpf-bulb{animation:gpTwinkle 1.6s ease-in-out infinite} .gpf-bob{animation:gpBob 2.4s ease-in-out infinite} }
   .gpf-corner{display:none} @media (min-width:900px){ .gpf-corner{display:block} }`;
   return <>
     <style>{css}</style>
@@ -542,7 +532,7 @@ function GpFestive({ season }) {
     <div aria-hidden="true" style={{position:'fixed',top:0,bottom:0,left:0,width:7,background:S.stripes,opacity:.9,pointerEvents:'none',zIndex:15}}/>
     <div aria-hidden="true" style={{position:'fixed',top:0,bottom:0,right:0,width:7,background:S.stripes,opacity:.9,pointerEvents:'none',zIndex:15}}/>
     <div aria-hidden="true" style={{position:'fixed',inset:0,pointerEvents:'none',zIndex:3,overflow:'hidden'}}>
-      {parts.map((pt,i)=><span key={i} className={`gpf-part ${S.dir}`} style={{left:`${pt.left}%`,animationDuration:`${pt.dur}s`,animationDelay:`${pt.delay}s`,['--sw']:`${i%2?-pt.sway:pt.sway}px`}}>{gpArt(pt.art,pt.size)}</span>)}
+      {/* FINGERPRINT_V334 — no drifting pieces (too busy); garland, stripes and corners only */}
       <span className="gpf-corner" style={{position:'absolute',left:16,bottom:10}}><span style={{display:'flex',alignItems:'flex-end',gap:2}}>{S.left.map((n,i)=><span key={n}>{gpArt(n,i?40:60)}</span>)}</span></span>
       <span className="gpf-corner" style={{position:'absolute',right:16,bottom:10}}><span style={{display:'flex',alignItems:'flex-end',gap:2}}>{S.right.map((n,i)=><span key={n}>{gpArt(n,i?40:60)}</span>)}</span></span>
     </div>
