@@ -1,5 +1,5 @@
 'use client';
-// build: festive-colours-v332-20261005-2130
+// build: headshot-guard-v333-20261005-2200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3385,7 +3385,11 @@ export default function App(){
   useEffect(()=>{
     fetch('/api/entries?headshots=1').then(r=>r.json()).then(d=>{
       const m=d?.map||{}; let n=0;
-      for(const [id,h] of Object.entries(m)) if(PLAYER_HEADSHOTS[id]==null&&h){ DYN_HEADSHOTS[id]=h; n++; }
+      // FINGERPRINT_V333 — never use a collected photo that belongs to someone else: DataGolf shows its #1 player
+      // (Scheffler) for profiles it doesn't have, e.g. amateurs, so drop any photo another player already uses.
+      const staticIds=new Set(Object.values(PLAYER_HEADSHOTS).map(String));
+      const uses={}; for(const h of Object.values(m)) uses[h]=(uses[h]||0)+1;
+      for(const [id,h] of Object.entries(m)) if(PLAYER_HEADSHOTS[id]==null&&h&&!staticIds.has(String(h))&&uses[h]===1){ DYN_HEADSHOTS[id]=h; n++; }
       if(n) setHsTick(x=>x+1);
     }).catch(()=>{});
   },[]);
