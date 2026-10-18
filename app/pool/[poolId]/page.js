@@ -1,5 +1,5 @@
 'use client';
-// build: pay-prompt-v340-20261006-0030
+// build: cups-tab-v341-20261006-0100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -6261,14 +6261,16 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={{fontSize:12,color:'#8a9580'}}>{historyView==='season'?`Prize money won in this pool, ${seasonYear} season`:historyView==='results'?'Final standings from previous events':`${schedule&&schedule.length?new Date().getFullYear():''} ${isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} season schedule`}</div>
           </div>
           {historyView==='season'?(()=>{
-            const RACES=[['majors','Majors'],['pgatour','PGA Tour'],['dpworld','DP World']];
+            const RACES=[['majors','Majors'],['pgatour','PGA Tour'],['dpworld','DP World'],['cups','Cups']];   // V341 — + Presidents/Ryder Cup
             const defRace=activeMajor==='dpworld'?'dpworld':(isTourMode(activeMajor)||activeMajor==='players')?'pgatour':'majors';
             const race=seasonRace||defRace;
             if(!seasonData||seasonData.year!==seasonYear) return <div style={{textAlign:'center',padding:40,color:'#8a9580',fontSize:13}}>Loading standings…</div>;
             const R0=seasonData.races?.[race]||{events:0,rows:[]};
-            const R={...R0,rows:seasonSort==='golfer'?[...R0.rows].sort((a,b)=>(b.golfer||0)-(a.golfer||0)||b.winnings-a.winnings):R0.rows};
+            const isCups=race==='cups';   // FINGERPRINT_V341_CUPS — the second ranking is Points instead of golfer earnings
+            const second=(x)=>isCups?(x.points||0):(x.golfer||0);
+            const R={...R0,rows:seasonSort==='golfer'?[...R0.rows].sort((a,b)=>second(b)-second(a)||b.winnings-a.winnings):R0.rows};
             const big=(n)=>!n?'$0':n>=1e6?'$'+(n/1e6).toFixed(n>=1e7?1:2).replace(/\.?0+$/,'')+'M':'$'+Math.round(n/1000)+'K';
-            const lead=seasonSort==='golfer'?(x)=>x.golfer||0:(x)=>x.winnings;
+            const lead=seasonSort==='golfer'?(x)=>second(x):(x)=>x.winnings;
             const money=(n)=>'$'+(Number.isInteger(n)?n.toLocaleString('en-US'):n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
             const ord=(n)=>n+(['th','st','nd','rd'][((n%100)-20)%10]||['th','st','nd','rd'][n%100]||'th');
             return <>
@@ -6280,7 +6282,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               </div>
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:8,fontSize:12,color:'#8a9580'}}>
                 <span>Rank by</span>
-                {[['prize','Prize money'],['golfer','Golfer earnings']].map(([k2,l2])=><button key={k2} type="button" onClick={()=>setSeasonSort(k2)}
+                {[['prize','Prize money'],['golfer',isCups?'Points':'Golfer earnings']].map(([k2,l2])=><button key={k2} type="button" onClick={()=>setSeasonSort(k2)}
                   style={{padding:'4px 10px',borderRadius:12,border:`1px solid ${seasonSort===k2?T.primary:'#d6d6cf'}`,background:seasonSort===k2?T.primary:'#fff',color:seasonSort===k2?'#fff':'#5a6b4e',fontSize:12,fontWeight:700,cursor:'pointer'}}>{l2}</button>)}
               </div>
               {(seasonData.years||[]).length>1&&<div style={{textAlign:'right',marginBottom:8}}>
@@ -6298,7 +6300,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         </div>
                         <div style={{textAlign:'right'}}>
                           <div style={{fontWeight:800,fontSize:16,color:x.winnings>0?'#2d7a1e':'#aaa'}}>{money(x.winnings)}</div>
-                          <div style={{fontSize:11,color:seasonSort==='golfer'?T.primary:'#8a9580',fontWeight:seasonSort==='golfer'?800:600}}>⛳ {big(x.golfer||0)}</div>
+                          <div style={{fontSize:11,color:seasonSort==='golfer'?T.primary:'#8a9580',fontWeight:seasonSort==='golfer'?800:600}}>{isCups?`🎯 ${x.points||0} pt${(x.points||0)===1?'':'s'}`:`⛳ ${big(x.golfer||0)}`}</div>
                         </div>
                       </div>;})}
                   </div>}
@@ -6308,7 +6310,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <button type="button" onClick={()=>openAcct('signup')} style={{background:T.primary,color:'#fff',border:'none',borderRadius:7,padding:'8px 12px',fontWeight:700,fontSize:13,cursor:'pointer',whiteSpace:'nowrap'}}>Join</button>
               </div>}
               <p style={{fontSize:11,color:'#8a9580',textAlign:'center',lineHeight:1.5,marginTop:10}}>Players with an account. Big number: prize money won, across all your entries. ⛳ Golfer earnings: what your picks earned on tour — your best entry each week (Cup weeks are points, so they don't count).
-                {race==='majors'?' Majors: the Masters, PGA Championship, U.S. Open and The Open.':race==='pgatour'?' Includes the Players.':''}</p>
+                {race==='majors'?' Majors: the Masters, PGA Championship, U.S. Open and The Open.':race==='pgatour'?' Includes the Players.':isCups?' Cups: the Presidents Cup and Ryder Cup. 🎯 Points: your best entry’s match points in each Cup.':''}</p>
             </>;
           })():historyView==='schedule'?(
             !scheduleLoaded
