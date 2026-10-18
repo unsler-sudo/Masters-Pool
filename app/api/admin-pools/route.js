@@ -143,6 +143,16 @@ export async function POST(request) {
 
     // FINGERPRINT_PLAYERS — master list of player accounts: details, sign-in methods, joined / last on, pools.
     // Uses the users:index set (added at every sign-up), plus a sweep for accounts made before it existed.
+    // FINGERPRINT_ADMIN_VENMO — set (or clear) a player's Venmo username from Platform Admin
+    if (body.action === 'set-user-venmo') {
+      const uid = String(body.uid || ''); if (!/^u[A-Za-z0-9_-]+$/.test(uid)) return Response.json({ error: 'Bad player' }, { status: 400 });
+      const raw = await redis('GET', `user:${uid}`); if (!raw) return Response.json({ error: 'Player not found' }, { status: 404 });
+      const u = JSON.parse(raw); const v = String(body.venmo || '').trim().replace(/^@/, '');
+      if (v && !/^[A-Za-z0-9_-]{5,30}$/.test(v)) return Response.json({ error: 'That doesn’t look like a Venmo username (5–30 letters, numbers, - or _)' }, { status: 400 });
+      if (v) u.venmo = v; else delete u.venmo;
+      await redis('SET', `user:${uid}`, JSON.stringify(u));
+      return Response.json({ ok: true, venmo: u.venmo || '' });
+    }
     if (body.action === 'list-users') {
       const idx = new Set((await redis('SMEMBERS', 'users:index')) || []);
       let cursor = '0';
@@ -165,7 +175,7 @@ export async function POST(request) {
       const users = uids.map((u, i) => {
         let x = null; try { x = JSON.parse(raws[i] || 'null'); } catch {}
         if (!x) return null;
-        return { uid: u, name: x.name || '', email: x.email || '', phone: x.phone || '', created: x.created || '', seen: x.seen || '',
+        return { uid: u, name: x.name || '', email: x.email || '', phone: x.phone || '', venmo: x.venmo || '', created: x.created || '', seen: x.seen || '',
           password: !!x.pw, google: !!x.google, apple: !!x.apple,
           pools: (poolSets[i] || []).filter(p => info[p]).map(p => ({ poolId: p, name: info[p].name, owner: info[p].owner === u })) };
       }).filter(Boolean).sort((a, b) => String(b.created).localeCompare(String(a.created)));
