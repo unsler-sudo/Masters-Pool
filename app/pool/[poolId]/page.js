@@ -1,5 +1,5 @@
 'use client';
-// build: no-floaters-v334-20261005-2230
+// build: on-course-dot-v335-20261005-2300
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -4587,7 +4587,23 @@ export default function App(){
                 {holeData.loading&&<div style={{textAlign:'center',padding:'20px 0'}}><div style={{width:24,height:24,border:`3px solid ${T.primary}20`,borderTopColor:T.primary,borderRadius:'50%',animation:'sp .7s linear infinite',margin:'0 auto 8px'}}/><div style={{fontSize:12,color:'#aaa'}}>Loading hole scores...</div></div>}
                 {!holeData.loading&&holeData.error&&holeData.round&&<div style={{textAlign:'center',padding:'16px 0',fontSize:12,color:'#bbb'}}>{holeData.error}</div>}
                 {!holeData.loading&&holeData.holes.length>0&&(()=>{
-                  const HoleCell=({h})=>{const s=holeStyle(h.toPar);return(
+                  // FINGERPRINT_V335_ON_COURSE — the hole he's playing right now (no score yet) gets a blinking green dot.
+                  // Started on the 10th? (10 scored, 1 not) → first unplayed hole from 10; otherwise first unplayed from 1.
+                  const nowHole=(()=>{ const t=parseInt(p.thru,10); if(!(t>=1&&t<=17)) return null;
+                    const H=holeData.holes, sc=(n)=>H.find(x=>x.hole===n)?.score!=null;
+                    if(!H.some(x=>x.score!=null)||!H.some(x=>x.score==null)) return null;
+                    const order=sc(10)&&!sc(1)?[10,11,12,13,14,15,16,17,18,1,2,3,4,5,6,7,8,9]:[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];   // back-nine starters play 10–18 then 1–9
+                    return order.find(n=>H.some(x=>x.hole===n)&&!sc(n))??null; })();
+                  const HoleCell=({h})=>{const s=holeStyle(h.toPar); const now=h.hole===nowHole&&h.score==null;
+                    if(now) return(
+                    <div style={{flex:1,textAlign:'center'}} title="On this hole now">
+                      <div style={{fontSize:9,color:'#1a8a3a',fontWeight:800,marginBottom:2}}>H{h.hole}</div>
+                      <div style={{width:30,height:30,borderRadius:'4px',border:'1.5px dashed #1a8a3a55',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto'}}>
+                        <span className="gp-now-dot" style={{width:10,height:10,borderRadius:'50%',background:'#22c55e',boxShadow:'0 0 0 0 rgba(34,197,94,.6)'}}/>
+                      </div>
+                      <div style={{fontSize:9,color:'#1a8a3a',fontWeight:700,marginTop:2}}>NOW</div>
+                    </div>);
+                    return(
                     <div style={{flex:1,textAlign:'center'}}>
                       <div style={{fontSize:9,color:'#aaa',marginBottom:2}}>H{h.hole}</div>
                       <div style={{width:30,height:30,borderRadius:h.toPar<=-1?'50%':'4px',background:s.bg,color:s.text,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:800,margin:'0 auto',outline:`2px solid ${s.ring}`,outlineOffset:1}}>{h.score??'-'}</div>
@@ -4595,6 +4611,8 @@ export default function App(){
                       {s.label&&<div style={{fontSize:9}}>{s.label}</div>}
                     </div>);};
                   return(<div style={{marginTop:14,marginBottom:4}}>
+                    <style>{`@keyframes gpNowPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.65);opacity:1}70%{box-shadow:0 0 0 7px rgba(34,197,94,0);opacity:.55}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);opacity:1}}
+                      .gp-now-dot{animation:gpNowPulse 1.4s ease-out infinite} @media (prefers-reduced-motion: reduce){.gp-now-dot{animation:none}}`}</style>
                     {roundCourseOf(p,holeData.round)&&<div style={{textAlign:'center',fontSize:12,fontWeight:700,color:T.primary,marginBottom:8}}>
                       ⛳ Round {holeData.round} · {roundCourseOf(p,holeData.round).name}</div>}
                     <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:1,marginBottom:8}}>HOLE BY HOLE — ROUND {holeData.round}</div>
