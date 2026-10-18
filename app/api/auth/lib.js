@@ -90,8 +90,10 @@ export async function newUser({ name, email, phone = '', pw = '', google = '', a
   if (apple) await redis('SET', `user:apple:${apple}`, uid);
   return u;
 }
+// FINGERPRINT_ACCOUNTS_VENMO — optional Venmo username, so the commissioner can pay winnings (no @, 5–30 chars)
+export const normVenmo = (v) => { const x = String(v || '').trim().replace(/^@/, ''); return /^[A-Za-z0-9_-]{5,30}$/.test(x) ? x : null; };
 export const publicUser = (u) => u && ({
-  uid: u.uid, name: u.name, nickname: u.nickname || '', email: u.email, phone: u.phone || '', photo: u.photo || '',
+  uid: u.uid, name: u.name, nickname: u.nickname || '', email: u.email, phone: u.phone || '', photo: u.photo || '', venmo: u.venmo || '',
   hasPassword: !!u.pw, google: !!u.google, apple: !!u.apple, needsPhone: !u.phone,
 });
 
