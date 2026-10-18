@@ -82,8 +82,8 @@ export default function AdminDashboard() {
   }, [authed]);
   const exportUsers = () => {
     const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = [['Name','Email','Cell','Sign-in','Joined','Last on','Pools run','Pools played']].concat((users || []).map(u => [
-      u.name, u.email, u.phone, [u.password&&'Password', u.google&&'Google', u.apple&&'Apple'].filter(Boolean).join(' + '),
+    const rows = [['Name','Email','Cell','Venmo','Sign-in','Joined','Last on','Pools run','Pools played']].concat((users || []).map(u => [
+      u.name, u.email, u.phone, u.venmo ? '@' + u.venmo : '', [u.password&&'Password', u.google&&'Google', u.apple&&'Apple'].filter(Boolean).join(' + '),
       u.created ? u.created.slice(0,10) : '', u.seen ? u.seen.slice(0,10) : '',
       u.pools.filter(x => x.owner).map(x => x.name).join('; '), u.pools.filter(x => !x.owner).map(x => x.name).join('; ')]));
     const blob = new Blob([rows.map(r => r.map(cell).join(',')).join('\n')], { type:'text/csv' });
@@ -344,11 +344,20 @@ export default function AdminDashboard() {
               : <div style={{overflowX:'auto'}}>
                   <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
                     <thead><tr style={{textAlign:'left',color:'#6b7280',fontSize:11,textTransform:'uppercase',letterSpacing:.5}}>
-                      {['Player','Cell','Sign-in','Joined','Last on','Pools'].map(h=><th key={h} style={{padding:'8px 10px',borderBottom:'2px solid #e5e7eb',whiteSpace:'nowrap'}}>{h}</th>)}
+                      {['Player','Cell','Venmo','Sign-in','Joined','Last on','Pools'].map(h=><th key={h} style={{padding:'8px 10px',borderBottom:'2px solid #e5e7eb',whiteSpace:'nowrap'}}>{h}</th>)}
                     </tr></thead>
                     <tbody>{list.map(u => <tr key={u.uid} style={{borderBottom:'1px solid #f3f4f6',verticalAlign:'top'}}>
                       <td style={{padding:'10px'}}><div style={{fontWeight:700,color:'#1a2a5c'}}>{u.name}</div><a href={`mailto:${u.email}`} style={{color:'#6b7280',textDecoration:'none'}}>{u.email}</a></td>
                       <td style={{padding:'10px',whiteSpace:'nowrap'}}>{u.phone ? <a href={`tel:${u.phone}`} style={{color:'#374151',textDecoration:'none'}}>{fmtPhone(u.phone)}</a> : <span style={{color:'#d97706'}}>missing</span>}</td>
+                      {/* FINGERPRINT_ADMIN_VENMO — tap to add or change a player's Venmo */}
+                      <td style={{padding:'10px',whiteSpace:'nowrap'}}>
+                        <button type="button" onClick={async()=>{
+                            const v=window.prompt(`Venmo username for ${u.name} (leave blank to remove)`, u.venmo?('@'+u.venmo):''); if(v===null) return;
+                            const d=await fetch('/api/admin-pools',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password,action:'set-user-venmo',uid:u.uid,venmo:v})}).then(r=>r.json()).catch(()=>null);
+                            if(d?.ok) setUsers(list=>(list||[]).map(x=>x.uid===u.uid?{...x,venmo:d.venmo}:x)); else alert(d?.error||'Could not save');
+                          }} style={{background:'none',border:'none',padding:0,cursor:'pointer',color:u.venmo?'#008CFF':'#9ca3af',fontWeight:u.venmo?700:500,fontSize:13}}>
+                          {u.venmo?'@'+u.venmo:'+ add'}</button>
+                      </td>
                       <td style={{padding:'10px',whiteSpace:'nowrap',color:'#374151'}}>{[u.password&&'Password',u.google&&'Google',u.apple&&'Apple'].filter(Boolean).join(' · ')||'—'}</td>
                       <td style={{padding:'10px',whiteSpace:'nowrap',color:'#374151'}}>{day(u.created)}</td>
                       <td style={{padding:'10px',whiteSpace:'nowrap',color:'#374151'}}>{ago(u.seen)}</td>
