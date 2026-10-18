@@ -78,6 +78,54 @@ function getMajors() {
 const MAJORS = getMajors();
 const DEFAULT_MAJOR = MAJORS[0].key; // soonest upcoming major
 
+
+// FINGERPRINT_HOME_CAMPAIGN — the home page hypes whatever's next: each major from the end of the previous
+// event through its final round; after The Open, weekly PGA Tour pools; a week before a Cup, the Cup; then
+// back to the Masters. Dates confirmed from the 2027 schedule (add the 2028 U.S. Open / Open / Presidents Cup
+// here once they're announced — until then it promotes weekly pools after the 2028 PGA Championship).
+const GP_EVENTS = [
+  ['masters', '2027-04-08', '2027-04-11', 'Augusta National'],
+  ['pga',     '2027-05-20', '2027-05-23', 'PGA Frisco'],
+  ['usopen',  '2027-06-17', '2027-06-20', 'Pebble Beach'],
+  ['open',    '2027-07-15', '2027-07-18', 'The Old Course, St Andrews'],
+  ['ryder',   '2027-09-17', '2027-09-19', 'Adare Manor'],
+  ['masters', '2028-04-06', '2028-04-09', 'Augusta National'],
+  ['pga',     '2028-05-18', '2028-05-21', 'The Olympic Club'],
+];
+const GP_CAMPAIGN = {
+  masters: { name:'The Masters', emoji:'🌸', bg:'linear-gradient(160deg,#08331e 0%,#0f5a34 55%,#1f7d47 100%)', accent:'#f4d35e',
+    headline:'Your Masters pool starts here.',
+    pitch:'Augusta in April — Amen Corner, Sunday roars and a green jacket. Your friends battle for the pot on a live money leaderboard that moves with every shot.' },
+  pga: { name:'PGA Championship', emoji:'🏆', bg:'linear-gradient(160deg,#0a1f45 0%,#13336e 60%,#1f4c9c 100%)', accent:'#f0c75e',
+    headline:'Your PGA Championship pool.',
+    pitch:'The year’s second major, a stacked field and the Wanamaker Trophy. Set up your pool in two minutes and let it run itself.' },
+  usopen: { name:'U.S. Open', emoji:'🇺🇸', bg:'linear-gradient(160deg,#0b1f3a 0%,#13315c 60%,#7a1424 130%)', accent:'#ff6b6b',
+    headline:'The U.S. Open at Pebble Beach.',
+    pitch:'Golf’s toughest test on America’s most beautiful course. Get your crew’s picks in before Thursday and watch the money move.' },
+  open: { name:'The Open', emoji:'🏴', bg:'linear-gradient(160deg,#16301f 0%,#2c4a34 60%,#5c4a1e 130%)', accent:'#e9c46a',
+    headline:'The Open at St Andrews.',
+    pitch:'The home of golf, the Old Course and the Claret Jug. Golf’s oldest major is the perfect excuse for a pool.' },
+  ryder: { name:'The Ryder Cup', emoji:'🏆', bg:'linear-gradient(160deg,#0a2a6b 0%,#1a3a8a 50%,#8a1022 120%)', accent:'#f5d77a',
+    headline:'The 100th Ryder Cup.',
+    pitch:'USA vs Europe at Adare Manor. Pick the winner of every match — pairings post automatically, picks lock at each tee time, and a live cup score tracks it all.' },
+  tour: { name:'PGA Tour', emoji:'⛳', bg:'linear-gradient(160deg,#0d1f3c 0%,#18345f 60%,#20467d 100%)', accent:'#c9a84c',
+    headline:'Golf every week. A pool every week.',
+    pitch:'Run a weekly PGA Tour or DP World Tour pool that rolls to the next event on its own — through the FedEx Cup Playoffs and beyond.' },
+};
+function gpCampaign(now) {
+  const day = (iso) => new Date(iso + 'T00:00:00');
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const next = GP_EVENTS.find(e => day(e[2]) >= today);
+  if (!next) return { key:'tour', ...GP_CAMPAIGN.tour };
+  const [key, st, en, venue] = next, start = day(st), end = day(en);
+  if ((key === 'ryder' || key === 'presidents') && (start - today) / 864e5 > 7) return { key:'tour', ...GP_CAMPAIGN.tour };
+  const days = Math.round((start - today) / 864e5);
+  const mon = (d) => d.toLocaleString('en-US', { month: 'long' });
+  const dates = start.getMonth() === end.getMonth() ? `${mon(start)} ${start.getDate()}–${end.getDate()}` : `${mon(start)} ${start.getDate()} – ${mon(end)} ${end.getDate()}`;
+  const countdown = days > 1 ? `${days} days until the first tee` : days === 1 ? 'Tees off tomorrow' : days === 0 ? 'Tees off today' : 'Happening now';
+  return { key, ...GP_CAMPAIGN[key], venue, dates, countdown, days };
+}
+
 export default function LandingPage() {
   const [step, setStep]     = useState('home');
   useEffect(() => { gpEmojiSetup(); }, []);   // FINGERPRINT_EMOJI_FONT
@@ -90,13 +138,14 @@ export default function LandingPage() {
   const [token, setToken] = useState(null);
   const [acct, setAcct] = useState(null);
   const [myPools, setMyPools] = useState([]);
+  const [freeAvail, setFreeAvail] = useState(true);   // FINGERPRINT_FIRST_POOL_FREE
   const [providers, setProviders] = useState({ google:false, apple:false });
   const [authMode, setAuthMode] = useState('signup');          // signup | signin | forgot | reset
   const [af, setAf] = useState({ name:'', email:'', phone:'', password:'', code:'' });
   const [authErr, setAuthErr] = useState('');
   const [authBusy, setAuthBusy] = useState(false);
   const authPost = async (body) => (await fetch('/api/auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })).json();
-  const loadPools = (t) => authPost({ action:'my-pools', auth:t }).then(d => { if (d?.ok) setMyPools(d.pools || []); }).catch(()=>{});
+  const loadPools = (t) => authPost({ action:'my-pools', auth:t }).then(d => { if (d?.ok) { setMyPools(d.pools || []); setFreeAvail(d.freePoolAvailable !== false); } }).catch(()=>{});
   const applySession = (t, u) => { try { localStorage.setItem('tgp_auth', t); } catch {} setToken(t); setAcct(u); loadPools(t); };
   const signOut = () => { try { localStorage.removeItem('tgp_auth'); } catch {} authPost({ action:'signout' }).catch(()=>{}); setToken(null); setAcct(null); setMyPools([]); };
   useEffect(() => {
@@ -310,13 +359,15 @@ export default function LandingPage() {
           </div>
           {error&&<div style={{background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,padding:'10px 14px',fontSize:13,color:'#dc2626',marginBottom:16}}>{error}</div>}
           <div style={{background:'#f9fafb',borderRadius:8,padding:'12px 14px',marginBottom:20,fontSize:12,color:'#6b7280',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span>Pool access — one major</span>
-            <span style={{fontWeight:700,color:'#1a2a5c',fontSize:16}}>$10</span>
+            <span>{freeAvail?'Your first pool':'Pool access — one tournament'}</span>
+            {freeAvail
+              ? <span><span style={{textDecoration:'line-through',color:'#9ca3af',marginRight:8}}>$10</span><span style={{fontWeight:800,color:'#15803d',fontSize:16}}>FREE</span></span>
+              : <span style={{fontWeight:700,color:'#1a2a5c',fontSize:16}}>$10</span>}
           </div>
           <button type="button" style={{...pri,opacity:loading?.6:1}} onClick={handleCreate} disabled={loading}>
-            {loading ? 'Creating...' : 'Create Pool & Pay $10 →'}
+            {loading ? 'Creating...' : freeAvail ? 'Create My Free Pool →' : 'Create Pool & Pay $10 →'}
           </button>
-          <div style={{fontSize:11,color:'#9ca3af',textAlign:'center',marginTop:10}}>Secure payment via Stripe</div>
+          <div style={{fontSize:11,color:'#9ca3af',textAlign:'center',marginTop:10}}>{freeAvail?'No card needed — your first pool is on us':'Secure payment via Stripe'}</div>
         </div>
       </div>
     );
@@ -343,33 +394,34 @@ export default function LandingPage() {
             <span style={{color:'rgba(255,255,255,.5)'}}>›</span></a>)}
         </div>}
       </div>}
-      <div style={{textAlign:'center',padding:'80px 20px 60px'}}>
-        <div style={{fontSize:56,marginBottom:16}}>⛳</div>
-        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:42,fontWeight:900,marginBottom:12,letterSpacing:-1}}>
-          Tuna Golf Pool
-        </h1>
-        <p style={{fontSize:18,opacity:.8,maxWidth:520,margin:'0 auto 20px',lineHeight:1.6}}>
-          A private golf pool for your friends, office, or group — with a <b style={{color:'#fff'}}>live money leaderboard</b>.
-          Play the <b style={{color:'#fff'}}>majors</b>, any <b style={{color:'#fff'}}>PGA Tour</b> or <b style={{color:'#fff'}}>DP World Tour</b> event,
-          and now the <b style={{color:'#fff'}}>Presidents Cup &amp; Ryder Cup</b>.
-        </p>
-        <div style={{maxWidth:440,margin:'0 auto 16px',padding:'12px 18px',background:'linear-gradient(135deg,rgba(80,140,255,.22),rgba(80,140,255,.10))',borderRadius:12,border:'1px solid rgba(120,160,255,.4)'}}>
-          <div style={{fontSize:11,fontWeight:700,color:'#7aa8ff',letterSpacing:1.5,marginBottom:4,textTransform:'uppercase'}}>🏆 New · Presidents Cup &amp; Ryder Cup</div>
-          <div style={{fontSize:15,fontWeight:700,color:'#fff',marginBottom:4}}>Match Pick'em</div>
-          <div style={{fontSize:12,opacity:.8,lineHeight:1.5}}>
-            Pick the winner of every match, session by session. Pairings post automatically as they're announced,
-            everyone gets an email when picks open, and a live cup score tracks it all.
+      {/* FINGERPRINT_HOME_CAMPAIGN — the hero hypes the next big event, with a countdown and the free first pool */}
+      {(()=>{ const C=gpCampaign(new Date()); const isCup=C.key==='ryder'||C.key==='presidents';
+        return <div style={{padding:'26px 16px 44px'}}>
+          <div style={{maxWidth:660,margin:'0 auto',borderRadius:22,overflow:'hidden',background:C.bg,boxShadow:'0 24px 70px rgba(0,0,0,.4)',border:`1px solid ${C.accent}55`}}>
+            <div style={{padding:'30px 22px 30px',textAlign:'center'}}>
+              <div style={{fontSize:12,fontWeight:800,letterSpacing:2,color:'rgba(255,255,255,.6)',marginBottom:16}}>⛳ TUNA GOLF POOL</div>
+              {C.dates&&<div style={{display:'inline-block',padding:'6px 14px',borderRadius:20,background:'rgba(0,0,0,.25)',border:`1px solid ${C.accent}88`,color:C.accent,fontSize:11,fontWeight:800,letterSpacing:1.4,textTransform:'uppercase',marginBottom:16}}>
+                {C.emoji} {C.name} · {C.dates} · {C.venue}</div>}
+              <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:'clamp(32px,7vw,48px)',fontWeight:900,lineHeight:1.08,letterSpacing:-1,color:'#fff',margin:'0 0 14px'}}>{C.headline}</h1>
+              <p style={{fontSize:17,lineHeight:1.6,color:'rgba(255,255,255,.85)',maxWidth:520,margin:'0 auto 22px'}}>{C.pitch}</p>
+              {C.countdown&&<div style={{marginBottom:22}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:C.days>1?44:26,fontWeight:900,color:C.accent,lineHeight:1}}>{C.days>1?C.days:C.countdown}</div>
+                {C.days>1&&<div style={{fontSize:12,fontWeight:700,letterSpacing:1.5,textTransform:'uppercase',color:'rgba(255,255,255,.7)',marginTop:6}}>days until the first tee</div>}
+              </div>}
+              <button type="button" onClick={()=>setStep('create')} style={{background:C.accent,color:'#14213d',border:'none',borderRadius:12,padding:'17px 38px',fontSize:18,fontWeight:900,cursor:'pointer',boxShadow:`0 8px 28px ${C.accent}66`}}>
+                {freeAvail?'Start your free pool ⛳':'Create your pool ⛳'}</button>
+              <div style={{fontSize:13,color:'rgba(255,255,255,.75)',marginTop:12}}>{freeAvail?<><b style={{color:'#fff'}}>Your first pool is free</b> · Players always join free</>:'$10 per tournament · Players always join free'}</div>
+            </div>
+            <div style={{background:'rgba(0,0,0,.28)',padding:'14px 20px',textAlign:'center',fontSize:13,lineHeight:1.5,color:'rgba(255,255,255,.88)'}}>
+              {isCup
+                ? <><b style={{color:C.accent}}>Match pick'em</b> — pick the winner of every match, session by session. Pairings post automatically and everyone gets an email when picks open.</>
+                : <><b style={{color:C.accent}}>🎯 New · Live odds</b> — every entry's chance to win the pool, updated as the scores come in.</>}
+            </div>
           </div>
-        </div>
-        <button type="button" onClick={()=>setStep('create')} style={{
-          background:'#c9a84c',color:'#1a2a5c',border:'none',borderRadius:10,
-          padding:'16px 40px',fontSize:17,fontWeight:800,cursor:'pointer',
-          boxShadow:'0 4px 20px rgba(201,168,76,.4)',
-        }}>
-          Create Your Pool ⛳
-        </button>
-        <div style={{fontSize:12,opacity:.5,marginTop:10}}>$10 per major · Renew each tournament · Cancel anytime</div>
-      </div>
+          <div style={{textAlign:'center',fontSize:13,color:'rgba(255,255,255,.6)',marginTop:16,lineHeight:1.6}}>
+            The majors · PGA Tour · DP World Tour · Presidents Cup &amp; Ryder Cup
+          </div>
+        </div>; })()}
       <div style={{maxWidth:760,margin:'0 auto',padding:'0 20px 16px',textAlign:'center'}}>
         <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:800,marginBottom:6}}>Everything your pool needs</h2>
         <div style={{fontSize:13,opacity:.6,marginBottom:22}}>Players open your link, sign up free in seconds, and they're in — no codes to remember.</div>
@@ -377,6 +429,7 @@ export default function LandingPage() {
       <div style={{maxWidth:760,margin:'0 auto',padding:'0 20px 60px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12}}>
         {[
           { emoji:'💰', title:'Live Money Leaderboard', desc:'Real prize-money earnings, updated every 60 seconds and calculated from each event\'s official payout structure' },
+          { emoji:'📈', title:'Live Odds', desc:'See every entry’s chance to win the pool, re-simulated thousands of times as the scores come in' },
           { emoji:'🎯', title:'Tiered Picks', desc:'Favorites, contenders and longshots — everyone gets a few stars and has to find some sleepers' },
           { emoji:'🌍', title:'Majors, PGA Tour & DP World', desc:'All four majors and the Players, plus any weekly PGA Tour or DP World Tour event — branded automatically, purses filled in for you' },
           { emoji:'🇺🇸', title:'Presidents Cup & Ryder Cup', desc:'A match pick\'em with auto-posted pairings, matches that lock at their own tee time, pick splits and a live cup score' },
@@ -422,7 +475,7 @@ export default function LandingPage() {
           background:'#c9a84c',color:'#1a2a5c',border:'none',borderRadius:10,
           padding:'16px 40px',fontSize:17,fontWeight:800,cursor:'pointer',
         }}>
-          Get Started — $10 ⛳
+          {freeAvail ? 'Start your free pool ⛳' : 'Get Started — $10 ⛳'}
         </button>
         <div style={{fontSize:12,opacity:.5,marginTop:10}}>Powered by DataGolf · Live scores · Updates every 60s</div>
         <div style={{fontSize:11,opacity:.4,marginTop:8}}><a href="/terms" style={{color:'#fff',textDecoration:'none'}}>Terms of Service</a></div>
