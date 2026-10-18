@@ -174,13 +174,16 @@ export async function POST(request) {
     // the pools you run or have entered, newest first
     if (a === 'my-pools') {
       const ids = (await redis('SMEMBERS', `user:${user.uid}:pools`)) || [];
-      if (!ids.length) return Response.json({ ok: true, pools: [] });
+      // FINGERPRINT_FIRST_POOL_FREE — free until claimed, and only if you've never had a paid pool of your own
+      const freeClaimed = !!(await redis('GET', `user:${user.uid}:freepool`));
+      if (!ids.length) return Response.json({ ok: true, pools: [], freePoolAvailable: !freeClaimed });
       const metas = await redis('MGET', ...ids.map(id => `pool:${id}:meta`));
       const pools = ids.map((id, i) => { try { const m = JSON.parse(metas[i] || 'null'); return m && {
           poolId: id, name: m.poolName || 'Golf pool', owner: m.ownerUid === user.uid,
           event: m.currentPgatourEvent || '', mode: m.major || '', created: m.createdAt || '' }; } catch { return null; } })
         .filter(Boolean).sort((x, y) => (y.owner - x.owner) || String(y.created).localeCompare(String(x.created)));
-      return Response.json({ ok: true, pools });
+      const ownsPaid = ids.some((id, i) => { try { const m = JSON.parse(metas[i] || 'null'); return m && m.ownerUid === user.uid && m.paid; } catch { return false; } });
+      return Response.json({ ok: true, pools, freePoolAvailable: !freeClaimed && !ownsPaid });
     }
 
     return bad('Unknown action');
