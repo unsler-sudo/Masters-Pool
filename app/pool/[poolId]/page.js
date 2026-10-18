@@ -1,5 +1,5 @@
 'use client';
-// build: season-first-v342-20261006-0130
+// build: venmo-default-v343-20261006-0200
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -6688,10 +6688,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>Players get a <b>Pay with Venmo</b> button that opens Venmo to you, with the entry fee and a note filled in. They tap <b>I've paid</b> afterwards.</p>
               <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
                 <span style={{fontSize:14,color:'#6b7c5e'}}>@</span>
-                <input style={{...inp,marginBottom:0,flex:'1 1 160px',width:'auto'}} placeholder="your-venmo-username" value={venmoInput??(poolMeta?.venmoUser||'')} onChange={e=>setVenmoInput(e.target.value)}/>
-                <button type="button" onClick={async()=>{const d=await adminAction('set-venmo',{venmoUser:venmoInput??(poolMeta?.venmoUser||'')});
+                <input style={{...inp,marginBottom:0,flex:'1 1 160px',width:'auto'}} placeholder="your-venmo-username" value={venmoInput??(poolMeta?.venmoUser||(ownerAdmin&&acct?.venmo)||'')} onChange={e=>setVenmoInput(e.target.value)}/>
+                <button type="button" onClick={async()=>{const d=await adminAction('set-venmo',{venmoUser:venmoInput??(poolMeta?.venmoUser||(ownerAdmin&&acct?.venmo)||'')});
                     if(d?.ok){setPoolMeta(prev=>({...(prev||{}),venmoUser:d.venmoUser}));setVenmoInput(null);msg(d.venmoUser?`Venmo set to @${d.venmoUser} ✓`:'Venmo removed');} else msg(d?.error||'Could not save');}} style={pri}>Save</button>
               </div>
+              {/* FINGERPRINT_V343 — pre-filled from your profile until saved for this pool */}
+              {!poolMeta?.venmoUser&&ownerAdmin&&acct?.venmo&&venmoInput==null&&<div style={{fontSize:11,color:'#b45309',marginTop:6}}>@{acct.venmo} is from your profile — tap <b>Save</b> to use it for this pool.</div>}
               <label style={{display:'flex',alignItems:'center',gap:10,marginTop:12,cursor:'pointer'}}>
                 <span style={{flex:1,fontSize:13,color:'#2a3a1e',lineHeight:1.45}}>Trust "I've paid"
                   <span style={{display:'block',fontSize:11,color:'#8a9580',marginTop:2}}>On: players are marked paid the moment they tap it. Off: you confirm each one below in Entries & Payments.</span></span>
