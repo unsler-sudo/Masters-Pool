@@ -1,5 +1,5 @@
 'use client';
-// build: venmo-default-v343-20261006-0200
+// build: cup-odds-v345-20261006-0330
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1298,6 +1298,98 @@ function formatTeeTimeForUser(date) {
 }
 
 
+// FINGERPRINT_V344_ODDS — "chance to win the pool". Plays out the rest of the tournament thousands of times:
+// each golfer's current score + his remaining holes with realistic randomness (≈2.8 strokes a round), his skill
+// tuned so his simulated win rate matches DataGolf's live win chance. A cut still to come keeps the number
+// DataGolf expects to make it; tied leaders go to a playoff. Each simulated finish is paid with calcEarnings
+// (the leaderboard's own money), the pool is ranked, and we count how often each entry wins and cashes.
+function gpSimulatePool({ field, entries, purse, major, evName, fee, wta, runs = 2000 }) {
+  const toPar = (x) => x === 'E' ? 0 : (x == null || x === '' || x === '-' || isNaN(+x)) ? null : +x;
+  const prob = (v) => { if (v == null || v === '' || isNaN(+v)) return null; const n = +v; return n > 1 ? n / 100 : n; };
+  const G = [];
+  for (const p of field || []) {
+    if (/CUT|WD|DQ|MC/i.test(p.pos || '')) continue;
+    const sc = toPar(p.score); if (sc == null) continue;
+    const R = [p.r1, p.r2, p.r3, p.r4], done = R.filter(x => x != null && x !== '').length, t = parseInt(p.thru, 10);
+    let played = done * 18 + (t >= 1 && t <= 17 ? t : 0);
+    if (t === 18 && R[done] == null) played += 18;                       // round just finished, card not posted yet
+    G.push({ name: p.name, sc, played, left: Math.max(0, 72 - played), w: prob(p.liveWin), mc: prob(p.liveMakeCut), mu: 0 });
+  }
+  const N = G.length;
+  if (N < 2 || !G.some(g => g.left > 0) || !G.some(g => g.played > 0)) return null;   // not under way, or finished
+  const cutAt = /dunhill/i.test(evName || '') ? 54 : 36;
+  const cutPending = G.some(g => g.mc != null && g.mc > 0.001 && g.mc < 0.999) && G.some(g => g.played < cutAt);
+  const cutSize = cutPending ? Math.max(1, Math.min(N, Math.round(G.reduce((t, g) => t + (g.mc ?? 1), 0)))) : 0;
+  const SD = 0.66;                                                         // per-hole spread
+  const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  const fin = new Float64Array(N), made = new Uint8Array(N);
+  const play = () => {
+    for (let i = 0; i < N; i++) { const g = G[i], a = cutPending ? Math.max(0, Math.min(g.left, cutAt - g.played)) : g.left;
+      fin[i] = g.sc + g.mu * a + SD * Math.sqrt(a) * gauss(); made[i] = 1; }
+    if (cutPending) {
+      const line = Float64Array.from(fin).sort()[cutSize - 1];
+      for (let i = 0; i < N; i++) { if (fin[i] > line + 1e-9) { made[i] = 0; continue; }
+        const g = G[i], a = g.left - Math.max(0, Math.min(g.left, cutAt - g.played));
+        fin[i] += g.mu * a + SD * Math.sqrt(a) * gauss(); }
+    }
+  };
+  // tune each golfer's skill so his simulated win rate matches DataGolf's live win chance
+  if (G.some(g => g.w != null && g.w > 0)) for (let pass = 0; pass < 4; pass++) {
+    const wins = new Float64Array(N), R = 500;
+    for (let r = 0; r < R; r++) { play(); let b = -1, bv = Infinity; for (let i = 0; i < N; i++) if (made[i] && fin[i] < bv) { bv = fin[i]; b = i; } wins[b]++; }
+    for (let i = 0; i < N; i++) { const g = G[i]; if (g.w == null) continue;
+      const step = Math.max(-1.5, Math.min(1.5, Math.log((g.w + 0.003) / (wins[i] / R + 0.003))));
+      g.mu -= step * 0.5 / Math.max(g.left, 6); }
+  }
+  const pot = (entries.length) * (fee || 0), prizes = !fee ? [0, 0, 0] : wta ? [pot, 0, 0] : [pot - fee * 3, fee * 2, fee];
+  const win = {}, cash = {}, idx = new Array(N);
+  for (let r = 0; r < runs; r++) {
+    play();
+    let m = 0; for (let i = 0; i < N; i++) if (made[i]) idx[m++] = i;
+    const order = idx.slice(0, m).sort((a, b) => Math.round(fin[a]) - Math.round(fin[b]) || fin[a] - fin[b]);
+    const sp = []; let k = 0;
+    while (k < m) { let j = k; const v = Math.round(fin[order[k]]); while (j + 1 < m && Math.round(fin[order[j + 1]]) === v) j++;
+      if (k === 0 && j > 0) { const wnr = k + Math.floor(Math.random() * (j - k + 1));      // playoff: one winner
+        for (let q = k; q <= j; q++) sp.push({ name: G[order[q]].name, pos: q === wnr ? '1' : (j - k >= 2 ? 'T2' : '2') }); }
+      else for (let q = k; q <= j; q++) sp.push({ name: G[order[q]].name, pos: j > k ? `T${k + 1}` : String(k + 1) });
+      k = j + 1; }
+    const em = calcEarnings(sp, purse, major, true, evName);
+    const tot = entries.map(e => ({ n: e.name, t: (e.picks || []).reduce((s, x) => s + (em[x] || 0), 0) + Math.random() * 1e-3 })).sort((a, b) => b.t - a.t);
+    win[tot[0].n] = (win[tot[0].n] || 0) + 1;
+    for (let q = 0; q < 3 && q < tot.length; q++) if (prizes[q] > 0) cash[tot[q].n] = (cash[tot[q].n] || 0) + 1;
+  }
+  const out = {}; for (const e of entries) out[e.name] = { win: 100 * (win[e.name] || 0) / runs, cash: fee ? 100 * (cash[e.name] || 0) / runs : null };
+  return out;
+}
+// FINGERPRINT_V345_CUP_ODDS — the same idea for Presidents Cup / Ryder Cup weeks: each unfinished match is
+// decided at random from DataGolf's live win / halve chances (45/45/10 when there's no fresh reading), every
+// entry is scored like the pool (1 per correct pick, ½ for any pick on a halved match), ties share.
+function gpSimulateCup({ entries, picks, matches, probOf, fee, wta, runs = 5000 }) {
+  const M = [];
+  for (const [sk, sv] of Object.entries(matches || {})) for (const m of (sv.matches || [])) {
+    if (m.result) { M.push({ sk, id: m.id, fixed: m.result }); continue; }
+    const P = probOf(m); let u = 0.45, i = 0.45, h = 0.10;
+    if (P) { u = Math.max(0, +P.usa || 0); i = Math.max(0, +P.intl || 0); h = Math.max(0, +P.halve || 0); const t = u + i + h || 1; u /= t; i /= t; h /= t; }
+    M.push({ sk, id: m.id, u, i, h });
+  }
+  if (!M.length || !M.some(x => x.fixed == null) || !M.some(x => x.fixed != null || x.u !== 0.45)) return null;   // nothing under way
+  const E = entries.map(e => ({ name: e.name, pk: picks?.[e.name] || {} }));
+  if (!E.some(e => M.some(x => e.pk?.[x.sk]?.[x.id]))) return null;           // no picks revealed yet
+  const pot = entries.length * (fee || 0), prizes = !fee ? [0, 0, 0] : wta ? [pot, 0, 0] : [pot - fee * 3, fee * 2, fee];
+  const win = {}, cash = {}, res = new Array(M.length);
+  for (let r = 0; r < runs; r++) {
+    for (let k = 0; k < M.length; k++) { const x = M[k]; if (x.fixed != null) { res[k] = x.fixed; continue; }
+      const z = Math.random(); res[k] = z < x.u ? 'USA' : z < x.u + x.i ? 'INT' : 'H'; }
+    const tot = E.map(e => { let t = 0; for (let k = 0; k < M.length; k++) { const pk = e.pk?.[M[k].sk]?.[M[k].id]; if (!pk) continue; t += res[k] === 'H' ? 0.5 : (pk === res[k] ? 1 : 0); } return { n: e.name, t }; })
+      .sort((a, b) => b.t - a.t);
+    for (let a = 0; a < tot.length;) { let b = a; while (b + 1 < tot.length && Math.abs(tot[b + 1].t - tot[a].t) < 1e-9) b++;
+      const share = 1 / (b - a + 1); let money = 0; for (let q = a; q <= b; q++) money += (prizes[q] || 0);
+      for (let q = a; q <= b; q++) { if (a === 0) win[tot[q].n] = (win[tot[q].n] || 0) + share; if (money > 0) cash[tot[q].n] = (cash[tot[q].n] || 0) + 1; }
+      a = b + 1; }
+  }
+  const out = {}; for (const e of entries) out[e.name] = { win: 100 * (win[e.name] || 0) / runs, cash: fee ? 100 * (cash[e.name] || 0) / runs : null, cup: true };
+  return out;
+}
 function calcEarnings(players, purse, major, tournamentComplete, signatureEventName){
   // FINGERPRINT_V99_EARNINGS_FIX
   // Projected earnings are shown during live play (pool standings need them), but:
@@ -2955,6 +3047,7 @@ export default function App(){
           r1:match.R1??match.round1??null,r2:match.R2??match.round2??null,
           r3:match.R3??match.round3??null,r4:match.R4??match.round4??null,
           liveMakeCut:match.make_cut??null,          // FINGERPRINT_V297_MAKECUT
+          liveWin:match.win??null,                  // FINGERPRINT_V344_ODDS — DataGolf's live win chance
         };
       }
       return f;
@@ -2996,6 +3089,7 @@ export default function App(){
           pairingTeeTime: null, pairingStartHole: null, pairingRoundNum: null,
           pos: p.current_pos!=null&&p.current_pos!=='--'?String(p.current_pos):'-',
           liveMakeCut: p.make_cut ?? null,          // FINGERPRINT_V297_MAKECUT
+          liveWin: p.win ?? null,                  // FINGERPRINT_V344_ODDS
           score: total!=null?(total===0?'E':(total>0?`+${total}`:String(total))):'E',
           today: '',
           thru: thruHoles!=null&&thruHoles>0?String(thruHoles):'',
@@ -3975,6 +4069,28 @@ export default function App(){
     ? [...entries].sort((a,b)=> isTeamPool ? ((projE(b)-projE(a)) || (teamE(b)-teamE(a))) : (teamE(b)-teamE(a)))
     : entries;
   const owners=n=>isTeamPool?[]:entries.filter(e=>e.picks.includes(n)).map(e=>e.name);
+  // FINGERPRINT_V344_ODDS — chance to win / cash, re-simulated a few seconds after each live update
+  const [poolOdds,setPoolOdds]=useState(null);
+  const prevOddsRef=useRef(null);
+  const oddsSig=(isTeamPool
+      ? Object.entries(teamMatches||{}).map(([sk,sv])=>(sv.matches||[]).map(m=>`${sk}.${m.id}:${m.result||''}:${m.prob?`${m.prob.usa}/${m.prob.intl}/${m.prob.halve}`:''}`).join(',')).join('|')+'~'+Object.keys(teamPicksPublic||{}).length
+      : field.map(f=>`${f.name}:${f.score}:${f.thru}:${f.pos}:${f.liveWin??''}`).join('|'))+'#'+entries.map(e=>e.name).join(',');
+  useEffect(()=>{
+    if(entries.length<2||(!isTeamPool&&(picksHidden||!fieldHasEarnings))) { setPoolOdds(null); return; }
+    const t=setTimeout(()=>{
+      try{
+        const major=activeMajorRef.current||activeMajor, P=dynamicPursesRef.current, th=THEMES[major]||THEMES.pga;
+        const purse=isTourMode(major)?((P&&P[major])||pgatourPurseRef.current||th.purse):((P&&P[major])||th.purse);
+        const evName=isTourMode(major)?(poolMeta?.currentPgatourEvent||th.eventName||''):undefined;
+        const fee=+poolMeta?.entryFee||0;
+        const res=isTeamPool
+          ? gpSimulateCup({entries,picks:teamPicksPublic,matches:teamMatches,probOf,fee,wta:isWinnerTakeAll(entries.length)})   // V345
+          : gpSimulatePool({field,entries,purse,major,evName,fee,wta:isWinnerTakeAll(entries.length)});
+        setPoolOdds(prev=>{ if(prev) prevOddsRef.current=prev; return res; });
+      }catch(e){ setPoolOdds(null); }
+    },1500);
+    return ()=>clearTimeout(t);
+  },[oddsSig,isTeamPool,picksHidden,fieldHasEarnings]);
   // FINGERPRINT_V166_MR_CHALK / FINGERPRINT_V168_ODDS_BASED
   // "Mr. Chalk" = the entry that drafted the chalk (the favorites), judged by the actual ODDS
   // shown on each player (the same `p.odds` value displayed in the scorecard, e.g. "-200"/"+5000").
@@ -5393,7 +5509,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       })()}
                       {payoutBtn(e.name)}
                     </div>
-                    <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Picks locked in':'Tap to '+(op?'collapse':'expand')}</div>
+                    {(()=>{const od=poolOdds?.[e.name]; if(!od||picksHidden) return <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Picks locked in':'Tap to '+(op?'collapse':'expand')}</div>;
+                      const pct=(x)=>x>=99.5?'99%+':x<0.5?(x>0?'<1%':'0%'):`${Math.round(x)}%`;
+                      const was=prevOddsRef.current?.[e.name]?.win, d=was==null?0:od.win-was;
+                      return <div title={od.cup?'Based on 5,000 simulations of the matches posted so far':'Based on 2,000 simulations of the rest of the tournament'} style={{fontSize:11,color:'#5a6b4e',marginTop:1,fontWeight:600}}>
+                        🎯 <b style={{color:T.primary}}>{pct(od.win)}</b> to win{od.cash!=null&&<> · {pct(od.cash)} to cash</>}
+                        {Math.abs(d)>=3&&<span style={{marginLeft:4,fontWeight:800,color:d>0?'#2d7a1e':'#c62828'}}>{d>0?'↑':'↓'}</span>}</div>;})()}
                   </div>
                   {!locked&&acct&&acctEntries.some(x=>x.name===e.name)&&!isTeamPool&&
                     <button type="button" onClick={(ev)=>{ev.stopPropagation();const me=acctEntries.find(x=>x.name===e.name);startEdit(e.name,me.code);setTab('Enter Pool');}} style={{background:'transparent',border:`1px solid ${T.primary}30`,color:T.primary,padding:'4px 10px',borderRadius:6,fontSize:10,fontWeight:700,cursor:'pointer'}}>✏️ Edit</button>}
