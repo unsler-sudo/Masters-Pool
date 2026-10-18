@@ -116,6 +116,7 @@ export async function POST(request) {
       commissionerEmail: commissionerEmail.trim().toLowerCase(),
       ...(adminPassword?.trim() ? { adminPassword: adminPassword.trim() } : {}),
       ownerUid:          acct.uid,
+      ...(acct.venmo ? { venmoUser: acct.venmo } : {}),   // FINGERPRINT_POOL_VENMO_DEFAULT — your profile's Venmo, from day one
       major,
       paid:              false,
       active:            false,
