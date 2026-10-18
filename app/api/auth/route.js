@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 import {
   redis, BASE_URL, normEmail, validEmail, normPhone, cleanName, hashPassword, checkPassword,
   makeToken, verifyToken, getUser, saveUser, findUid, newUser, publicUser, tooMany, sixDigits,
-  sendEmail, linkPoolEntries, linkPoolOwner, unsubSig,
+  sendEmail, linkPoolEntries, linkPoolOwner, unsubSig, normVenmo,
 } from './lib';
 
 export const dynamic = 'force-dynamic';
@@ -142,6 +142,7 @@ export async function POST(request) {
     if (a === 'update-profile') {
       if (body.name !== undefined) { const n = cleanName(body.name); if (n.length < 2) return bad('Enter your name'); user.name = n; }
       if (body.phone !== undefined) { const p = normPhone(body.phone); if (!p) return bad('Enter a valid cell number (10 digits, or +country code)'); user.phone = p; }
+      if (body.venmo !== undefined) { const raw = String(body.venmo || '').trim(); if (!raw) delete user.venmo; else { const v = normVenmo(raw); if (!v) return bad('That doesn’t look like a Venmo username (5–30 letters, numbers, - or _)'); user.venmo = v; } }   // FINGERPRINT_ACCOUNTS_VENMO
       // FINGERPRINT_ACCOUNTS_NICKNAME — optional; your default entry name in pools (blank removes it)
       if (body.nickname !== undefined) { const n = cleanName(body.nickname).slice(0, 30); if (n) user.nickname = n; else delete user.nickname; }
       await saveUser(user);
