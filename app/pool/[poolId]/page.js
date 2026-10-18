@@ -1,5 +1,5 @@
 'use client';
-// build: pay-winners-v337-20261005-2330
+// build: pay-prompt-v340-20261006-0030
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1490,6 +1490,20 @@ export default function App(){
   const [claimList,setClaimList]=useState(null);           // FINGERPRINT_V309 — entries you can claim
   const [adminClaims,setAdminClaims]=useState([]);        // FINGERPRINT_V309 — requests for the commissioner
   const [payoutEvents,setPayoutEvents]=useState([]);      // FINGERPRINT_V337 — winners still to pay
+  // FINGERPRINT_V340_PAY_PROMPT — after tapping venmo for a winner, ask "Did you send it?" when you come back
+  const [payPrompt,setPayPrompt]=useState(null);           // {archiveId, entryName, amt, at, show}
+  const payArmed=useRef(false);
+  const startPayPrompt=(archiveId,entryName,amt)=>{ const pr={archiveId,entryName,amt,at:Date.now()}; payArmed.current=false;
+    setPayPrompt({...pr,show:false}); try{ sessionStorage.setItem('gp_payprompt',JSON.stringify(pr)); }catch{} };
+  const endPayPrompt=()=>{ setPayPrompt(null); try{ sessionStorage.removeItem('gp_payprompt'); }catch{} };
+  useEffect(()=>{
+    try{ const pr=JSON.parse(sessionStorage.getItem('gp_payprompt')||'null');            // the app reloaded while you were in Venmo
+      if(pr&&Date.now()-pr.at<30*60e3) setPayPrompt({...pr,show:true}); else sessionStorage.removeItem('gp_payprompt'); }catch{}
+    const onVis=()=>{ if(document.visibilityState==='hidden') payArmed.current=true;
+      else if(payArmed.current){ payArmed.current=false; setPayPrompt(pr=>pr&&Date.now()-pr.at<30*60e3?{...pr,show:true}:pr); } };
+    document.addEventListener('visibilitychange',onVis);
+    return ()=>document.removeEventListener('visibilitychange',onVis);
+  },[]);
   const [providers,setProviders]=useState({google:false,apple:false});
   const [ownerAdmin,setOwnerAdmin]=useState(false);
   const [payPending,setPayPending]=useState([]);          // FINGERPRINT_V316_VENMO — said "I've paid", awaiting confirmation
@@ -3528,8 +3542,8 @@ export default function App(){
     if(d?.ok){ msg('Request sent — your commissioner will approve it'); setClaimList(l=>(l||[]).map(x=>x===c?{...x,requested:true}:x)); } else msg(d?.error||'Could not send the request');
   };
   useEffect(()=>{
-    if(tab!=='Admin'||!adminOk||!adminPw) return;
-    adminAction('claims-list').then(d=>{ if(d?.ok) setAdminClaims(d.claims||[]); }).catch(()=>{});
+    if((tab!=='Admin'&&tab!=='Standings')||!adminOk||!adminPw) return;   // V338 — Standings shows Pay the winners
+    if(tab==='Admin') adminAction('claims-list').then(d=>{ if(d?.ok) setAdminClaims(d.claims||[]); }).catch(()=>{});
     adminAction('payouts').then(d=>{ if(d?.ok) setPayoutEvents(d.events||[]); }).catch(()=>{});
   },[tab,adminOk,adminPw]);
   const acctCall=async(body)=>{ setAcctBusy(true); setAcctErr('');
@@ -4315,6 +4329,48 @@ export default function App(){
   const dan={background:'#8b2020',color:'#fff',border:'none',padding:'8px 18px',borderRadius:7,fontWeight:600,fontSize:13,cursor:'pointer'};
   const inp={flex:1,padding:'9px 12px',borderRadius:7,border:`1px solid ${T.inputBorder}`,fontSize:14,fontFamily:"'DM Sans',sans-serif",background:'#fff'};
   const bx={textAlign:'center',padding:'36px 16px',background:'#fff',borderRadius:12,border:`1px solid ${T.cardBorder}`};
+  // FINGERPRINT_V338_PAYOUTS — the commissioner's "Pay the winners" card, on Admin AND the Standings tab
+  const renderPayouts=()=>payoutEvents.length>0&&(adminOk||ownerAdmin)?(
+<div style={{...sec,borderColor:'#f0c060'}}><h3 style={stl}>🏆 Pay the winners</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>Each <b>venmo</b> button opens Venmo from your account with the winner, amount and a note filled in. Tick each one off once it's sent. Winners without a Venmo saved: pick them in Venmo, or add theirs in Platform Admin.</p>
+              {payoutEvents.map(ev=><div key={ev.archiveId} style={{marginTop:10}}>
+                <div style={{fontSize:12,fontWeight:800,color:T.primary,marginBottom:4}}>{ev.event}{ev.year?` ${ev.year}`:''}</div>
+                {ev.winners.map(w=>{const ord=(n)=>n+(['th','st','nd','rd'][((n%100)-20)%10]||['th','st','nd','rd'][n%100]||'th');
+                  const amt=Number.isInteger(w.prize)?`$${w.prize}`:`$${w.prize.toFixed(2)}`;
+                  const note=[poolMeta?.poolName,ev.event,`${ord(w.place)} place 🏆`].filter(Boolean).join(' · ');
+                  const v=gpVenmo(w.venmo,w.prize,note);
+                  return <div key={w.entryName} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:'1px solid #f0f0ea',opacity:w.paidAt?.55:1}}>
+                    <span style={{fontSize:16,width:22,textAlign:'center'}}>{w.place===1?'🥇':w.place===2?'🥈':w.place===3?'🥉':'💰'}</span>
+                    <span style={{flex:1,minWidth:0}}>
+                      <span style={{display:'block',fontSize:14,fontWeight:700,color:'#2a3a1e'}}>{w.entryName} — {amt}</span>
+                      <span style={{display:'block',fontSize:11,color:w.venmo?'#8a9580':'#b45309'}}>{w.venmo?`@${w.venmo}`:'No Venmo saved'}</span>
+                    </span>
+                    {!w.paidAt&&<a href={v.href} onClick={(e2)=>{startPayPrompt(ev.archiveId,w.entryName,amt);v.onClick(e2);}} target="_blank" rel="noopener noreferrer" aria-label={`Pay ${amt} with Venmo`}
+                        style={{background:'#008CFF',borderRadius:8,padding:12,display:'inline-flex',alignItems:'center',textDecoration:'none',lineHeight:0}}>
+                        <img src="/brand/venmo-logo-white.png" alt="Venmo" height={12} width={63} style={{display:'block',height:12,width:'auto'}}/></a>}
+                    <button type="button" onClick={async()=>{const d=await adminAction('mark-payout',{archiveId:ev.archiveId,entryName:w.entryName,paid:!w.paidAt});
+                        if(d?.ok){ setPayoutEvents(list=>list.map(e=>e.archiveId!==ev.archiveId?e:{...e,winners:e.winners.map(x=>x.entryName!==w.entryName?x:{...x,paidAt:d.paid[w.entryName]||null})})); msg(w.paidAt?'Marked unpaid':`${w.entryName} paid ✓`); } }}
+                      style={w.paidAt?{background:'none',border:'none',color:'#2d7a1e',fontWeight:800,fontSize:12,cursor:'pointer'}:{background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`,borderRadius:7,padding:'6px 10px',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                      {w.paidAt?'✓ Paid':'Mark paid'}</button>
+                  </div>;})}
+              </div>)}
+            </div>
+  ):null;
+  // FINGERPRINT_V339_ROW_VENMO — on Standings, a small venmo button on each unpaid prize-winner's row (commissioner only)
+  const evKey=(x)=>String(x||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  const payoutBtn=(name)=>{
+    if(!(adminOk||ownerAdmin)||!payoutEvents.length) return null;
+    const shown=evKey(tcEventName||T.eventName); if(!shown) return null;
+    const pe=payoutEvents.find(e=>{const k=evKey(e.event); return k&&(k===shown||k.includes(shown)||shown.includes(k));});
+    const w=pe?.winners.find(x=>x.entryName===name&&!x.paidAt); if(!w) return null;
+    const ord=(n)=>n+(['th','st','nd','rd'][((n%100)-20)%10]||['th','st','nd','rd'][n%100]||'th');
+    const amt=Number.isInteger(w.prize)?`$${w.prize}`:`$${w.prize.toFixed(2)}`;
+    const v=gpVenmo(w.venmo,w.prize,[poolMeta?.poolName,pe.event,`${ord(w.place)} place 🏆`].filter(Boolean).join(' · '));
+    return <a href={v.href} onClick={(ev)=>{ev.stopPropagation();startPayPrompt(pe.archiveId,w.entryName,amt);v.onClick(ev);}} target="_blank" rel="noopener noreferrer"
+      aria-label={`Pay ${w.entryName} ${amt} with Venmo`} title={w.venmo?`Pay @${w.venmo} ${amt}`:`Pay ${amt} — pick ${w.entryName} in Venmo`}
+      style={{background:'#008CFF',borderRadius:6,padding:8,display:'inline-flex',alignItems:'center',lineHeight:0,marginLeft:4,verticalAlign:'middle'}}>
+      <img src="/brand/venmo-logo-white.png" alt="Venmo" height={8} width={42} style={{display:'block',height:8,width:'auto'}}/></a>;
+  };
   const sec={background:'#fff',padding:14,borderRadius:9,marginBottom:9,border:`1px solid ${T.cardBorder}`};
   const stl={fontFamily:"'Playfair Display',serif",fontSize:14,fontWeight:700,marginBottom:6};
 
@@ -4808,6 +4864,19 @@ export default function App(){
             <button type="button" onClick={hidePush} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
           </div>
         : null)}
+      {/* FINGERPRINT_V340_PAY_PROMPT — "Did you send it?" after coming back from Venmo */}
+      {payPrompt?.show&&(adminOk||ownerAdmin)&&<div onClick={endPayPrompt} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:178,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,borderRadius:'16px 16px 0 0',padding:'18px 16px 26px',textAlign:'center'}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:800,color:T.primary,marginBottom:6}}>💸 Did you send {payPrompt.entryName} {payPrompt.amt}?</div>
+          <div style={{fontSize:13,color:'#6b7c5e',lineHeight:1.45,marginBottom:14}}>Mark it paid so you know it's done — they'll see <b>✓ Paid out</b> in their record.</div>
+          <button type="button" onClick={async()=>{ const {archiveId,entryName}=payPrompt; endPayPrompt();
+              const d=await adminAction('mark-payout',{archiveId,entryName,paid:true});
+              if(d?.ok){ setPayoutEvents(list=>list.map(e=>e.archiveId!==archiveId?e:{...e,winners:e.winners.map(x=>x.entryName!==entryName?x:{...x,paidAt:d.paid?.[entryName]||new Date().toISOString()})})); msg(`${entryName} paid ✓`); }
+              else msg(d?.error||'Could not mark paid — try in Admin → Money'); }}
+            style={{...pri,width:'100%',padding:'12px 16px',fontSize:15,marginBottom:8}}>Yes — mark paid</button>
+          <button type="button" onClick={endPayPrompt} style={{background:'none',border:'none',color:'#8a9580',fontSize:14,cursor:'pointer',padding:8}}>Not yet</button>
+        </div>
+      </div>}
       {/* FINGERPRINT_V318 — payment panel from your own Unpaid badge */}
       {payFor&&<div onClick={()=>{setPayFor(null);setPayJustEntered(false);}} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:175,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
         <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,borderRadius:'16px 16px 0 0',padding:'16px 16px 26px',textAlign:'center'}}>
@@ -5322,6 +5391,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                           border:`1px solid ${paid?'#2d7a1e30':(nag?'#c6282866':'#ddd')}`,
                           animation:nag?'glow 1.1s ease-in-out infinite':'none'}}>{paid?'✓ Paid':canPay?'Unpaid · Pay ›':'Unpaid'}</span>;
                       })()}
+                      {payoutBtn(e.name)}
                     </div>
                     <div style={{fontSize:11,color:'#8a9580',marginTop:1}}>{picksHidden?'Picks locked in':'Tap to '+(op?'collapse':'expand')}</div>
                   </div>
@@ -6608,31 +6678,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             {/* FINGERPRINT_V299_ADMIN_GROUPS */}
             <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>Money</div>
-            {/* FINGERPRINT_V337_PAYOUTS — pay the winners from your Venmo (amount + note filled in), then tick them off */}
-            {payoutEvents.length>0&&<div style={{...sec,borderColor:'#f0c060'}}><h3 style={stl}>🏆 Pay the winners</h3>
-              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>Each <b>venmo</b> button opens Venmo from your account with the winner, amount and a note filled in. Tick each one off once it's sent. Winners without a Venmo saved: pick them in Venmo, or add theirs in Platform Admin.</p>
-              {payoutEvents.map(ev=><div key={ev.archiveId} style={{marginTop:10}}>
-                <div style={{fontSize:12,fontWeight:800,color:T.primary,marginBottom:4}}>{ev.event}{ev.year?` ${ev.year}`:''}</div>
-                {ev.winners.map(w=>{const ord=(n)=>n+(['th','st','nd','rd'][((n%100)-20)%10]||['th','st','nd','rd'][n%100]||'th');
-                  const amt=Number.isInteger(w.prize)?`$${w.prize}`:`$${w.prize.toFixed(2)}`;
-                  const note=[poolMeta?.poolName,ev.event,`${ord(w.place)} place 🏆`].filter(Boolean).join(' · ');
-                  const v=gpVenmo(w.venmo,w.prize,note);
-                  return <div key={w.entryName} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:'1px solid #f0f0ea',opacity:w.paidAt?.55:1}}>
-                    <span style={{fontSize:16,width:22,textAlign:'center'}}>{w.place===1?'🥇':w.place===2?'🥈':w.place===3?'🥉':'💰'}</span>
-                    <span style={{flex:1,minWidth:0}}>
-                      <span style={{display:'block',fontSize:14,fontWeight:700,color:'#2a3a1e'}}>{w.entryName} — {amt}</span>
-                      <span style={{display:'block',fontSize:11,color:w.venmo?'#8a9580':'#b45309'}}>{w.venmo?`@${w.venmo}`:'No Venmo saved'}</span>
-                    </span>
-                    {!w.paidAt&&<a href={v.href} onClick={v.onClick} target="_blank" rel="noopener noreferrer" aria-label={`Pay ${amt} with Venmo`}
-                        style={{background:'#008CFF',borderRadius:8,padding:12,display:'inline-flex',alignItems:'center',textDecoration:'none',lineHeight:0}}>
-                        <img src="/brand/venmo-logo-white.png" alt="Venmo" height={12} width={63} style={{display:'block',height:12,width:'auto'}}/></a>}
-                    <button type="button" onClick={async()=>{const d=await adminAction('mark-payout',{archiveId:ev.archiveId,entryName:w.entryName,paid:!w.paidAt});
-                        if(d?.ok){ setPayoutEvents(list=>list.map(e=>e.archiveId!==ev.archiveId?e:{...e,winners:e.winners.map(x=>x.entryName!==w.entryName?x:{...x,paidAt:d.paid[w.entryName]||null})})); msg(w.paidAt?'Marked unpaid':`${w.entryName} paid ✓`); } }}
-                      style={w.paidAt?{background:'none',border:'none',color:'#2d7a1e',fontWeight:800,fontSize:12,cursor:'pointer'}:{background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`,borderRadius:7,padding:'6px 10px',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
-                      {w.paidAt?'✓ Paid':'Mark paid'}</button>
-                  </div>;})}
-              </div>)}
-            </div>}
+            {renderPayouts()}{/* FINGERPRINT_V338 — shared with the Standings tab */}
             {/* FINGERPRINT_V316_VENMO — commissioner's Venmo + trust switch */}
             <div style={sec}><h3 style={stl}>💸 Venmo</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>Players get a <b>Pay with Venmo</b> button that opens Venmo to you, with the entry fee and a note filled in. They tap <b>I've paid</b> afterwards.</p>
