@@ -1,5 +1,5 @@
 'use client';
-// build: cups-tab-v341-20261006-0100
+// build: season-first-v342-20261006-0130
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -6250,15 +6250,25 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
 
         {tab==='History'&&<>
           <div style={{textAlign:'center',marginBottom:16}}>
-            {/* FINGERPRINT_V181_SCHEDULE — dropdown to switch between Past Results and the Schedule */}
-            <div style={{display:'inline-flex',alignItems:'center',gap:8,marginBottom:10}}>
-              <select value={historyView} onChange={e=>setHistoryView(e.target.value)} style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,border:`1.5px solid ${T.primary}33`,borderRadius:8,padding:'4px 30px 4px 12px',background:`${T.primary}08`,cursor:'pointer',appearance:'none',WebkitAppearance:'none',backgroundImage:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23${T.primary.replace('#','')}' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E")`,backgroundRepeat:'no-repeat',backgroundPosition:'right 10px center'}}>
-                <option value="schedule">📅 Schedule</option>
-                <option value="results">📚 Past Results</option>
-                <option value="season">🏆 Standings</option>
-              </select>
-            </div>
-            <div style={{fontSize:12,color:'#8a9580'}}>{historyView==='season'?`Prize money won in this pool, ${seasonYear} season`:historyView==='results'?'Final standings from previous events':`${schedule&&schedule.length?new Date().getFullYear():''} ${isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} season schedule`}</div>
+            {/* FINGERPRINT_V342_SEASON_FIRST — pick the season, then Schedule / Past Results / Standings */}
+            {(()=>{
+              const nowY=new Date().getFullYear();
+              const aYear=(x)=>Number(x.year)||new Date(x.tournamentDate||x.archivedAt||Date.now()).getFullYear();
+              const yrs=[...new Set([nowY,...(publicArchives||[]).map(aYear),...((seasonData&&seasonData.years)||[])])].filter(Boolean).sort((x,y)=>y-x);
+              const views=[...(seasonYear===nowY?[['schedule','📅 Schedule']]:[]),['results','📚 Past Results'],['season','🏆 Standings']];
+              const pick=(y)=>{ setSeasonYear(y); if(y!==nowY&&historyView==='schedule') setHistoryView('results'); };
+              return <>
+                <div style={{display:'flex',gap:6,justifyContent:'center',flexWrap:'wrap',marginBottom:10}}>
+                  {yrs.map(y=><button key={y} type="button" onClick={()=>pick(y)} style={{padding:'6px 14px',borderRadius:16,cursor:'pointer',fontWeight:800,fontSize:14,
+                    fontFamily:"'Playfair Display',serif",border:`1.5px solid ${seasonYear===y?T.primary:T.cardBorder}`,background:seasonYear===y?T.primary:'#fff',color:seasonYear===y?'#fff':T.primary}}>{y}</button>)}
+                </div>
+                <div style={{display:'flex',gap:4,padding:3,borderRadius:9,background:'#f0f0ea',marginBottom:8}}>
+                  {views.map(([v,l])=><button key={v} type="button" onClick={()=>setHistoryView(v)} style={{flex:1,padding:'8px 4px',borderRadius:7,border:'none',cursor:'pointer',
+                    background:historyView===v?T.primary:'transparent',color:historyView===v?'#fff':'#5a6b4e',fontWeight:700,fontSize:13}}>{l}</button>)}
+                </div>
+              </>;
+            })()}
+            <div style={{fontSize:12,color:'#8a9580'}}>{historyView==='season'?`Prize money won in this pool, ${seasonYear} season`:historyView==='results'?`Final standings from the ${seasonYear} season`:`${schedule&&schedule.length?new Date().getFullYear():''} ${isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} season schedule`}</div>
           </div>
           {historyView==='season'?(()=>{
             const RACES=[['majors','Majors'],['pgatour','PGA Tour'],['dpworld','DP World'],['cups','Cups']];   // V341 — + Presidents/Ryder Cup
@@ -6285,9 +6295,6 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 {[['prize','Prize money'],['golfer',isCups?'Points':'Golfer earnings']].map(([k2,l2])=><button key={k2} type="button" onClick={()=>setSeasonSort(k2)}
                   style={{padding:'4px 10px',borderRadius:12,border:`1px solid ${seasonSort===k2?T.primary:'#d6d6cf'}`,background:seasonSort===k2?T.primary:'#fff',color:seasonSort===k2?'#fff':'#5a6b4e',fontSize:12,fontWeight:700,cursor:'pointer'}}>{l2}</button>)}
               </div>
-              {(seasonData.years||[]).length>1&&<div style={{textAlign:'right',marginBottom:8}}>
-                <select value={seasonYear} onChange={e=>setSeasonYear(+e.target.value)} style={{fontSize:13,padding:'4px 8px',borderRadius:6,border:'1px solid #d6d6cf'}}>
-                  {seasonData.years.map(y=><option key={y} value={y}>{y} season{y<new Date().getFullYear()?' (final)':''}</option>)}</select></div>}
               {R.rows.length===0
                 ? <div style={bx}><div style={{fontSize:40,marginBottom:8}}>🏆</div><p style={{color:'#8a9580',margin:0}}>{R0.events?`No one with an account has played ${RACES.find(x=>x[0]===race)[1]} events in ${seasonYear} yet.`:`No finished ${RACES.find(x=>x[0]===race)[1]} events in ${seasonYear} yet.`}</p></div>
                 : <div style={{background:'#fff',borderRadius:12,border:`1px solid ${T.cardBorder}`,overflow:'hidden'}}>
@@ -6481,19 +6488,14 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 const archYear=(a)=>Number(a.year)||new Date(a.tournamentDate||a.archivedAt||Date.now()).getFullYear();
                 const years=[...new Set(publicArchives.map(archYear))].sort((a,b)=>b-a);
                 const newestYear=years[0];
-                return <>{years.map(y=>{
+                // FINGERPRINT_V342 — only the season chosen at the top
+                if(!years.includes(seasonYear)) return <div style={bx}><div style={{fontSize:40,marginBottom:8}}>📚</div><p style={{color:'#8a9580',margin:0}}>No finished events in {seasonYear} yet.</p></div>;
+                return <>{years.filter(y=>y===seasonYear).map(y=>{
                   const yearArchives=publicArchives.filter(a=>archYear(a)===y);
                   const majorArchives=yearArchives.filter(a=>majorKeys.includes(a.major)).sort(byDate);
                   const tourArchives=yearArchives.filter(a=>isTourMode(a.major)||a.major==='players').sort(byDate);
-                  const isOpen=expandedYears[y]??(y===newestYear);
+                  const isOpen=true;
                   return <div key={y} style={{marginBottom:14}}>
-                    <button onClick={()=>setExpandedYears(prev=>({...prev,[y]:!isOpen}))}
-                      style={{width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',
-                        background:T.navActive,border:`1px solid ${T.cardBorder}`,borderRadius:10,
-                        padding:'12px 14px',cursor:'pointer',marginBottom:isOpen?12:0}}>
-                      <span style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:800,color:T.primary}}>🗓 {y} Season</span>
-                      <span style={{fontSize:12,color:'#8a9580',fontWeight:600}}>{yearArchives.length} event{yearArchives.length===1?'':'s'} <span style={{marginLeft:6,color:T.primary}}>{isOpen?'▼':'▶'}</span></span>
-                    </button>
                     {isOpen&&<>
                       {majorArchives.length>0&&<div style={{marginBottom:20}}>
                         {sectionHdr('⛳ Majors')}
