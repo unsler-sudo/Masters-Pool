@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: nickname-v220-20261005-1600
+// build: payouts-v221-20261005-2330
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -585,10 +585,12 @@ async function srvMyRecord(user, extraPoolId) {
       for (const r of res) {
         const mine = r.entry.uid === user.uid || (email && String(r.entry.email || '').toLowerCase().trim() === email);
         if (!mine) continue;
+        let paidOut = false;
+        if (r.prize > 0) { try { paidOut = !!JSON.parse((await redis('GET', k(pid, `payouts:${a._id}`))) || '{}')[r.entry.name]; } catch {} }   // V221
         rows.push({
           poolId: pid, poolName: meta.poolName || 'Golf pool', event: a.eventName || SRV_MAJOR_LABEL[a.major] || a.major,
           year: +a.year || null, kind, date: a.tournamentDate || a.archivedAt || '', entry: r.entry.name,
-          place: r.place, field: res.length, total: r.total, pts, prize: Math.round((r.prize || 0) * 100) / 100,
+          place: r.place, field: res.length, total: r.total, pts, prize: Math.round((r.prize || 0) * 100) / 100, paidOut,
           picks: pts ? [] : (r.entry.picks || []).map(p => ({ name: p, earned: +(a.earnings || {})[p] || 0 })).sort((x, y) => y.earned - x.earned),
         });
       }
@@ -1970,6 +1972,38 @@ export async function POST(request) {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const am = await getPoolMeta(poolId);
       return Response.json({ ok:true, joinCode: am?.joinCode || '', hasPassword: !!am?.adminPassword, ownedPool: !!am?.ownerUid });   // FINGERPRINT_V198/V214 — Admin only
+    }
+
+    // FINGERPRINT_V221_PAYOUTS — commissioner: finished events with prize-winners still to pay (newest first, up to 3)
+    if (body.action === 'payouts') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId);
+      const arcs = (await srvLoadArchives(poolId)).sort((a, b) => String(b.tournamentDate || b.archivedAt || '').localeCompare(String(a.tournamentDate || a.archivedAt || ''))).slice(0, 8);
+      const events = [];
+      for (const a of arcs) {
+        const won = srvArchiveResults(a, meta).filter(r => r.prize > 0);
+        if (!won.length) continue;
+        let paid = {}; try { paid = JSON.parse((await redis('GET', k(poolId, `payouts:${a._id}`))) || '{}'); } catch {}
+        events.push({ archiveId: a._id, event: a.eventName || SRV_MAJOR_LABEL[a.major] || a.major, year: +a.year || null,
+          winners: won.map(r => ({ entryName: r.entry.name, place: r.place, prize: Math.round(r.prize * 100) / 100,
+            uid: r.entry.uid || null, email: String(r.entry.email || '').toLowerCase().trim(), paidAt: paid[r.entry.name] || null })) });
+      }
+      const open = events.filter(e => e.winners.some(w => !w.paidAt)).slice(0, 3);
+      // whose Venmo: by account, or by the email they entered with
+      const emails = [...new Set(open.flatMap(e => e.winners.filter(w => !w.uid && w.email).map(w => w.email)))];
+      const byEmail = {}; if (emails.length) { const r = await redis('MGET', ...emails.map(x => `user:email:${x}`)); emails.forEach((x, i) => { if (r[i]) byEmail[x] = r[i]; }); }
+      const uids = [...new Set(open.flatMap(e => e.winners.map(w => w.uid || byEmail[w.email]).filter(Boolean)))];
+      const users = {}; if (uids.length) { const r = await redis('MGET', ...uids.map(u => `user:${u}`)); uids.forEach((u, i) => { try { if (r[i]) users[u] = JSON.parse(r[i]); } catch {} }); }
+      for (const e of open) for (const w of e.winners) { const u = users[w.uid || byEmail[w.email]]; w.venmo = u?.venmo || ''; w.accountName = u?.name || ''; delete w.email; delete w.uid; }
+      return Response.json({ ok:true, events: open });
+    }
+    if (body.action === 'mark-payout') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const archiveId = String(body.archiveId || ''); if (!/^[a-z0-9_-]+$/.test(archiveId)) return Response.json({ error:'Bad request' }, { status:400 });
+      const key = k(poolId, `payouts:${archiveId}`); let paid = {}; try { paid = JSON.parse((await redis('GET', key)) || '{}'); } catch {}
+      if (body.paid) paid[String(body.entryName)] = new Date().toISOString(); else delete paid[String(body.entryName)];
+      await redis('SET', key, JSON.stringify(paid));
+      return Response.json({ ok:true, paid });
     }
 
     // FINGERPRINT_V217_CLAIMS — player: list unclaimed entries in my pools / ask to claim one
