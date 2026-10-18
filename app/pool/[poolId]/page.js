@@ -1,5 +1,5 @@
 'use client';
-// build: on-course-dot-v335-20261005-2300
+// build: on-course-par-v336-20261005-2310
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -4601,7 +4601,8 @@ export default function App(){
                       <div style={{width:30,height:30,borderRadius:'4px',border:'1.5px dashed #1a8a3a55',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto'}}>
                         <span className="gp-now-dot" style={{width:10,height:10,borderRadius:'50%',background:'#22c55e',boxShadow:'0 0 0 0 rgba(34,197,94,.6)'}}/>
                       </div>
-                      <div style={{fontSize:9,color:'#1a8a3a',fontWeight:700,marginTop:2}}>NOW</div>
+                      <div style={{fontSize:9,color:'#bbb',marginTop:2}}>p{h.par}</div>
+                      <div style={{fontSize:9,color:'#1a8a3a',fontWeight:800}}>NOW</div>
                     </div>);
                     return(
                     <div style={{flex:1,textAlign:'center'}}>
