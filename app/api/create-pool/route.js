@@ -177,6 +177,22 @@ export async function POST(request) {
       });
     }
 
+    // FINGERPRINT_FIRST_POOL_FREE — your FIRST pool is free: once per account (claimed atomically with SET NX),
+    // and only if you've never had a paid pool of your own. Unlocks exactly like the bypass code.
+    {
+      const others = ((await redis('SMEMBERS', `user:${acct.uid}:pools`)) || []).filter(id => id !== poolId);
+      let ownsPaid = false;
+      if (others.length) { const ms = await redis('MGET', ...others.map(id => `pool:${id}:meta`));
+        ownsPaid = ms.some(r => { try { const m = JSON.parse(r || 'null'); return m && m.ownerUid === acct.uid && m.paid; } catch { return false; } }); }
+      if (!ownsPaid && await redis('SET', `user:${acct.uid}:freepool`, poolId, 'NX')) {
+        meta.paid = true; meta.active = true; meta.firstPoolFree = true;
+        await redis('SET', `pool:${poolId}:meta`, JSON.stringify(meta));
+        await redis('SET', `pool:${poolId}:locked`, 'false');
+        await sendConfirmationEmail(meta, poolId);
+        return Response.json({ ok: true, poolId, joinCode, poolUrl: `${BASE_URL}/pool/${poolId}`, free: true, firstPoolFree: true });
+      }
+    }
+
     // ── Stripe Checkout ───────────────────────────────────────────────────────
     if (!STRIPE_SECRET) {
       return Response.json({ error:'Stripe not configured' }, { status:500 });
