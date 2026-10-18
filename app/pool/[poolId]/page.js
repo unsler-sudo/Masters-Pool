@@ -1,5 +1,5 @@
 'use client';
-// build: on-course-par-v336-20261005-2310
+// build: pay-winners-v337-20261005-2330
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1476,7 +1476,7 @@ export default function App(){
   const [acctEntries,setAcctEntries]=useState([]);
   const [showAcct,setShowAcct]=useState(false);
   const [acctMode,setAcctMode]=useState('signin');        // signin | signup | forgot | reset
-  const [acctForm,setAcctForm]=useState({name:'',nickname:'',email:'',phone:'',password:'',current:'',code:''});
+  const [acctForm,setAcctForm]=useState({name:'',nickname:'',email:'',phone:'',venmo:'',password:'',current:'',code:''});
   const [acctBusy,setAcctBusy]=useState(false);
   const [acctErr,setAcctErr]=useState('');
   const [acctEditing,setAcctEditing]=useState(false);     // FINGERPRINT_V300 — editing name/cell
@@ -1489,6 +1489,7 @@ export default function App(){
   const [recOpen,setRecOpen]=useState(null);
   const [claimList,setClaimList]=useState(null);           // FINGERPRINT_V309 — entries you can claim
   const [adminClaims,setAdminClaims]=useState([]);        // FINGERPRINT_V309 — requests for the commissioner
+  const [payoutEvents,setPayoutEvents]=useState([]);      // FINGERPRINT_V337 — winners still to pay
   const [providers,setProviders]=useState({google:false,apple:false});
   const [ownerAdmin,setOwnerAdmin]=useState(false);
   const [payPending,setPayPending]=useState([]);          // FINGERPRINT_V316_VENMO — said "I've paid", awaiting confirmation
@@ -3474,6 +3475,17 @@ export default function App(){
     else if(d?.status==='pending'){ setPayPending(l=>[...new Set([...(l||[]),name])]); msg('Thanks — your commissioner will confirm it'); }
     else msg(d?.error||'Could not update — try again');
   };
+  // FINGERPRINT_V337 — open Venmo: the app on phones (its link keeps the note's spaces), else the web; `to` optional
+  const gpVenmo=(to,amount,note)=>{
+    const amt=Number.isInteger(+amount)?String(+amount):(+amount).toFixed(2);
+    const web=`https://venmo.com/${to?encodeURIComponent(to):''}?txn=pay&amount=${amt}&note=${encodeURIComponent(note)}`;
+    const app=`venmo://paycharge?txn=pay${to?`&recipients=${encodeURIComponent(to)}`:''}&amount=${amt}&note=${encodeURIComponent(note)}`;
+    const mobile=typeof navigator!=='undefined'&&(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1));
+    return { href:web, onClick:(ev)=>{ if(!mobile) return; ev.preventDefault();
+      const t=setTimeout(()=>{ if(document.visibilityState==='visible') window.location.href=web; },1500);
+      const left=()=>{ if(document.visibilityState==='hidden'){ clearTimeout(t); document.removeEventListener('visibilitychange',left); } };
+      document.addEventListener('visibilitychange',left); window.location.href=app; } };
+  };
   const isMine=(name)=>(acctEntries||[]).some(x=>x.name===name)||(chatVerified&&chatName===name);
   const payRow=(name,compact)=>{
     if(paymentsHidden||!name) return null;
@@ -3518,6 +3530,7 @@ export default function App(){
   useEffect(()=>{
     if(tab!=='Admin'||!adminOk||!adminPw) return;
     adminAction('claims-list').then(d=>{ if(d?.ok) setAdminClaims(d.claims||[]); }).catch(()=>{});
+    adminAction('payouts').then(d=>{ if(d?.ok) setPayoutEvents(d.events||[]); }).catch(()=>{});
   },[tab,adminOk,adminPw]);
   const acctCall=async(body)=>{ setAcctBusy(true); setAcctErr('');
     try{ const d=await authPost(body); if(d.error) setAcctErr(d.error); return d; }
@@ -3531,7 +3544,7 @@ export default function App(){
     if(d.ok){ setAcctMode('reset'); msg('If that email has an account, a code is on its way'); } };
   const doReset=async()=>{ const d=await acctCall({action:'reset-confirm',email:acctForm.email,code:acctForm.code,password:acctForm.password});
     if(d.ok){ applySession(d.token,d.user); setShowAcct(false); msg('Password reset ✓'); } };
-  const doProfile=async()=>{ const d=await acctCall({action:'update-profile',auth:acctToken,name:acctForm.name,nickname:acctForm.nickname||'',phone:acctForm.phone});
+  const doProfile=async()=>{ const d=await acctCall({action:'update-profile',auth:acctToken,name:acctForm.name,nickname:acctForm.nickname||'',phone:acctForm.phone,venmo:acctForm.venmo||''});
     if(d.ok){ setAcct(d.user); msg('Saved ✓'); } return !!d.ok; };
   const doPassword=async()=>{ const d=await acctCall({action:'change-password',auth:acctToken,current:acctForm.current,password:acctForm.password});
     if(d.ok){ applySession(d.token,d.user); setAcctForm(f=>({...f,current:'',password:''})); msg('Password updated — other devices signed out'); } return !!d.ok; };
@@ -4925,7 +4938,7 @@ export default function App(){
                           <span style={{display:'block',fontSize:14,fontWeight:700,color:'#2a3a1e',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.event}{r.year?` ${r.year}`:''}</span>
                           <span style={{display:'block',fontSize:12,color:'#8a9580',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ord(r.place)} of {r.field} · {r.pts?`${r.total} pts`:big(r.total)} · {r.poolName}{rows.filter(x=>x.event===r.event&&x.year===r.year&&x.poolId===r.poolId).length>1?` · ${r.entry}`:''}</span>
                         </span>
-                        {r.prize>0&&<span style={{fontSize:13,fontWeight:800,color:'#2d7a1e'}}>{usd(r.prize)}</span>}
+                        {r.prize>0&&<span style={{fontSize:13,fontWeight:800,color:'#2d7a1e',textAlign:'right'}}>{usd(r.prize)}{r.paidOut&&<span style={{display:'block',fontSize:10,fontWeight:700,color:'#2d7a1e'}}>✓ Paid out</span>}</span>}
                         <span style={{color:'#bbb'}}>{open?'▾':'›'}</span>
                       </button>
                       {open&&<div style={{padding:'0 4px 10px 34px'}}>
@@ -5013,7 +5026,7 @@ export default function App(){
               <div style={{border:`1px solid ${T.cardBorder}`,borderRadius:10,padding:'2px 12px 8px'}}>
                 <div style={{display:'flex',alignItems:'center',padding:'8px 0 6px'}}>
                   <div style={{flex:1,fontSize:10,fontWeight:800,letterSpacing:1,color:'#8a9580',textTransform:'uppercase'}}>Your details</div>
-                  {!acctEditing&&<button type="button" onClick={()=>{setAcctErr('');setAcctForm(f=>({...f,name:acct.name||'',nickname:acct.nickname||'',phone:acct.phone||''}));setAcctEditing(true);}}
+                  {!acctEditing&&<button type="button" onClick={()=>{setAcctErr('');setAcctForm(f=>({...f,name:acct.name||'',nickname:acct.nickname||'',phone:acct.phone||'',venmo:acct.venmo||''}));setAcctEditing(true);}}
                     style={{background:'none',border:'none',color:T.primary,fontSize:13,fontWeight:700,cursor:'pointer',padding:0}}>✏️ Edit</button>}
                 </div>
                 {acctEditing ? <>
@@ -5023,6 +5036,8 @@ export default function App(){
                   {field('nickname','e.g. Tuna','text','nickname')}
                   <div style={{fontSize:12,color:'#8a9580',margin:'2px 0 4px'}}>Cell</div>
                   {field('phone','Cell number','tel','tel')}
+                  <div style={{fontSize:12,color:'#8a9580',margin:'2px 0 4px'}}>Venmo <span style={{color:'#a3ac98'}}>— optional, so your commissioner can pay your winnings</span></div>
+                  {field('venmo','@your-venmo','text','off')}
                   <div style={{fontSize:11,color:'#8a9580',margin:'-2px 0 8px'}}>Your email is your sign-in, so it can't be changed here.</div>
                   <div style={{display:'flex',gap:8}}>
                     {btn('Save',async()=>{ if(await doProfile()) setAcctEditing(false); })}
@@ -5032,6 +5047,7 @@ export default function App(){
                   {row('Name',acct.name)}
                   {row('Nickname',acct.nickname||<span style={{color:'#a3ac98',fontWeight:500}}>—</span>)}
                   {row('Email',acct.email)}
+                  {row('Venmo',acct.venmo?`@${acct.venmo}`:<span style={{color:'#a3ac98',fontWeight:500}}>—</span>)}
                   {row('Cell',acct.phone?fmtPhone(acct.phone):<span onClick={()=>{setAcctErr('');setAcctForm(f=>({...f,name:acct.name||'',phone:''}));setAcctEditing(true);}}
                     style={{color:'#b45309',cursor:'pointer',textDecoration:'underline'}}>📱 Add your cell number</span>)}
                 </>}
@@ -6592,6 +6608,31 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             {/* FINGERPRINT_V299_ADMIN_GROUPS */}
             <div style={{fontSize:11,fontWeight:800,letterSpacing:1.2,color:'#8a9580',textTransform:'uppercase',margin:'18px 2px 8px'}}>Money</div>
+            {/* FINGERPRINT_V337_PAYOUTS — pay the winners from your Venmo (amount + note filled in), then tick them off */}
+            {payoutEvents.length>0&&<div style={{...sec,borderColor:'#f0c060'}}><h3 style={stl}>🏆 Pay the winners</h3>
+              <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>Each <b>venmo</b> button opens Venmo from your account with the winner, amount and a note filled in. Tick each one off once it's sent. Winners without a Venmo saved: pick them in Venmo, or add theirs in Platform Admin.</p>
+              {payoutEvents.map(ev=><div key={ev.archiveId} style={{marginTop:10}}>
+                <div style={{fontSize:12,fontWeight:800,color:T.primary,marginBottom:4}}>{ev.event}{ev.year?` ${ev.year}`:''}</div>
+                {ev.winners.map(w=>{const ord=(n)=>n+(['th','st','nd','rd'][((n%100)-20)%10]||['th','st','nd','rd'][n%100]||'th');
+                  const amt=Number.isInteger(w.prize)?`$${w.prize}`:`$${w.prize.toFixed(2)}`;
+                  const note=[poolMeta?.poolName,ev.event,`${ord(w.place)} place 🏆`].filter(Boolean).join(' · ');
+                  const v=gpVenmo(w.venmo,w.prize,note);
+                  return <div key={w.entryName} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 0',borderTop:'1px solid #f0f0ea',opacity:w.paidAt?.55:1}}>
+                    <span style={{fontSize:16,width:22,textAlign:'center'}}>{w.place===1?'🥇':w.place===2?'🥈':w.place===3?'🥉':'💰'}</span>
+                    <span style={{flex:1,minWidth:0}}>
+                      <span style={{display:'block',fontSize:14,fontWeight:700,color:'#2a3a1e'}}>{w.entryName} — {amt}</span>
+                      <span style={{display:'block',fontSize:11,color:w.venmo?'#8a9580':'#b45309'}}>{w.venmo?`@${w.venmo}`:'No Venmo saved'}</span>
+                    </span>
+                    {!w.paidAt&&<a href={v.href} onClick={v.onClick} target="_blank" rel="noopener noreferrer" aria-label={`Pay ${amt} with Venmo`}
+                        style={{background:'#008CFF',borderRadius:8,padding:12,display:'inline-flex',alignItems:'center',textDecoration:'none',lineHeight:0}}>
+                        <img src="/brand/venmo-logo-white.png" alt="Venmo" height={12} width={63} style={{display:'block',height:12,width:'auto'}}/></a>}
+                    <button type="button" onClick={async()=>{const d=await adminAction('mark-payout',{archiveId:ev.archiveId,entryName:w.entryName,paid:!w.paidAt});
+                        if(d?.ok){ setPayoutEvents(list=>list.map(e=>e.archiveId!==ev.archiveId?e:{...e,winners:e.winners.map(x=>x.entryName!==w.entryName?x:{...x,paidAt:d.paid[w.entryName]||null})})); msg(w.paidAt?'Marked unpaid':`${w.entryName} paid ✓`); } }}
+                      style={w.paidAt?{background:'none',border:'none',color:'#2d7a1e',fontWeight:800,fontSize:12,cursor:'pointer'}:{background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`,borderRadius:7,padding:'6px 10px',fontSize:12,fontWeight:700,cursor:'pointer',whiteSpace:'nowrap'}}>
+                      {w.paidAt?'✓ Paid':'Mark paid'}</button>
+                  </div>;})}
+              </div>)}
+            </div>}
             {/* FINGERPRINT_V316_VENMO — commissioner's Venmo + trust switch */}
             <div style={sec}><h3 style={stl}>💸 Venmo</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8,lineHeight:1.5}}>Players get a <b>Pay with Venmo</b> button that opens Venmo to you, with the entry fee and a note filled in. They tap <b>I've paid</b> afterwards.</p>
