@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: cups-race-v222-20261006-0100
+// build: chat-v223-20261006-0400
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -342,7 +342,7 @@ async function srvHidePicksNow(poolId, picksHidden, locked, meta) {
 
 // FINGERPRINT_V194_NOTIFY_PREFS — what each device wants. Opt-ins default OFF; the rest default ON.
 const SRV_PUSH_DEFAULTS = { picksOpen: true, pickReminder: true, lockSoon: true, poolOpen: true, cut: true, recap: true,
-  final: true, leadChange: false, golferMoment: false, chatMention: false, newEntry: true, unpaid: true };
+  final: true, leadChange: false, golferMoment: false, chatMention: false, chatAll: false, newEntry: true, unpaid: true };
 const srvPushWants = (dev, type) => (dev?.prefs && typeof dev.prefs[type] === 'boolean') ? dev.prefs[type] : SRV_PUSH_DEFAULTS[type] !== false;
 const srvCleanPrefs = (p) => { const o = {}; for (const kk of Object.keys(SRV_PUSH_DEFAULTS)) if (typeof p?.[kk] === 'boolean') o[kk] = p[kk]; return o; };
 const srvPrefsView = (dev) => { const o = {}; for (const kk of Object.keys(SRV_PUSH_DEFAULTS)) o[kk] = srvPushWants(dev, kk); return o; };
@@ -643,10 +643,39 @@ async function srvClaimCandidates(user, extraPoolId) {
   return out.sort((x, y) => String(y.date).localeCompare(String(x.date)) || x.place - y.place);
 }
 
+// FINGERPRINT_V223_CHAT — who's chatting: an entry (name + its code) first; otherwise ANY signed-in account,
+// as a spectator under their nickname/name (" (fan)" added if that name is someone else's entry).
+async function srvChatWho(poolId, body) {
+  const entries = await getEntries(poolId);
+  if (body.name && body.code) {
+    const e = entries.find(x => x.name.toLowerCase() === String(body.name).toLowerCase() && x.editCode?.toUpperCase() === String(body.code).toUpperCase());
+    if (e) return { name: e.name };
+  }
+  const u = body.auth ? await verifyToken(body.auth) : null;
+  if (!u) return null;
+  const mine = entries.find(x => x.uid === u.uid || (u.email && String(x.email || '').toLowerCase() === u.email.toLowerCase()));
+  if (mine) return { name: mine.name };
+  let nm = String(u.nickname || u.name || '').trim().slice(0, 30) || 'Fan';
+  if (entries.some(x => x.name.toLowerCase() === nm.toLowerCase()) || /^pool bot$/i.test(nm)) nm = `${nm} (fan)`;
+  return { name: nm, guest: true };
+}
+// FINGERPRINT_V223_BOT — "chat moments": the Pool Bot posts the cut, round leaders, lead changes and golfers
+// taking the lead into the pool's chat (commissioner can switch it off).
+async function srvChatBot(pid, meta, text) {
+  if (!text || meta?.chatBot === false) return;
+  const raw = await redis('GET', k(pid, 'chat')); const messages = raw ? JSON.parse(raw) : [];
+  messages.push({ id: Math.random().toString(36).slice(2, 10), name: 'Pool Bot', bot: true, message: text, ts: Date.now(), reactions: {} });
+  while (messages.length > 100) messages.shift();
+  await redis('SETEX', k(pid, 'chat'), 2592000, JSON.stringify(messages));
+}
+const srvLast = (n) => String(n || '').includes(',') ? String(n).split(',')[0].trim() : String(n || '').trim().split(/\s+/).slice(-1)[0];
+const srvJoinNames = (a) => a.length <= 1 ? (a[0] || '') : a.length === 2 ? `${a[0]} & ${a[1]}` : `${a.slice(0, -1).join(', ')} & ${a[a.length - 1]}`;
+
 async function srvNotifyTick() {
   if (!srvPushReady()) return { skipped: 'no VAPID keys' };
   let pids = [];
   try { pids = (await redis('SMEMBERS', 'pushpools')) || []; } catch {}
+  try { pids = [...new Set([...pids, ...((await redis('SMEMBERS', 'pools:index')) || [])])]; } catch {}   // V223 — chat moments everywhere
   if (!pids.length) return { pools: 0 };
   const cache = {};
   const dg = async (path) => {
@@ -663,7 +692,7 @@ async function srvNotifyTick() {
   for (let i = 0; i < pids.length; i++) {
     try {
       const meta = JSON.parse(vals[i * 3] || 'null'), subs = JSON.parse(vals[i * 3 + 1] || '{}'), st = JSON.parse(vals[i * 3 + 2] || '{}');
-      if (!meta || !Object.values(subs).some(v => (v || []).length)) continue;
+      if (!meta || (!Object.values(subs).some(v => (v || []).length) && (meta.chatBot === false || meta.active === false))) continue;
       out[pids[i]] = await srvNotifyPool(pids[i], meta, subs, st, dg);
     } catch (e) { out[pids[i]] = 'error: ' + e.message; }
   }
@@ -747,6 +776,18 @@ async function srvNotifyPool(pid, meta, subs, st, dg) {
           else if (cutNow) push(n, 'cut', `✂️ The cut's in — ${row.picks.filter(pk => (byPick[pk] || 0) > 0).length} of ${row.picks.length} made it`, `${standing}.`);
           else push(n, 'recap', `🏁 After Round ${round}: you're ${srvOrd(pl)}`, `${standing}.`);
         }
+        try {   // FINGERPRINT_V223_BOT — round-end moment
+          const second = table[1];
+          if (round >= 4 && leader) await srvChatBot(pid, meta, `🏆 ${leader.name} wins the ${evName} pool with ${srvBig(leader.total)}!${second ? ` ${second.name} takes 2nd.` : ''}`);
+          else if (cutNow) {
+            const outs = players.filter(p => /CUT|MC/i.test(String(p.current_pos || '')));
+            const hit = [];
+            for (const g of outs) { const vars = new Set(srvNameVariants(g.player_name));
+              const who = table.filter(r => r.picks.some(pk => vars.has(srvNormalizeName(pk)))).map(r => r.name);
+              if (who.length) hit.push(`${srvLast(g.player_name)} — sorry ${srvJoinNames(who.slice(0, 3))}${who.length > 3 ? ' & co' : ''}`); }
+            await srvChatBot(pid, meta, hit.length ? `✂️ The cut's in. Missed it: ${hit.slice(0, 6).join('; ')}${hit.length > 6 ? ` …and ${hit.length - 6} more` : ''}.` : `✂️ The cut's in — every pick in this pool made it!`);
+          } else if (leader) await srvChatBot(pid, meta, `🏁 After Round ${round}: ${leader.name} leads the pool with ${srvBig(leader.total)}${second ? `, with ${second.name} next on ${srvBig(second.total)}` : ''}.`);
+        } catch {}
       }
       // 🔥 Sunday lead changes (opt-in), at most one an hour
       if (round === 4 && !roundDone && leader && leader.total > 0) {
@@ -755,6 +796,14 @@ async function srvNotifyPool(pid, meta, subs, st, dg) {
           ev.leaderAt = now;
         }
         if (ev.leader !== leader.name) { ev.leader = leader.name; changed = true; }
+      }
+      // FINGERPRINT_V223_BOT — a new pool leader (rounds 2–4, at most one an hour)
+      if (round >= 2 && !roundDone && leader && leader.total > 0) {
+        if (ev.botLeader && ev.botLeader !== leader.name && now - (ev.botLeaderAt || 0) >= 60 * 60000) {
+          try { await srvChatBot(pid, meta, `🔥 ${leader.name} takes the lead in the pool — ${srvBig(leader.total)}.`); } catch {}
+          ev.botLeaderAt = now; changed = true;
+        }
+        if (ev.botLeader !== leader.name) { ev.botLeader = leader.name; changed = true; }
       }
       // ⛳ one of your golfers takes the outright lead (opt-in), rounds 3–4, once per golfer per round
       if (round >= 3 && !roundDone) {
@@ -767,6 +816,8 @@ async function srvNotifyPool(pid, meta, subs, st, dg) {
           const disp = String(g.player_name || '').includes(',') ? g.player_name.split(',').reverse().map(x => x.trim()).join(' ') : g.player_name;
           for (const row of table) if (row.picks.some(pk => vars.has(srvNormalizeName(pk))))
             push(row.name, 'golferMoment', `⛳ ${disp} leads the ${evName}`, `One of your picks is out in front in Round ${round}.`, `gm-${key}`);
+          try { const owners = table.filter(r => r.picks.some(pk => vars.has(srvNormalizeName(pk)))).map(r => r.name);   // V223 bot
+            await srvChatBot(pid, meta, `⛳ ${disp} takes the lead at the ${evName}${owners.length ? ` — he's in ${srvJoinNames(owners.slice(0, 4))}'s lineup${owners.length > 1 ? 's' : ''}${owners.length > 4 ? ' and more' : ''}` : ' — and nobody in this pool has him!'}.`); } catch {}
         }
       }
     }
@@ -2258,15 +2309,10 @@ export async function POST(request) {
     // a second device on an older view). Same 30-day TTL as the chat itself.
     if (body.action === 'chat-seen') {
       const { name, code, ts } = body;
-      if (!name || !code) return Response.json({ error:'Verification required' }, { status:401 });
       const stamp = Number(ts);
       if (!stamp || !isFinite(stamp)) return Response.json({ error:'Bad timestamp' }, { status:400 });
-      const entries = await getEntries(poolId);
-      const entry = entries.find(e =>
-        e.name.toLowerCase() === name.toLowerCase() &&
-        e.editCode?.toUpperCase() === code.toUpperCase()
-      );
-      if (!entry) return Response.json({ error:'Invalid credentials' }, { status:401 });
+      const entry = await srvChatWho(poolId, body);   // FINGERPRINT_V223 — entrant, or a signed-in spectator
+      if (!entry) return Response.json({ error:'Sign in to chat' }, { status:401 });
       let seen = {};
       try { const s = await redis('GET', k(poolId, 'chat_seen')); if (s) seen = JSON.parse(s); } catch {}
       if (!seen[entry.name] || stamp > seen[entry.name]) seen[entry.name] = stamp;
@@ -2276,17 +2322,12 @@ export async function POST(request) {
 
     if (body.action === 'chat-post') {
       const { name, code, message } = body;
-      if (!name || !code) return Response.json({ error:'Verification required' }, { status:401 });
       if (!message?.trim()) return Response.json({ error:'Empty message' }, { status:400 });
       if (message.length > 300) return Response.json({ error:'Message too long (300 max)' }, { status:400 });
 
       // Verify entry/code
-      const entries = await getEntries(poolId);
-      const entry = entries.find(e =>
-        e.name.toLowerCase() === name.toLowerCase() &&
-        e.editCode?.toUpperCase() === code.toUpperCase()
-      );
-      if (!entry) return Response.json({ error:'Invalid credentials' }, { status:401 });
+      const entry = await srvChatWho(poolId, body);   // FINGERPRINT_V223 — entrant, or a signed-in spectator
+      if (!entry) return Response.json({ error:'Sign in to chat' }, { status:401 });
 
       // Rate limit: 1 message per 3 seconds per user
       const rateKey = k(poolId, `chat_rate:${entry.name.toLowerCase()}`);
@@ -2299,12 +2340,15 @@ export async function POST(request) {
       const messages = raw ? JSON.parse(raw) : [];
       // Strip HTML
       const cleaned = message.trim().replace(/<[^>]*>/g, '');
+      const orig = body.replyTo ? messages.find(m => m.id === String(body.replyTo)) : null;   // FINGERPRINT_V223 — reply
       messages.push({
         id: Math.random().toString(36).slice(2, 10),
         name: entry.name,
         message: cleaned,
         ts: Date.now(),
         reactions: {},
+        ...(entry.guest ? { guest: true } : {}),
+        ...(orig ? { replyTo: { id: orig.id, name: orig.name, text: String(orig.message || '').slice(0, 90) } } : {}),
       });
       while (messages.length > 100) messages.shift();
       // Store with 30-day TTL (auto-clear between tournaments)
@@ -2319,21 +2363,25 @@ export async function POST(request) {
           title: `💬 ${entry.name} mentioned you`, body: cleaned.slice(0, 120),
           url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`, tag: `chat-${poolId}` } })));
       } catch {}
+      // FINGERPRINT_V223 — "every new message" (opt-in), at most one every 5 minutes per pool
+      try {
+        if (await redis('SET', k(poolId, 'chatpush'), '1', 'NX', 'EX', '300')) {
+          const all = (await getEntries(poolId)).filter(e => e.name.toLowerCase() !== entry.name.toLowerCase());
+          if (all.length) await srvPushMany(poolId, all.map(e => ({ name: e.name, type: 'chatAll', payload: {
+            title: `💬 ${entry.name} in the pool chat`, body: cleaned.slice(0, 120),
+            url: `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}`, tag: `chatall-${poolId}` } })));
+        }
+      } catch {}
       return Response.json({ ok:true, messages });
     }
 
     if (body.action === 'chat-react') {
       const { name, code, messageId, emoji } = body;
-      if (!name || !code) return Response.json({ error:'Verification required' }, { status:401 });
       if (!messageId || !emoji) return Response.json({ error:'Message ID and emoji required' }, { status:400 });
 
       // Verify entry/code
-      const entries = await getEntries(poolId);
-      const entry = entries.find(e =>
-        e.name.toLowerCase() === name.toLowerCase() &&
-        e.editCode?.toUpperCase() === code.toUpperCase()
-      );
-      if (!entry) return Response.json({ error:'Invalid credentials' }, { status:401 });
+      const entry = await srvChatWho(poolId, body);   // FINGERPRINT_V223 — entrant, or a signed-in spectator
+      if (!entry) return Response.json({ error:'Sign in to chat' }, { status:401 });
 
       // Load messages
       const raw = await redis('GET', k(poolId, 'chat'));
@@ -3486,6 +3534,12 @@ export async function POST(request) {
     }
 
     // FINGERPRINT_V218_VENMO — commissioner: Venmo username + "trust I've paid"
+    if (body.action === 'set-chat-bot') {   // FINGERPRINT_V223_BOT
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId); if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
+      meta.chatBot = !!body.on; await redis('SET', k(poolId, 'meta'), JSON.stringify(meta));
+      return Response.json({ ok:true, chatBot: meta.chatBot });
+    }
     if (body.action === 'set-venmo') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const meta = await getPoolMeta(poolId);
