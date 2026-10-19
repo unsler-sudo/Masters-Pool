@@ -1,5 +1,5 @@
 'use client';
-// build: cup-odds-v345-20261006-0330
+// build: chat-v346-20261006-0400
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -581,7 +581,7 @@ const NOTIF_GROUPS = [
     ['cut','✂️ Cut report'],['recap','🏁 Round recaps'],['final','🏆 Final result']]],
   ['Presidents Cup & Ryder Cup',[['picksOpen','Pairings are out'],['pickReminder','Picks closing soon (if you haven’t finished)']]],
   ['Live action — can be frequent',[['leadChange','🔥 Sunday lead changes (max 1 an hour)'],['golferMoment','⛳ One of your golfers takes the lead']]],
-  ['Chat',[['chatMention','💬 Someone mentions your name']]],
+  ['Chat',[['chatMention','💬 Someone mentions your name'],['chatAll','💬 Every new message (at most one every 5 minutes)']]],
 ];
 // FINGERPRINT_V276_MULTI_COURSE — names for course codes on multi-course events (Dunhill Links, etc.)
 const COURSE_NAMES = { SA: 'Old Course, St Andrews', CN: 'Carnoustie', KB: 'Kingsbarns' };
@@ -1732,6 +1732,9 @@ export default function App(){
   const [chatCode,setChatCode]=useState('');
   const [chatVerified,setChatVerified]=useState(false);
   const [chatInput,setChatInput]=useState('');
+  const [replyTo,setReplyTo]=useState(null);              // FINGERPRINT_V346_CHAT — replying to {id,name,text}
+  const [guestName,setGuestName]=useState('');            // the name the server gave a spectator
+  const chatInputRef=useRef(null), pressTimer=useRef(null);
   const [chatSending,setChatSending]=useState(false);
   const [chatVerifying,setChatVerifying]=useState(false);
   const chatScrollRef=useRef(null);
@@ -3446,10 +3449,12 @@ export default function App(){
     setChatSending(true);
     try{
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({poolId,action:'chat-post',name:chatName,code:chatCode,message:chatInput.trim()})});
+        body:JSON.stringify({poolId,action:'chat-post',name:chatVerified?chatName:undefined,code:chatVerified?chatCode:undefined,auth:acctToken||undefined,replyTo:replyTo?.id,message:chatInput.trim()})});
       const d=await r.json();
       if(d.error){msg(d.error);setChatSending(false);return;}
       if(d.messages)setChatMessages(d.messages);
+      if(!chatVerified&&d.messages?.length) setGuestName(d.messages[d.messages.length-1].name);
+      setReplyTo(null);
       setChatInput('');
       setTimeout(()=>{if(chatScrollRef.current)chatScrollRef.current.scrollTop=chatScrollRef.current.scrollHeight;},50);
     }catch{msg('Error sending');}
@@ -3470,7 +3475,7 @@ export default function App(){
   const reactToMessage=async(messageId,emoji)=>{
     try{
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({poolId,action:'chat-react',name:chatName,code:chatCode,messageId,emoji})});
+        body:JSON.stringify({poolId,action:'chat-react',name:chatVerified?chatName:undefined,code:chatVerified?chatCode:undefined,auth:acctToken||undefined,messageId,emoji})});
       const d=await r.json();
       if(d.error){msg(d.error);return;}
       if(d.messages)setChatMessages(d.messages);
@@ -6214,7 +6219,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
         </>}
 
         {tab==='Chat'&&<>
-          {!chatVerified
+          {!(chatVerified||acct)   /* FINGERPRINT_V346 — anyone signed in can chat */
             ?<div style={{background:'#fff',borderRadius:11,padding:24,border:`1px solid ${T.cardBorder}`,textAlign:'center'}}>
               <div style={{fontSize:36,marginBottom:10}}>💬</div>
               <h3 style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:800,color:T.primary,marginBottom:6}}>Join the chat</h3>
@@ -6229,7 +6234,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
 
             :<div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,padding:'8px 14px',background:`${T.primary}0a`,borderRadius:9}}>
-                <span style={{fontSize:12,color:T.primary,fontWeight:600}}>💬 Chatting as <b>{chatName} ✓</b></span>
+                <span style={{fontSize:12,color:T.primary,fontWeight:600}}>{chatVerified?<>💬 Chatting as <b>{chatName} ✓</b></>:<>👀 Chatting as a spectator — <b>{guestName||acct?.nickname||acct?.name}</b></>}</span>
                 <button type="button" onClick={()=>{
                   if(typeof window!=='undefined'){
                     localStorage.removeItem(`chat_${poolId}_name`);
@@ -6255,7 +6260,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     No messages yet — start the trash talk!
                   </div>
                   :chatMessages.map((m,mIdx)=>{
-                    const isMe=m.name===chatName;
+                    const myChat=chatVerified?chatName:guestName;
+                    const isMe=!m.bot&&!!myChat&&m.name===myChat;
                     const isFirstMessage=mIdx===0;
                     const timeAgo=(()=>{
                       const diff=Date.now()-m.ts;
@@ -6275,8 +6281,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         gap:8,
                       }}>
                         <div style={{maxWidth:'75%',position:'relative'}}>
-                          <div onClick={()=>setReactionPickerFor(reactionPickerFor===m.id?null:m.id)} style={{
-                            background:isMe?T.primary:'#f1f1f1',
+                          <div onClick={()=>setReactionPickerFor(reactionPickerFor===m.id?null:m.id)}
+                            onTouchStart={()=>{ clearTimeout(pressTimer.current); pressTimer.current=setTimeout(()=>{ setReactionPickerFor(null); setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)}); try{chatInputRef.current?.focus();}catch{} },500); }}
+                            onTouchEnd={()=>clearTimeout(pressTimer.current)} onTouchMove={()=>clearTimeout(pressTimer.current)}
+                            onContextMenu={(e)=>{ e.preventDefault(); setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)}); try{chatInputRef.current?.focus();}catch{} }}
+                            style={{
+                            background:m.bot?`${T.primary}14`:isMe?T.primary:'#f1f1f1',
+                            border:m.bot?`1px solid ${T.primary}33`:'none',
                             color:isMe?'#fff':'#222',
                             borderRadius:14,
                             padding:'8px 12px',
@@ -6285,13 +6296,15 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                             cursor:'pointer',
                           }}>
                             <div style={{fontSize:10,fontWeight:700,opacity:.7,marginBottom:2}}>
-                              {m.name} ✓ <span style={{fontWeight:400,marginLeft:4}}>{timeAgo}</span>
+                              {m.bot?'🤖 Pool Bot':m.name}{m.bot?'':m.guest?' 👀':' ✓'} <span style={{fontWeight:400,marginLeft:4}}>{timeAgo}</span>
                             </div>
+                            {m.replyTo&&<div style={{fontSize:12,lineHeight:1.35,margin:'2px 0 5px',padding:'4px 8px',borderLeft:`3px solid ${isMe?'rgba(255,255,255,.6)':T.primary}`,background:isMe?'rgba(255,255,255,.14)':'rgba(0,0,0,.05)',borderRadius:4,opacity:.9}}>
+                              <b>↩︎ {m.replyTo.name}</b> <span>{m.replyTo.text}{String(m.replyTo.text||'').length>=90?'…':''}</span></div>}
                             <div style={{fontSize:14,lineHeight:1.4,wordBreak:'break-word'}}>{m.message}</div>
                           </div>
                           {reactionEntries.length>0&&<div style={{display:'flex',gap:3,marginTop:4,flexWrap:'wrap',justifyContent:isMe?'flex-end':'flex-start'}}>
                             {reactionEntries.map(([emoji,users])=>{
-                              const userReacted=users.includes(chatName);
+                              const userReacted=users.includes(chatVerified?chatName:guestName);
                               return <button key={emoji} type="button" onClick={()=>reactToMessage(m.id,emoji)}
                                 title={users.join(', ')}
                                 style={{background:userReacted?`${T.primary}25`:'#fff',border:`1px solid ${userReacted?T.primary:'#ddd'}`,borderRadius:12,padding:'2px 7px',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:3}}>
@@ -6314,6 +6327,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                             zIndex:5,
                             alignItems:'center',
                           }} onClick={e=>e.stopPropagation()}>
+                            <button type="button" onClick={()=>{setReactionPickerFor(null);setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)});try{chatInputRef.current?.focus();}catch{}}}
+                              style={{background:'#f0f0f0',border:'none',fontSize:12,fontWeight:700,cursor:'pointer',padding:'5px 8px',borderRadius:6,lineHeight:1,color:'#444',whiteSpace:'nowrap'}}>↩︎ Reply</button>
+                            <div style={{width:1,height:20,background:'#ddd',margin:'0 2px'}}/>
                             {QUICK_REACTIONS.map(emoji=>(
                               <button key={emoji} type="button" onClick={()=>{reactToMessage(m.id,emoji);setReactionPickerFor(null);}}
                                 style={{background:'transparent',border:'none',fontSize:20,cursor:'pointer',padding:'2px 4px',borderRadius:6,lineHeight:1}}>
@@ -6352,8 +6368,21 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   </div>;
                 })()}
               </div>
+              {/* FINGERPRINT_V346_CHAT — replying-to bar, and @ suggestions */}
+              {replyTo&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,padding:'6px 10px',borderLeft:`3px solid ${T.primary}`,background:`${T.primary}0d`,borderRadius:6,fontSize:12}}>
+                <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>↩︎ Replying to <b>{replyTo.name}</b>: {replyTo.text}</span>
+                <button type="button" onClick={()=>setReplyTo(null)} aria-label="Cancel reply" style={{background:'none',border:'none',fontSize:16,color:'#999',cursor:'pointer',padding:0}}>✕</button></div>}
+              {(()=>{ const mm=chatInput.match(/(?:^|\s)@([^@\n]{0,24})$/); if(!mm) return null;
+                const q=mm[1].toLowerCase(), me=chatVerified?chatName:guestName;
+                const names=[...new Set([...(entries||[]).map(e=>e.name),...chatMessages.filter(x=>!x.bot).map(x=>x.name)])].filter(n=>n&&n!==me)
+                  .filter(n=>!q||n.toLowerCase().includes(q)).sort((a,b)=>(b.toLowerCase().startsWith(q)?1:0)-(a.toLowerCase().startsWith(q)?1:0)).slice(0,6);
+                if(!names.length) return null;
+                return <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
+                  {names.map(n=><button key={n} type="button" onClick={()=>{ setChatInput(v=>v.replace(/@([^@\n]{0,24})$/,`@${n} `)); try{chatInputRef.current?.focus();}catch{} }}
+                    style={{background:'#fff',border:`1px solid ${T.primary}55`,color:T.primary,borderRadius:14,padding:'4px 10px',fontSize:12,fontWeight:700,cursor:'pointer'}}>@{n}</button>)}
+                </div>; })()}
               <div style={{display:'flex',gap:8}}>
-                <input type="text" placeholder="Say something..." value={chatInput} maxLength={300}
+                <input ref={chatInputRef} type="text" placeholder={replyTo?`Reply to ${replyTo.name}…`:'Say something... (type @ to mention)'} value={chatInput} maxLength={300}
                   onChange={e=>setChatInput(e.target.value)}
                   onKeyDown={e=>e.key==='Enter'&&!chatSending&&sendChatMessage()}
                   style={{...inp,flex:1}}/>
@@ -6363,7 +6392,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 </button>
               </div>
               <div style={{fontSize:10,color:'#aaa',textAlign:'center',marginTop:6}}>
-                {chatInput.length}/300 · Live updates · Tap a message to react
+                {chatInput.length}/300 · Tap a message to react or reply · Type @ to mention
               </div>
             </div>
           }
@@ -6956,6 +6985,16 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
             <div style={sec}>
               <h3 style={stl}>💬 Chat Moderation</h3>
+              {/* FINGERPRINT_V346_BOT — the Pool Bot's chat moments */}
+              <label style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,cursor:'pointer'}}>
+                <span style={{flex:1,fontSize:13,color:'#2a3a1e',lineHeight:1.45}}>🤖 Chat moments
+                  <span style={{display:'block',fontSize:11,color:'#8a9580',marginTop:2}}>The Pool Bot posts the cut, round leaders, lead changes and golfers taking the lead into the chat.</span></span>
+                <span role="switch" aria-checked={poolMeta?.chatBot!==false} onClick={async(e)=>{e.preventDefault();const on=poolMeta?.chatBot===false;const d=await adminAction('set-chat-bot',{on});
+                    if(d?.ok){setPoolMeta(prev=>({...(prev||{}),chatBot:d.chatBot}));msg(d.chatBot?'Chat moments on':'Chat moments off');}}}
+                  style={{width:44,height:26,borderRadius:13,background:poolMeta?.chatBot!==false?T.primary:'#d6d6cf',position:'relative',transition:'background .15s',flexShrink:0}}>
+                  <span style={{position:'absolute',top:3,left:poolMeta?.chatBot!==false?21:3,width:20,height:20,borderRadius:'50%',background:'#fff',boxShadow:'0 1px 2px rgba(0,0,0,.25)',transition:'left .15s'}}/>
+                </span>
+              </label>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>{chatMessages.length} messages in pool chat. Use the X button next to messages to delete individual ones.</p>
               <button type="button" style={dan} onClick={async()=>{
                 if(!confirm('Clear ALL chat messages? This cannot be undone.'))return;
