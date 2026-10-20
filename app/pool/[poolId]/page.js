@@ -1,5 +1,5 @@
 'use client';
-// build: all-entries-v348-20261006-0500
+// build: cup-switch-safe-v349-20261006-0515
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -5717,7 +5717,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                     <span style={{flex:1}}>{(acctEntries||[]).length>1&&<span style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
                         {/* FINGERPRINT_V348 — Cup weeks: which of your entries you're picking for */}
                         <span style={{fontSize:12,color:'#6b7c5e',alignSelf:'center'}}>Picking for:</span>
-                        {acctEntries.map(x=><button key={x.name} type="button" onClick={()=>{ if(x.name!==chatName){ adoptEntry(x.name,x.code); msg(`Picking for ${x.name}`); } }}
+                        {acctEntries.map(x=><button key={x.name} type="button" onClick={()=>{ if(x.name===chatName) return;
+                            // FINGERPRINT_V349 — never carry one entry's unsaved picks over to another
+                            const unsaved=Object.values(pickDraft||{}).some(v=>v&&Object.keys(v).length);
+                            if(unsaved&&!window.confirm(`You have unsaved picks for ${chatName} — switch to ${x.name} anyway?`)) return;
+                            setPickDraft({}); setMyTeamPicks({}); adoptEntry(x.name,x.code); msg(`Picking for ${x.name}`); }}
                           style={{padding:'4px 12px',borderRadius:14,fontSize:12,fontWeight:700,cursor:'pointer',border:`1.5px solid ${T.primary}`,
                             background:x.name===chatName?T.primary:'#fff',color:x.name===chatName?'#fff':T.primary}}>{x.name}</button>)}
                       </span>}Picking as <b>{chatName}</b>{(()=>{const r=payRow(chatName,true); return r?<span style={{display:'block',marginTop:6}}>{r}</span>:null;})()}</span>
