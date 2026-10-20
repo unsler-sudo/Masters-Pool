@@ -1,5 +1,5 @@
 'use client';
-// build: pick-zoom-v347-20261006-0430
+// build: all-entries-v348-20261006-0500
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3559,7 +3559,7 @@ export default function App(){
         setAcctEntries(d.entries);
         if(d.entries.length){
           let saved=null; try{ saved=localStorage.getItem(`chat_${poolId}_name`); }catch{}
-          const pick=d.entries.find(e=>e.name===saved)||d.entries[0];
+          const pick=d.entries[0];   // FINGERPRINT_V348 — chat posts as your first entry
           adoptEntry(pick.name,pick.code);
         }
       }
@@ -3719,15 +3719,24 @@ export default function App(){
       const reg=await navigator.serviceWorker.ready;
       let sub=await reg.pushManager.getSubscription();
       if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(pushKey)});
-      const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({poolId,action:'push-subscribe',name:chatName,code:chatCode,subscription:sub.toJSON()})});
-      const d=await r.json(); if(d.ok){ setPushState('on'); setPushEndpoint(sub.endpoint); if(d.prefs) setNotifPrefs(d.prefs); }
+      // FINGERPRINT_V348 — sign this phone up for EVERY one of your entries here (the server names the entry when there are several)
+      const mineAll=[...new Map([[chatName,{name:chatName,code:chatCode}],...(acctEntries||[]).map(x=>[x.name,x])]).values()].filter(x=>x.name&&x.code);
+      let first=null;
+      for(const e of mineAll){
+        const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({poolId,action:'push-subscribe',name:e.name,code:e.code,subscription:sub.toJSON()})});
+        const d=await r.json(); if(d.ok&&!first) first=d;
+      }
+      if(first){ setPushState('on'); setPushEndpoint(sub.endpoint); if(first.prefs) setNotifPrefs(first.prefs); }
     }catch{} })();
-  },[pushState,chatVerified,chatName,chatCode,pushKey,poolId]);
+  },[pushState,chatVerified,chatName,chatCode,pushKey,poolId,(acctEntries||[]).map(x=>x.name).join('|')]);
   // FINGERPRINT_V272_NOTIFY_SETTINGS — change one notification type for this device
   const setNotifPref=async(key,val)=>{
     setNotifPrefs(p=>({...(p||{}),[key]:val}));
     try{
+      // FINGERPRINT_V348 — the switch applies to every entry this phone follows
+      for(const e of (acctEntries||[]).filter(x=>x.name!==chatName&&x.code)) fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({poolId,action:'push-prefs',name:e.name,code:e.code,endpoint:pushEndpoint,prefs:{[key]:val}})}).catch(()=>{});
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({poolId,action:'push-prefs',name:chatName,code:chatCode,endpoint:pushEndpoint,prefs:{[key]:val}})});
       const d=await r.json(); if(d.ok&&d.prefs) setNotifPrefs(d.prefs); else if(d.error) msg(d.error);
@@ -4191,16 +4200,20 @@ export default function App(){
   // FINGERPRINT_V275_YOURE_IN — normal weeks: if the signed-in entry is already in this week's pool, the
   // Enter Pool tab shows their entry (picks, paid status, Edit) instead of a blank form that invites duplicates.
   const myEntry = (!isTeamPool && chatVerified && chatName) ? entries.find(e => e.name.toLowerCase() === chatName.toLowerCase()) : null;
-  const showYoureIn = !!myEntry && !editMode && !addAnother && poolMeta?.paid !== false;
+  // FINGERPRINT_V348 — all of your entries in this pool (with their codes), for the "You're in" card
+  const myEntries = isTeamPool ? [] : [...new Map([...(myEntry?[[myEntry.name,{...myEntry,code:chatCode}]]:[]),
+    ...(acctEntries||[]).map(a=>{const e=entries.find(x=>x.name===a.name); return e?[e.name,{...e,code:a.code}]:null;}).filter(Boolean)]).values()];
+  const showYoureIn = myEntries.length>0 && !editMode && !addAnother && poolMeta?.paid !== false;
+  const [ownPicksMap,setOwnPicksMap]=useState({});
   // FINGERPRINT_V280_PRIVACY — while picks are hidden the server sends nobody's picks, so fetch your own with your code
   useEffect(()=>{
-    if(!showYoureIn||!picksHidden||!chatCode){ return; }
-    (async()=>{ try{
+    if(!showYoureIn||!picksHidden){ return; }
+    (async()=>{ const got={}; for(const e of myEntries){ if(!e.code) continue; try{
       const r=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({poolId,action:'my-entry',name:myEntry.name,code:chatCode})});
-      const d=await r.json(); if(Array.isArray(d?.picks)) setOwnPicks(d.picks);
-    }catch{} })();
-  },[showYoureIn,picksHidden,chatCode,myEntry?.name,poolId]);
+        body:JSON.stringify({poolId,action:'my-entry',name:e.name,code:e.code})});
+      const d=await r.json(); if(Array.isArray(d?.picks)) got[e.name]=d.picks;
+    }catch{} } setOwnPicksMap(got); if(myEntry&&got[myEntry.name]) setOwnPicks(got[myEntry.name]); })();
+  },[showYoureIn,picksHidden,myEntries.map(e=>e.name).join('|'),poolId]);
   // FINGERPRINT_V273_UNPAID_TEAM — Cup weeks have no stroke-play Round 1, so the Unpaid badge starts
   // blinking once the FIRST session (earliest first tee) has a result for every match instead.
   const firstSessionDone = (()=>{
@@ -5285,15 +5298,7 @@ export default function App(){
                   </div>
                 </div>
               </div>
-              {/* FINGERPRINT_V302 — only when you have 2+ entries here: which one this device plays as */}
-              {acctEntries.length>1&&<>{h('Playing as')}
-                <div style={{fontSize:12,color:'#8a9580',margin:'-2px 0 6px',lineHeight:1.4}}>You have {acctEntries.length} entries in this pool. Chat, picks and notifications use the one you choose.</div>
-                {acctEntries.map(e=>{const on=chatName===e.name; return <button key={e.name} type="button" onClick={()=>{if(!on){adoptEntry(e.name,e.code);msg(`Now playing as ${e.name}`);}}}
-                  style={{display:'flex',alignItems:'center',gap:10,width:'100%',textAlign:'left',padding:'10px 12px',marginBottom:6,borderRadius:9,cursor:on?'default':'pointer',
-                    border:`1.5px solid ${on?T.primary:'#e5e5dc'}`,background:on?`${T.primary}0f`:'#fff'}}>
-                  <span style={{flex:1,fontSize:14,fontWeight:on?800:600,color:'#2a3a1e'}}>{e.name}</span>
-                  {on?<span style={{fontSize:12,fontWeight:800,color:T.primary}}>✓ Playing as</span>:<span style={{fontSize:12,color:'#8a9580'}}>Switch</span>}
-                </button>;})}</>}
+              {/* FINGERPRINT_V348 — no "Playing as": every entry shows on Enter Pool; Cup weeks switch on Match Picks */}
               {myPools.length>0&&<>{h('My pools')}
                 {myPools.map(pl=><a key={pl.poolId} href={`/pool/${pl.poolId}`} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 2px',borderBottom:'1px solid #f0f0ea',textDecoration:'none',color:'#2a3a1e'}}>
                   <span style={{flex:1,minWidth:0}}>
@@ -5709,7 +5714,13 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   style={{...pri,width:'100%',padding:12,fontSize:15,opacity:on?1:.45}}>{text}</button>;
                 if(chatVerified) return <div style={{borderTop:'1px solid #eee8dc',paddingTop:10,marginTop:6}}>
                   <div style={{display:'flex',alignItems:'center',fontSize:12,marginBottom:8,color:'#3a4a2e'}}>
-                    <span style={{flex:1}}>Picking as <b>{chatName}</b>{(()=>{const r=payRow(chatName,true); return r?<span style={{display:'block',marginTop:6}}>{r}</span>:null;})()}</span>
+                    <span style={{flex:1}}>{(acctEntries||[]).length>1&&<span style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:6}}>
+                        {/* FINGERPRINT_V348 — Cup weeks: which of your entries you're picking for */}
+                        <span style={{fontSize:12,color:'#6b7c5e',alignSelf:'center'}}>Picking for:</span>
+                        {acctEntries.map(x=><button key={x.name} type="button" onClick={()=>{ if(x.name!==chatName){ adoptEntry(x.name,x.code); msg(`Picking for ${x.name}`); } }}
+                          style={{padding:'4px 12px',borderRadius:14,fontSize:12,fontWeight:700,cursor:'pointer',border:`1.5px solid ${T.primary}`,
+                            background:x.name===chatName?T.primary:'#fff',color:x.name===chatName?'#fff':T.primary}}>{x.name}</button>)}
+                      </span>}Picking as <b>{chatName}</b>{(()=>{const r=payRow(chatName,true); return r?<span style={{display:'block',marginTop:6}}>{r}</span>:null;})()}</span>
                     <button type="button" onClick={()=>openAcct()} style={{background:'none',border:'none',color:T.primary,fontWeight:700,fontSize:12,cursor:'pointer'}}>Not you? Switch</button>
                   </div>
                   {canSave&&bigBtn(dirty?`💾 Save ${label} picks`:(picked?`✓ ${label} picks saved`:'Tap your picks above'),savePicks,dirty)}
@@ -5728,27 +5739,35 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           </>;
         })()}
         {tab==='Enter Pool'&&!isTeamPool&&showYoureIn&&(()=>{
-          const mine = (picksHidden ? ownPicks : myEntry.picks) || [];
-          const byTier = TIERS.map(t=>({t, names:mine.filter(n=>field.find(f=>f.name===n)?.tier===t.id)}));
-          const unmatched = mine.filter(n=>!field.find(f=>f.name===n));
-          const paid = !!payments[myEntry.name];
+          // FINGERPRINT_V348 — one card for ALL your entries in this pool, each with its own Edit picks
+          const many=myEntries.length>1;
           return <div style={sec}>
-            <div style={{textAlign:'center',padding:'6px 0 12px'}}>
+            <div style={{textAlign:'center',padding:'6px 0 8px'}}>
               <div style={{fontSize:34,lineHeight:1}}>✅</div>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800,color:T.primary,marginTop:6}}>You're in, {myEntry.name}</div>
-              {payRow(myEntry.name,false)}
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:800,color:T.primary,marginTop:6}}>{many?`You're in with ${myEntries.length} entries`:`You're in, ${myEntries[0].name}`}</div>
+              {!many&&payRow(myEntries[0].name,false)}
             </div>
-            {byTier.map(({t,names})=><div key={t.id} style={{marginBottom:9}}>
-              <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:t.color,textTransform:'uppercase',marginBottom:4}}>{t.label}</div>
-              <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
-                {names.length?names.map(n=><span key={n} style={{fontSize:12,padding:'3px 9px',borderRadius:12,background:`${t.color}14`,color:'#2a3a1e',fontWeight:600}}>{flip(n)}</span>)
-                  :<span style={{fontSize:12,color:'#aaa'}}>—</span>}
-              </div>
-            </div>)}
-            {unmatched.length>0&&<div style={{fontSize:11,color:'#8a9580',marginBottom:8}}>Also: {unmatched.map(flip).join(', ')} (not in the current field)</div>}
-            {!locked
-              ? <button type="button" onClick={()=>startEdit(myEntry.name, chatCode)} style={{...pri,width:'100%',padding:12,fontSize:15,marginTop:6}}>✏️ Edit my picks</button>
-              : <div style={{textAlign:'center',fontSize:13,color:'#6b7c5e',marginTop:8}}>🔒 Picks are locked — good luck!</div>}
+            {myEntries.map((me,ix)=>{
+              const mine=(picksHidden?(ownPicksMap[me.name]||(myEntry&&me.name===myEntry.name?ownPicks:null)):me.picks)||[];
+              const byTier=TIERS.map(t=>({t,names:mine.filter(n=>field.find(f=>f.name===n)?.tier===t.id)}));
+              const unmatched=mine.filter(n=>!field.find(f=>f.name===n));
+              return <div key={me.name} style={many?{border:`1px solid ${T.cardBorder}`,borderRadius:10,padding:'10px 12px',marginTop:ix?10:4}:{}}>
+                {many&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6}}>
+                  <div style={{flex:1,fontWeight:800,fontSize:15,color:T.primary}}>{me.name}</div>
+                  <div style={{fontSize:12}}>{payRow(me.name,true)||(payments[me.name]?<span style={{color:'#2d7a1e',fontWeight:700}}>Paid ✓</span>:null)}</div>
+                </div>}
+                {byTier.map(({t,names})=><div key={t.id} style={{marginBottom:7}}>
+                  <div style={{fontSize:10,fontWeight:800,letterSpacing:1,color:t.color,textTransform:'uppercase',marginBottom:3}}>{t.label}</div>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                    {names.length?names.map(n=><span key={n} style={{fontSize:12,padding:'3px 9px',borderRadius:12,background:`${t.color}14`,color:'#2a3a1e',fontWeight:600}}>{flip(n)}</span>)
+                      :<span style={{fontSize:12,color:'#aaa'}}>—</span>}
+                  </div>
+                </div>)}
+                {unmatched.length>0&&<div style={{fontSize:11,color:'#8a9580',marginBottom:6}}>Also: {unmatched.map(flip).join(', ')} (not in the current field)</div>}
+                {!locked&&me.code&&<button type="button" onClick={()=>startEdit(me.name, me.code)} style={{...pri,width:'100%',padding:many?10:12,fontSize:many?14:15,marginTop:4}}>✏️ Edit {many?`${me.name}'s picks`:'my picks'}</button>}
+              </div>;
+            })}
+            {locked&&<div style={{textAlign:'center',fontSize:13,color:'#6b7c5e',marginTop:10}}>🔒 Picks are locked — good luck!</div>}
             {(!locked||lateOK)&&<div style={{textAlign:'center',marginTop:10}}>
               <button type="button" onClick={()=>setAddAnother(true)} style={{background:'none',border:'none',color:T.primary,fontSize:12,textDecoration:'underline',cursor:'pointer'}}>+ Add another entry</button>
             </div>}
