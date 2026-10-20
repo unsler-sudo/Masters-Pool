@@ -1,5 +1,5 @@
 'use client';
-// build: chat-v346-20261006-0400
+// build: pick-zoom-v347-20261006-0430
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -4985,6 +4985,20 @@ export default function App(){
             <button type="button" onClick={hidePush} aria-label="Dismiss" style={{background:'none',border:'none',color:'#999',fontSize:16,cursor:'pointer',padding:'0 2px'}}>✕</button>
           </div>
         : null)}
+      {/* FINGERPRINT_V347_PICK_ZOOM — the enlarged photo, from the entry form (the scorecard keeps its own) */}
+      {zoomShot&&!selectedPlayer&&<div onClick={()=>setZoomShot(null)}
+        style={{position:'fixed',inset:0,background:'rgba(0,0,0,.84)',zIndex:200,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:24,cursor:'zoom-out'}}>
+        <img src={zoomShot.url} alt={zoomShot.name}
+          style={{width:'min(78vw,300px)',height:'min(78vw,300px)',borderRadius:'50%',objectFit:'cover',objectPosition:'top center',
+            border:'3px solid rgba(255,255,255,.85)',background:'#f2f4f0',boxShadow:'0 8px 40px rgba(0,0,0,.6)'}}/>
+        <div style={{marginTop:16,color:'#fff',fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:700,textAlign:'center'}}>
+          {zoomShot.country&&<span style={{marginRight:8}}><Flag c={zoomShot.country}/></span>}{zoomShot.name}</div>
+        {(zoomShot.odds||zoomShot.rank)&&<div style={{marginTop:8,display:'flex',gap:10,flexWrap:'wrap',justifyContent:'center'}}>
+          {zoomShot.odds&&zoomShot.odds!=='n/a'&&<span style={{padding:'4px 12px',borderRadius:14,background:'rgba(255,255,255,.14)',color:'#fff',fontSize:13,fontWeight:700}}>Odds {zoomShot.odds}</span>}
+          {zoomShot.rank&&<span style={{padding:'4px 12px',borderRadius:14,background:'rgba(255,255,255,.14)',color:'#fff',fontSize:13,fontWeight:700}}>DataGolf #{zoomShot.rank}</span>}
+        </div>}
+        <div style={{marginTop:12,color:'rgba(255,255,255,.55)',fontSize:11}}>Tap anywhere to close</div>
+      </div>}
       {/* FINGERPRINT_V340_PAY_PROMPT — "Did you send it?" after coming back from Venmo */}
       {payPrompt?.show&&(adminOk||ownerAdmin)&&<div onClick={endPayPrompt} style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:178,display:'flex',alignItems:'flex-end',justifyContent:'center'}}>
         <div onClick={e=>e.stopPropagation()} style={{background:'#fff',width:'100%',maxWidth:480,borderRadius:'16px 16px 0 0',padding:'18px 16px 26px',textAlign:'center'}}>
@@ -5803,9 +5817,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   {/* FINGERPRINT_V227_PICKER_HEADSHOTS / FINGERPRINT_V230_UNIFORM_AVATAR
                       Same uniform 34px slot: photo with corner flag when mapped, flag centred in a
                       plain circle when not, so every row's name starts at the same x. */}
-                  <div style={{position:'relative',width:34,height:34,flexShrink:0,marginRight:9,
+                  <div onClick={shotUrl?(e)=>{e.stopPropagation();setZoomShot({url:shotUrl,name:flip(p.name),country:p.country,odds:p.odds,rank:p.dgRank});}:undefined}
+                    title={shotUrl?`See ${flip(p.name)}`:undefined}
+                    style={{position:'relative',width:34,height:34,flexShrink:0,marginRight:9,cursor:shotUrl?'zoom-in':'inherit',
                     display:'flex',alignItems:'center',justifyContent:'center',borderRadius:'50%',
                     background:'#f2f4f0',border:`1.5px solid ${T.primary}22`}}>
+                    {/* FINGERPRINT_V347_PICK_ZOOM — tap the photo to see him up close; tap the row to pick */}
                     {/* FINGERPRINT_V234_SINGLE_FLAG — see note in the Field row. */}
                     {shotUrl&&<img src={shotUrl} alt="" loading="lazy"
                         onError={e=>{e.currentTarget.style.display='none';const b=e.currentTarget.nextSibling;
