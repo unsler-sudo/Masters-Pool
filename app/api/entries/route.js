@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: chat-v223-20261006-0400
+// build: multi-entry-v224-20261006-0500
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -708,7 +708,12 @@ async function srvNotifyPool(pid, meta, subs, st, dg) {
   const evKey = `${meta.major}|${evName}`.toLowerCase();
   const people = Object.keys(subs).filter(n => n !== '__admin__' && (subs[n] || []).length);
   const items = [];
-  const push = (name, type, title, body, tag) => items.push({ name, type, payload: { title, body, url: poolUrl, tag: tag || `${type}-${evKey}` } });
+  // FINGERPRINT_V224_MULTI — a phone that follows SEVERAL of your entries: say which entry, and give each its own slot
+  const epOf = (d) => d?.endpoint || d?.sub?.endpoint || d?.subscription?.endpoint || '';
+  const seenEp = {}; for (const n of people) for (const d of subs[n] || []) { const e = epOf(d); if (e) (seenEp[e] = seenEp[e] || new Set()).add(n); }
+  const multi = new Set(); for (const set of Object.values(seenEp)) if (set.size > 1) set.forEach(n => multi.add(n));
+  const push = (name, type, title, body, tag) => items.push({ name, type, payload: { title: multi.has(name) ? `${name} · ${title}` : title, body, url: poolUrl,
+    tag: (tag || `${type}-${evKey}`) + (multi.has(name) ? `-${name}` : '') } });
   let changed = false;
   // 📢 a new event → the pool is open (not on the very first check, which just records where we are)
   if (!st.evKey) { st = { evKey, ev: {} }; changed = true; }
