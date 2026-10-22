@@ -1,5 +1,5 @@
 'use client';
-// build: cup-switch-safe-v349-20261006-0515
+// build: wta-odds-v350-20261006-0530
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1358,7 +1358,7 @@ function gpSimulatePool({ field, entries, purse, major, evName, fee, wta, runs =
     win[tot[0].n] = (win[tot[0].n] || 0) + 1;
     for (let q = 0; q < 3 && q < tot.length; q++) if (prizes[q] > 0) cash[tot[q].n] = (cash[tot[q].n] || 0) + 1;
   }
-  const out = {}; for (const e of entries) out[e.name] = { win: 100 * (win[e.name] || 0) / runs, cash: fee ? 100 * (cash[e.name] || 0) / runs : null };
+  const out = {}; for (const e of entries) out[e.name] = { win: 100 * (win[e.name] || 0) / runs, cash: fee && !wta ? 100 * (cash[e.name] || 0) / runs : null };   // V350 — winner-take-all: cashing IS winning
   return out;
 }
 // FINGERPRINT_V345_CUP_ODDS — the same idea for Presidents Cup / Ryder Cup weeks: each unfinished match is
@@ -1387,7 +1387,7 @@ function gpSimulateCup({ entries, picks, matches, probOf, fee, wta, runs = 5000 
       for (let q = a; q <= b; q++) { if (a === 0) win[tot[q].n] = (win[tot[q].n] || 0) + share; if (money > 0) cash[tot[q].n] = (cash[tot[q].n] || 0) + 1; }
       a = b + 1; }
   }
-  const out = {}; for (const e of entries) out[e.name] = { win: 100 * (win[e.name] || 0) / runs, cash: fee ? 100 * (cash[e.name] || 0) / runs : null, cup: true };
+  const out = {}; for (const e of entries) out[e.name] = { win: 100 * (win[e.name] || 0) / runs, cash: fee && !wta ? 100 * (cash[e.name] || 0) / runs : null, cup: true };   // V350
   return out;
 }
 function calcEarnings(players, purse, major, tournamentComplete, signatureEventName){
