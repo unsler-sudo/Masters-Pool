@@ -1,5 +1,5 @@
 'use client';
-// build: pct-scale-v352-20261006-0615
+// build: no-dg-text-v353-20261006-0630
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3227,7 +3227,7 @@ export default function App(){
     setHoleData({round:roundNum,holes:[],loading:true,error:null});
     try{
       const r=await fetch(`/api/scores?endpoint=hole-scores${tourQS(activeMajor)}`);
-      if(!r.ok)throw new Error('DataGolf unavailable ('+r.status+')');
+      if(!r.ok)throw new Error('Live scores unavailable ('+r.status+')');
       const data=await r.json();
       const all=data.data||data.players||data.scores||[];
       if(!all.length)throw new Error('No hole score data available yet');
@@ -4770,7 +4770,7 @@ export default function App(){
                   return (
                     <a href={`https://datagolf.com/player-profiles?dg_id=${dgId}`} target="_blank" rel="noopener noreferrer"
                        style={{display:'block',textAlign:'center',padding:'8px 12px',marginBottom:14,fontSize:11,fontWeight:600,color:T.primary,background:'#fff',border:`1px solid ${T.primary}40`,borderRadius:8,textDecoration:'none'}}>
-                      📊 View full profile on DataGolf →
+                      📊 Full player profile →
                     </a>
                   );
                 })()}
@@ -5030,7 +5030,7 @@ export default function App(){
           {zoomShot.country&&<span style={{marginRight:8}}><Flag c={zoomShot.country}/></span>}{zoomShot.name}</div>
         {(zoomShot.odds||zoomShot.rank)&&<div style={{marginTop:8,display:'flex',gap:10,flexWrap:'wrap',justifyContent:'center'}}>
           {zoomShot.odds&&zoomShot.odds!=='n/a'&&<span style={{padding:'4px 12px',borderRadius:14,background:'rgba(255,255,255,.14)',color:'#fff',fontSize:13,fontWeight:700}}>Odds {zoomShot.odds}</span>}
-          {zoomShot.rank&&<span style={{padding:'4px 12px',borderRadius:14,background:'rgba(255,255,255,.14)',color:'#fff',fontSize:13,fontWeight:700}}>DataGolf #{zoomShot.rank}</span>}
+          {zoomShot.rank&&<span style={{padding:'4px 12px',borderRadius:14,background:'rgba(255,255,255,.14)',color:'#fff',fontSize:13,fontWeight:700}}>Ranked #{zoomShot.rank}</span>}
         </div>}
         <div style={{marginTop:12,color:'rgba(255,255,255,.55)',fontSize:11}}>Tap anywhere to close</div>
       </div>}
@@ -6142,7 +6142,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 staring at an endless spinner even though the field + tee times were loaded. Now if
                 we have players, we render them (tee times / dashes) and scores fill in as they post. */}
             {projCut&&field.length>0&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,margin:'4px 0 8px',padding:'7px 12px',borderRadius:9,background:'#fff8e6',border:'1px solid #f0c060',fontSize:13,color:'#7a5500'}}>
-              ✂️ Projected cut <b style={{fontSize:15}}>{projCut.label}</b><span style={{fontSize:11,color:'#9a7a30'}}>· from DataGolf's live make-cut odds</span></div>}
+              ✂️ Projected cut <b style={{fontSize:15}}>{projCut.label}</b></div>}
             {field.length === 0
               ? <div style={{padding:'40px 20px',textAlign:'center',color:'#8a9580',fontSize:13}}>
                   <div style={{display:'inline-block',width:24,height:24,border:`3px solid ${T.primary}30`,borderTop:`3px solid ${T.primary}`,borderRadius:'50%',animation:'spin 0.8s linear infinite',marginBottom:10}}/>
@@ -6771,7 +6771,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               return <div style={{...sec,border:`2px solid ${T.primary}`}}>
                 <h3 style={stl}>🏆 Match Pick'em — {tcEventName}</h3>
                 <p style={{fontSize:12,color:'#6b7c5e',marginBottom:10,lineHeight:1.5}}>
-                  For each session: paste the pairings from DataGolf's live model (or build matches by hand), set the <b>first tee time</b> — picks lock then automatically — and save. Come back to tap each match's result as it finishes.
+                  For each session: paste the pairings (or build matches by hand), set the <b>first tee time</b> — picks lock then automatically — and save. Come back to tap each match's result as it finishes.
                 </p>
                 <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:10}}>
                   {sessions.map(([sk,lb])=>{const x=teamMatches[sk], on=sk===active;
@@ -6892,7 +6892,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             <div style={sec}><h3 style={stl}>👀 Show/Hide Picks</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Picks are currently <b>{picksHidden?'hidden':'visible'}</b>.</p>
               <button type="button" style={picksHidden?pri:dan} onClick={async()=>{const d=await adminAction(picksHidden?'show-picks':'hide-picks');if(d?.ok)msg(picksHidden?'Picks revealed!':'Picks hidden');}}>{picksHidden?'👀 Reveal Picks':'🙈 Hide Picks'}</button>
             </div>
-            <div style={sec}><h3 style={stl}>📡 Live Scores</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Auto-refreshes from DataGolf every 60s.</p>
+            <div style={sec}><h3 style={stl}>📡 Live Scores</h3><p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Auto-refreshes every 60 seconds.</p>
               <button type="button" style={{...pri,opacity:refreshing?.5:1}} onClick={()=>fetchScores(false)} disabled={refreshing}>{refreshing?'Updating...':'⟳ Refresh Now'}</button>
               {lastUp&&<span style={{fontSize:11,color:'#8a9580',marginLeft:8}}>Last: {lastUp}</span>}
             </div>
@@ -7100,7 +7100,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 })}
               </div>
               {isTourMode(activeMajor)&&<div style={{marginTop:10,padding:'10px 12px',background:`${T.primary}0a`,borderRadius:8,fontSize:11,color:T.primary}}>
-                ✓ Currently in {isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} mode. The pool tracks whichever event DataGolf has live this week.
+                ✓ Currently in {isDPWorld(activeMajor)?'DP World Tour':'PGA Tour'} mode. The pool tracks whichever event is being played this week.
               </div>}
               {/* FINGERPRINT_V180_ROTATE_BTN — manual advance to the next event on this tour */}
               {isTourMode(activeMajor)&&<div style={{marginTop:12,paddingTop:12,borderTop:'1px solid #eee'}}>
