@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: multi-entry-v224-20261006-0500
+// build: pct-scale-v225-20261006-0615
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -376,7 +376,8 @@ const srvOrd = (n) => n + (['th', 'st', 'nd', 'rd'][((n % 100) - 20) % 10] || ['
 // FINGERPRINT_V211_MAKECUT — same rule as the page: once EVERY golfer's live make-cut % is exactly 0 or 100,
 // anyone at exactly 0 who has finished their round has missed the cut (DataGolf labels CUT later).
 function srvApplyMakeCut(players) {
-  const mcOf = (p) => { const v = p.make_cut; if (v == null || v === '' || isNaN(+v)) return null; const n = +v; return n > 1 ? n / 100 : n; };
+  const pctMC = players.some(p => +p.make_cut > 1);   // V225 — percentages or fractions, decided once for the whole field
+  const mcOf = (p) => { const v = p.make_cut; if (v == null || v === '' || isNaN(+v)) return null; return pctMC ? +v / 100 : +v; };
   const live = players.filter(p => !/WD|DQ/i.test(String(p.current_pos || '')) && mcOf(p) != null);
   if (live.length < 30 || !live.every(p => mcOf(p) === 0 || mcOf(p) >= 0.9999)) return players;
   return players.map(p => {
