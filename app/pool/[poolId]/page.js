@@ -1,5 +1,5 @@
 'use client';
-// build: wta-odds-v350-20261006-0530
+// build: pct-scale-v352-20261006-0615
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1305,7 +1305,9 @@ function formatTeeTimeForUser(date) {
 // (the leaderboard's own money), the pool is ranked, and we count how often each entry wins and cashes.
 function gpSimulatePool({ field, entries, purse, major, evName, fee, wta, runs = 2000 }) {
   const toPar = (x) => x === 'E' ? 0 : (x == null || x === '' || x === '-' || isNaN(+x)) ? null : +x;
-  const prob = (v) => { if (v == null || v === '' || isNaN(+v)) return null; const n = +v; return n > 1 ? n / 100 : n; };
+  // percentages or fractions — decided once for the whole field (V352), so a 1% golfer never reads as 100%
+  const pctW = (field || []).some(p => +p.liveWin > 1), pctM = (field || []).some(p => +p.liveMakeCut > 1);
+  const prob = (v, pct) => { if (v == null || v === '' || isNaN(+v)) return null; return pct ? +v / 100 : +v; };
   const G = [];
   for (const p of field || []) {
     if (/CUT|WD|DQ|MC/i.test(p.pos || '')) continue;
@@ -1313,7 +1315,7 @@ function gpSimulatePool({ field, entries, purse, major, evName, fee, wta, runs =
     const R = [p.r1, p.r2, p.r3, p.r4], done = R.filter(x => x != null && x !== '').length, t = parseInt(p.thru, 10);
     let played = done * 18 + (t >= 1 && t <= 17 ? t : 0);
     if (t === 18 && R[done] == null) played += 18;                       // round just finished, card not posted yet
-    G.push({ name: p.name, sc, played, left: Math.max(0, 72 - played), w: prob(p.liveWin), mc: prob(p.liveMakeCut), mu: 0 });
+    G.push({ name: p.name, sc, played, left: Math.max(0, 72 - played), w: prob(p.liveWin, pctW), mc: prob(p.liveMakeCut, pctM), mu: 0 });
   }
   const N = G.length;
   if (N < 2 || !G.some(g => g.left > 0) || !G.some(g => g.played > 0)) return null;   // not under way, or finished
@@ -3150,7 +3152,8 @@ export default function App(){
     // between = nothing left to decide), anyone at exactly 0% who has finished their round has missed the cut.
     // Works whichever round the cut follows (R2 normally, R3 at the Dunhill); no-cut events sit at 100%.
     {
-      const mcOf = (p) => { const v = p.liveMakeCut; if (v == null || v === '' || isNaN(+v)) return null; const n = +v; return n > 1 ? n / 100 : n; };
+      const pctMC = updated.some(p => +p.liveMakeCut > 1);   // V352 — decided once for the whole field
+      const mcOf = (p) => { const v = p.liveMakeCut; if (v == null || v === '' || isNaN(+v)) return null; return pctMC ? +v / 100 : +v; };
       const live = updated.filter(p => !/WD|DQ/i.test(p.pos || '') && mcOf(p) != null);
       const settled = live.length >= 30 && live.every(p => mcOf(p) === 0 || mcOf(p) >= 0.9999);
       if (settled) updated.forEach(p => {
@@ -4436,6 +4439,25 @@ export default function App(){
     }
     return true;
   });
+  // FINGERPRINT_V351_PROJ_CUT — projected cut line while the cut is still being decided. Uses DataGolf's live
+  // make-cut chances (so it follows each event's own rule and players still on the course): the line sits just
+  // below the worst score among golfers more likely than not to make it. Gone once the cut is settled.
+  const projCut=(()=>{
+    // percentages or fractions? decide once for the whole field (a 1% golfer must not read as 100%)
+    const pct=field.some(x=>+x.liveMakeCut>1);
+    const mcOf=(x)=>{ const v=x.liveMakeCut; if(v==null||v===''||isNaN(+v)) return null; return pct?+v/100:+v; };
+    const toPar=(x)=>x==='E'?0:(x==null||x===''||x==='-'||isNaN(+x))?null:+x;
+    if(field.some(x=>/CUT|MC/i.test(x.pos||''))) return null;                 // already made
+    const live=field.filter(x=>!/WD|DQ/i.test(x.pos||'')&&mcOf(x)!=null&&toPar(x.score)!=null);
+    if(live.length<30||!live.some(x=>mcOf(x)>0.02&&mcOf(x)<0.98)) return null;  // nothing left to decide
+    const makers=live.filter(x=>mcOf(x)>=0.5); if(!makers.length) return null;
+    const line=Math.max(...makers.map(x=>toPar(x.score)));
+    return { line, label: line===0?'E':line>0?`+${line}`:String(line), toPar };
+  })();
+  const showCutLine=!!projCut&&fieldSort!=='pairings'&&(!colSort||(colSort.key==='pos'&&colSort.dir===1));
+  const fieldVisCut=(()=>{ if(!showCutLine) return fieldVis;
+    const k=fieldVis.findIndex(x=>!/CUT|WD|DQ|MC/i.test(x.pos||'')&&projCut.toPar(x.score)!=null&&projCut.toPar(x.score)>projCut.line);
+    return k>0?[...fieldVis.slice(0,k),{__cut:true},...fieldVis.slice(k)]:fieldVis; })();
 
   const adminAction=async(action,extra={})=>{
     try{
@@ -6119,13 +6141,17 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 early Thursday (past tee, model warming up, positions not posted). That left users
                 staring at an endless spinner even though the field + tee times were loaded. Now if
                 we have players, we render them (tee times / dashes) and scores fill in as they post. */}
+            {projCut&&field.length>0&&<div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,margin:'4px 0 8px',padding:'7px 12px',borderRadius:9,background:'#fff8e6',border:'1px solid #f0c060',fontSize:13,color:'#7a5500'}}>
+              ✂️ Projected cut <b style={{fontSize:15}}>{projCut.label}</b><span style={{fontSize:11,color:'#9a7a30'}}>· from DataGolf's live make-cut odds</span></div>}
             {field.length === 0
               ? <div style={{padding:'40px 20px',textAlign:'center',color:'#8a9580',fontSize:13}}>
                   <div style={{display:'inline-block',width:24,height:24,border:`3px solid ${T.primary}30`,borderTop:`3px solid ${T.primary}`,borderRadius:'50%',animation:'spin 0.8s linear infinite',marginBottom:10}}/>
                   <div>Loading field...</div>
                   <style>{`@keyframes spin { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }`}</style>
                 </div>
-              : fieldVis.map((p,i)=>{const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);const shotUrl=headshotFor(p);
+              : fieldVisCut.map((p,i)=>{ if(p.__cut) return <div key="__projcut" style={{display:'flex',alignItems:'center',gap:8,margin:'6px 0',color:'#b45309',fontSize:11,fontWeight:800,letterSpacing:.5}}>
+                  <span style={{flex:1,borderTop:'2px dashed #e0a43a'}}/>✂️ PROJECTED CUT {projCut.label}<span style={{flex:1,borderTop:'2px dashed #e0a43a'}}/></div>;
+                const ow=owners(p.name),sc=String(p.score).startsWith('-')?'#1a6b1a':p.score==='E'?'#555':'#b02020';const t=TIERS.find(t=>t.id===p.tier);const isCut=/CUT|WD|DQ|MC/i.test(p.pos);const shotUrl=headshotFor(p);
             const thruNum = parseInt(p.thru, 10);
             const isActivelyPlaying = thruNum > 0 && thruNum < 18;
             // FINGERPRINT_V96_DISPLAY_ROUND
