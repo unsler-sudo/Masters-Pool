@@ -45,7 +45,7 @@ export async function GET(request) {
   if (!url) return Response.json({ error: 'Invalid endpoint' }, { status: 400 });
   try {
     const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) return Response.json({ error: `DataGolf ${res.status}` }, { status: res.status });
+    if (!res.ok) return Response.json({ error: `Live scores ${res.status}` }, { status: res.status });
     const data = await res.json();
     return Response.json(data, {
       headers: { 'Cache-Control': 'public, s-maxage=20, stale-while-revalidate=40' },
