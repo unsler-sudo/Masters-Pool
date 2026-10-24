@@ -130,13 +130,27 @@ export async function POST(request) {
         const sent = await resendBatch([{ ...mk(to, 'there'), subject: '[TEST] ' + subject }]);
         return Response.json({ ok: !!sent, test: true, sent });
       }
-      const a = await audiences();
-      const list = a[body.audience];
+      // FINGERPRINT_BROADCAST_CSV — an uploaded list arrives in parts (the page sends ~400 at a time, so nothing times out)
+      let list;
+      if (body.audience === 'csv') {
+        const seen = new Set(); list = [];
+        for (const x of Array.isArray(body.list) ? body.list : []) {
+          const email = String(x?.email || '').trim().toLowerCase();
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || seen.has(email)) continue;
+          const raw = String(x?.name || '').trim(), first = (raw.includes(',') ? raw.split(',')[1] : raw).trim().split(/\s+/)[0];   // "Smith, Tony" → Tony
+          seen.add(email); list.push({ email, name: first || 'there' });
+          if (list.length >= 500) break;
+        }
+        if (!list.length) return Response.json({ error: 'No valid emails in this part of the list' }, { status: 400 });
+      } else {
+        const a = await audiences();
+        list = a[body.audience];
+      }
       if (!list) return Response.json({ error: 'Choose who to send it to' }, { status: 400 });
       const uns = list.length ? await redis('MGET', ...list.map(x => `unsub:${x.email}`)) : [];
       const to = list.filter((x, i) => !uns[i]);
       const sent = await resendBatch(to.map(x => mk(x.email, x.name)));
-      await redis('LPUSH', 'broadcasts', JSON.stringify({ at: new Date().toISOString(), audience: body.audience, subject, sent, skipped: list.length - to.length }));
+      await redis('LPUSH', 'broadcasts', JSON.stringify({ at: new Date().toISOString(), audience: body.audience === 'csv' ? `uploaded list${body.part ? ` (part ${body.part})` : ''}` : body.audience, subject, sent, skipped: list.length - to.length }));
       await redis('LTRIM', 'broadcasts', '0', '49');
       return Response.json({ ok: true, sent, skipped: list.length - to.length });
     }
