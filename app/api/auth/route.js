@@ -22,6 +22,12 @@ const signedIn = (user) => { const token = makeToken(user);
 // Which buttons the page should show — or, with ?unsub=…&s=…, unsubscribe from platform announcements
 export async function GET(request) {
   const u = new URL(request.url);
+  // FINGERPRINT_HOME_STATS — how many player accounts and pools, for the home page (cached 10 minutes)
+  if (u.searchParams.get('stats')) {
+    let players = 0, pools = 0;
+    try { players = +(await redis('SCARD', 'users:index')) || 0; pools = +(await redis('SCARD', 'pools:index')) || 0; } catch {}
+    return Response.json({ ok: true, players, pools }, { headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=3600' } });
+  }
   if (u.searchParams.get('unsub')) {
     const email = normEmail(u.searchParams.get('unsub'));
     const ok = u.searchParams.get('s') === unsubSig(email);
