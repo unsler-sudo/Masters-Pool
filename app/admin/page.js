@@ -59,7 +59,51 @@ export default function AdminDashboard() {
   const loadBInfo = () => fetch('/api/admin-pools', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password, action:'broadcast-info' }) })
     .then(r => r.json()).then(d => { if (d?.ok) setBInfo(d); }).catch(() => {});
   useEffect(() => { if (authed) loadBInfo(); }, [authed]);
+  // FINGERPRINT_BROADCAST_CSV — an uploaded list: find the email (and name) columns, skip bad + duplicate emails
+  const [csvList, setCsvList] = useState(null);   // [{email,name}]
+  const [csvInfo, setCsvInfo] = useState('');
+  const readCsv = (file) => {
+    const rd = new FileReader();
+    rd.onload = () => {
+      const split = (line) => { const out = []; let cur = '', q = false;
+        for (let i = 0; i < line.length; i++) { const c = line[i];
+          if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+          else if ((c === ',' || c === ';' || c === '\t') && !q) { out.push(cur); cur = ''; } else cur += c; }
+        out.push(cur); return out.map(x => x.trim()); };
+      const rows = String(rd.result || '').split(/\r?\n/).filter(l => l.trim()).map(split);
+      if (!rows.length) { setCsvList(null); setCsvInfo('⚠️ That file is empty'); return; }
+      const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim());
+      const head = rows[0].map(h => h.toLowerCase());
+      let ei = head.findIndex(h => /e-?mail/.test(h)), ni = head.findIndex(h => /^(first ?name|name|full ?name)$/.test(h));
+      const hasHeader = ei >= 0 || !rows[0].some(isEmail);
+      if (ei < 0) ei = rows[hasHeader ? 1 : 0]?.findIndex(isEmail) ?? -1;
+      if (ei < 0) { setCsvList(null); setCsvInfo('⚠️ Couldn’t find a column of email addresses'); return; }
+      const seen = new Set(), list = []; let bad = 0, dup = 0;
+      for (const r of rows.slice(hasHeader ? 1 : 0)) { const e = String(r[ei] || '').trim().toLowerCase();
+        if (!isEmail(e)) { bad++; continue; } if (seen.has(e)) { dup++; continue; } seen.add(e);
+        list.push({ email: e, name: ni >= 0 ? String(r[ni] || '').trim() : '' }); }
+      setCsvList(list);
+      setCsvInfo(`✓ ${list.length.toLocaleString()} emails ready${bad || dup ? ` (${[bad && `${bad} invalid`, dup && `${dup} duplicates`].filter(Boolean).join(', ')} skipped)` : ''}${ni < 0 ? ' · no name column, so emails start “Hi there,”' : ''}`);
+    };
+    rd.readAsText(file);
+  };
   const sendB = async (test) => {
+    if (!test && bf.audience === 'csv') {          // the uploaded list goes out in parts of 400
+      if (!csvList?.length) { setBNote('⚠️ Upload a CSV first'); return; }
+      if (!window.confirm(`Send "${bf.subject}" to ${csvList.length.toLocaleString()} people from your list?\n\nAnyone who's unsubscribed is skipped. This can't be undone.`)) return;
+      setBBusy(true); let sent = 0, skipped = 0; const n = Math.ceil(csvList.length / 400);
+      for (let k = 0; k < n; k++) {
+        setBNote(`Sending… ${(k * 400).toLocaleString()} of ${csvList.length.toLocaleString()}`);
+        try {
+          const d = await fetch('/api/admin-pools', { method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ password, action:'broadcast', ...bf, test: undefined, list: csvList.slice(k * 400, k * 400 + 400), part: `${k + 1}/${n}` }) }).then(r => r.json());
+          if (d.error) { setBNote(`⚠️ Stopped at part ${k + 1} of ${n}: ${d.error} — ${sent.toLocaleString()} sent so far`); setBBusy(false); return; }
+          sent += d.sent || 0; skipped += d.skipped || 0;
+        } catch { setBNote(`⚠️ Connection problem at part ${k + 1} of ${n} — ${sent.toLocaleString()} sent so far`); setBBusy(false); return; }
+      }
+      setBNote(`✓ Sent to ${sent.toLocaleString()}${skipped ? ` (${skipped} unsubscribed, skipped)` : ''}`);
+      setBf(f => ({ ...f, subject:'', message:'', buttonText:'', buttonUrl:'' })); setBBusy(false); loadBInfo(); return;
+    }
     if (!test) {
       const n = bInfo?.counts?.[bf.audience] ?? 0;
       const who = { commissioners:'commissioners', players:'players', everyone:'people' }[bf.audience];
@@ -297,11 +341,15 @@ export default function AdminDashboard() {
         <div style={{background:'#fff',borderRadius:12,padding:20,marginTop:20,boxShadow:'0 1px 3px rgba(0,0,0,.08)'}}>
           <h2 style={{color:'#1a2a5c',fontSize:18,fontWeight:800,margin:'0 0 12px'}}>📣 Email</h2>
           <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
-            {[['commissioners','Commissioners'],['players','All players'],['everyone','Everyone']].map(([k,l]) =>
+            {[['commissioners','Commissioners'],['players','All players'],['everyone','Everyone'],['csv','📄 Upload a list']].map(([k,l]) =>
               <button key={k} type="button" onClick={()=>setBf(f=>({...f,audience:k}))} style={{padding:'8px 14px',borderRadius:20,fontSize:13,fontWeight:700,cursor:'pointer',
                 border:`1.5px solid ${bf.audience===k?'#1a2a5c':'#d1d5db'}`,background:bf.audience===k?'#1a2a5c':'#fff',color:bf.audience===k?'#fff':'#374151'}}>
-                {l}{bInfo?` · ${bInfo.counts[k]}`:''}</button>)}
+                {l}{k==='csv'?(csvList?` · ${csvList.length.toLocaleString()}`:''):(bInfo?` · ${bInfo.counts[k]}`:'')}</button>)}
           </div>
+          {bf.audience==='csv'&&<div style={{marginBottom:12,padding:'10px 12px',borderRadius:8,background:'#f8fafc',border:'1px dashed #cbd5e1'}}>
+            <input type="file" accept=".csv,text/csv,.txt" onChange={e=>{ const f=e.target.files?.[0]; if(f) readCsv(f); }} style={{fontSize:13}}/>
+            <div style={{fontSize:12,color:csvInfo.startsWith('⚠️')?'#b3261e':'#15803d',marginTop:6}}>{csvInfo||'A CSV with an email column (and a name column, if you have one). Only email people who’ve agreed to hear from you.'}</div>
+          </div>}
           <input value={bf.subject} onChange={e=>setBf(f=>({...f,subject:e.target.value}))} placeholder="Subject" style={{...inp,marginBottom:8}}/>
           <textarea value={bf.message} onChange={e=>setBf(f=>({...f,message:e.target.value}))} placeholder={"Message — starts with \"Hi [first name],\" automatically"} rows={6} style={{...inp,marginBottom:8,resize:'vertical',lineHeight:1.5}}/>
           <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
