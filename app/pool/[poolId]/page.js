@@ -1,5 +1,5 @@
 'use client';
-// build: chat-dark-picker-v364-20261006-1030
+// build: no-zoom-v365-20261006-1100
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1512,6 +1512,7 @@ export default function App(){
 
   const [tab,setTab]=useState('Standings');
   useEffect(()=>{ gpEmojiSetup(); },[]);   // FINGERPRINT_EMOJI_FONT
+  useEffect(()=>{ try{ if(!document.getElementById('gp-nozoom')){ const st=document.createElement('style'); st.id='gp-nozoom'; st.textContent='@media (max-width: 700px) and (pointer: coarse){ input, textarea, select { font-size:16px !important; } }'; document.head.appendChild(st); } }catch{} },[]);   // FINGERPRINT_NO_ZOOM — every screen, every text box
   // FINGERPRINT_V313_DARK — Light · Dark · Auto (follows the device), saved per device; default Auto (V314)
   const [appearance,setAppearanceRaw]=useState('auto');
   const [sysDark,setSysDark]=useState(false);
