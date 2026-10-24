@@ -1,5 +1,5 @@
 'use client';
-// build: oad-hide-v369-20261006-1530
+// build: oad-events-v370-20261006-1600
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3541,6 +3541,8 @@ export default function App(){
   useEffect(()=>{ if(poolMeta?.oad?.on) loadOad(); },[poolMeta?.oad?.on,acctToken]);   // FINGERPRINT_V369 — know whether to show the tab
   const [oadAdmin,setOadAdmin]=useState(null);           // FINGERPRINT_V368 — commissioner's list of who's paid
   const [oadFeeIn,setOadFeeIn]=useState(null);
+  const [oadSched,setOadSched]=useState(null);           // FINGERPRINT_V370 — {year, events:[{slug,name,start,major,signature,players,on,fixed}]}
+  const [oadSchedOpen,setOadSchedOpen]=useState(false);
   const loadOadAdmin=()=>adminAction('oad-get',{auth:acctToken||undefined}).then(d=>{ if(d?.ok) setOadAdmin(d); }).catch(()=>{});
   useEffect(()=>{ if(tab==='Admin'&&adminOk&&adminPw&&poolMeta?.oad?.on) loadOadAdmin(); },[tab,adminOk,adminPw,poolMeta?.oad?.on]);
   const oadPaid=async()=>{
@@ -6385,7 +6387,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               </div>
               <div style={{fontSize:12,color:'#6b7c5e',margin:'4px 0 10px',lineHeight:1.5}}>
                 {d.offSeason?<>The <b>{d.nextYear}</b> season starts with the first PGA Tour event in January and runs to the TOUR Championship.{(d.standings||[]).length?' Here are last season’s final standings.':''}</>:d.closed?'Final standings for the season.':d.event?<>This week: <b>{d.event}</b> · one golfer, his real prize money, and you can't use him again this season.{!d.locked&&' Picks lock when the first group tees off.'}</>:'No PGA Tour event this week.'}</div>
-              {!d.closed&&d.event&&(!acct
+              {d.weekOff&&!d.closed&&<div style={{fontSize:14,padding:'8px 12px',borderRadius:9,background:'#f2f4f0',color:'#5a6b4e',marginBottom:8}}>
+                The <b>{d.event}</b> doesn't count in One &amp; Done this season — back next week.</div>}
+              {!d.closed&&d.event&&!d.weekOff&&(!acct
                 ? <button type="button" onClick={()=>openAcct('signin')} style={{...pri,width:'100%'}}>Sign in to play</button>
                 : d.locked
                   ? <div style={{fontSize:15,padding:'8px 0'}}>Your pick: <b style={{color:T.primary}}>{d.me?.pick?flip(d.me.pick):'— none this week ($0)'}</b></div>
@@ -7348,6 +7352,34 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <button type="button" onClick={async()=>{const d=await adminAction('set-oad',{fee:+(oadFeeIn??poolMeta?.oad?.fee??0)||0}); if(d?.ok){setPoolMeta(prev=>({...(prev||{}),oad:d.oad}));setOadFeeIn(null);msg(d.oad.fee?`Buy-in set to $${d.oad.fee}`:'No buy-in');loadOadAdmin();}}} style={pri}>Save</button>
                 </div>
                 <div style={{fontSize:11,color:'#8a9580',marginTop:4}}>Players pay with the venmo button on the 🎯 1&amp;Done tab. "Trust I've paid" above applies here too.</div>
+                {/* FINGERPRINT_V370 — which PGA Tour events count */}
+                <div style={{marginTop:12}}>
+                  <button type="button" onClick={async()=>{ const o=!oadSchedOpen; setOadSchedOpen(o); if(o&&!oadSched){ const d=await adminAction('oad-schedule',{}); if(d?.ok) setOadSched(d); else msg(d?.error||'Could not load the schedule'); } }}
+                    style={{background:'none',border:'none',color:T.primary,fontWeight:700,fontSize:13,cursor:'pointer',padding:0}}>
+                    📅 Events that count{oadSched?` · ${oadSched.events.filter(e=>e.on).length} of ${oadSched.events.length}`:''} {oadSchedOpen?'▾':'›'}</button>
+                  {oadSchedOpen&&(!oadSched?<div style={{fontSize:12,color:'#8a9580',marginTop:6}}>Loading the {new Date().getMonth()>=8?new Date().getFullYear()+1:new Date().getFullYear()} schedule…</div>
+                    :!oadSched.events.length?<div style={{fontSize:12,color:'#8a9580',marginTop:6}}>The {oadSched.year} PGA Tour schedule isn't out yet — check back closer to January.</div>
+                    :<div style={{marginTop:8}}>
+                      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+                        {[['All events',()=>true],['Majors + Signature',e=>e.major||e.signature||e.players],['Majors only',e=>e.major]].map(([l,f])=>
+                          <button key={l} type="button" onClick={()=>setOadSched(o=>({...o,events:o.events.map(e=>e.fixed?e:{...e,on:!!f(e)})}))}
+                            style={{padding:'4px 10px',borderRadius:12,fontSize:12,fontWeight:700,cursor:'pointer',border:`1px solid ${T.primary}`,background:'#fff',color:T.primary}}>{l}</button>)}
+                      </div>
+                      <div style={{maxHeight:300,overflowY:'auto',border:`1px solid ${T.cardBorder}`,borderRadius:9}}>
+                        {oadSched.events.map(e=><label key={e.slug} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 10px',borderBottom:'1px solid #f0f0ea',opacity:e.fixed?.55:1,cursor:e.fixed?'default':'pointer'}}>
+                          <span style={{width:46,fontSize:11,color:'#8a9580'}}>{new Date(e.start+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+                          <span style={{flex:1,fontSize:13,color:'#2a3a1e',fontWeight:e.major?800:600}}>{e.major?'🏆 ':e.signature||e.players?'⭐ ':''}{e.name}</span>
+                          {e.fixed&&<span style={{fontSize:10,color:'#8a9580'}}>played</span>}
+                          <input type="checkbox" checked={e.on} disabled={e.fixed} onChange={ev=>{ const on=ev.target.checked; setOadSched(o=>({...o,events:o.events.map(x=>x.slug===e.slug?{...x,on}:x)})); }}/>
+                        </label>)}
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginTop:8}}>
+                        <span style={{flex:1,fontSize:12,color:'#6b7c5e'}}>{oadSched.events.filter(e=>e.on).length} of {oadSched.events.length} events count · 🏆 major · ⭐ Signature / Players</span>
+                        <button type="button" onClick={async()=>{ const d=await adminAction('set-oad-schedule',{year:oadSched.year,skip:oadSched.events.filter(e=>!e.on).map(e=>e.slug)});
+                            if(d?.ok){ setOadSched(d); msg('One & Done events saved ✓'); } else msg(d?.error||'Could not save'); }} style={pri}>Save</button>
+                      </div>
+                    </div>)}
+                </div>
                 {(oadAdmin?.payRows||[]).length>0&&+poolMeta?.oad?.fee>0&&<div style={{marginTop:10}}>
                   <div style={{fontSize:12,fontWeight:800,color:'#5a6b4e',marginBottom:4}}>{oadAdmin.payYear} buy-ins</div>
                   {oadAdmin.payRows.sort((a,b)=>(b.pending-a.pending)||(a.paid-b.paid)||a.name.localeCompare(b.name)).map(r=><div key={r.uid} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderTop:'1px solid #f0f0ea'}}>
