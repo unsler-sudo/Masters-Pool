@@ -1,5 +1,5 @@
 'use client';
-// build: keyboard-dock-v360-20261006-0915
+// build: keyboard-dock-v361-20261006-0930
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3501,7 +3501,8 @@ export default function App(){
   useEffect(()=>{
     if(tab!=='Chat'||typeof window==='undefined'||!window.visualViewport) return;
     const vv=window.visualViewport;
-    const upd=()=>setKbOffset(Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop)));
+    // V361 — iPhone Safari shrinks window.innerHeight with the keyboard, so measure against the layout height
+    const upd=()=>{ const full=document.documentElement.clientHeight||window.innerHeight; setKbOffset(Math.max(0,Math.round(full-vv.height-vv.offsetTop))); };
     upd(); vv.addEventListener('resize',upd); vv.addEventListener('scroll',upd);
     return ()=>{ vv.removeEventListener('resize',upd); vv.removeEventListener('scroll',upd); };
   },[tab]);
@@ -5416,7 +5417,7 @@ export default function App(){
       {justActivated&&<div style={{background:'#d1fae5',padding:'10px 16px',fontSize:13,color:'#065f46',textAlign:'center',fontWeight:600}}>🎉 Your pool is live! Share this link with your friends to start entering picks.</div>}
       {status&&<div style={{background:'#fef3cd',padding:'8px 16px',fontSize:12,color:'#856404',textAlign:'center'}}>{status}</div>}
 
-      <main style={{padding:'12px 12px 80px',maxWidth:660,margin:'0 auto',animation:'fu .35s ease'}}>
+      <main style={{padding:tab==='Chat'&&composerFocus?'12px 12px 6px':'12px 12px 80px',maxWidth:660,margin:'0 auto',animation:'fu .35s ease'}}>{/* V361 — no bottom gap while typing in chat */}
 
         {tab==='Standings'&&(<>
           {/* FINGERPRINT_V199_SHARE_CARD — brag button */}
@@ -6507,7 +6508,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   {chatSending?'...':'Send'}
                 </button>
               </div>
-              {!docked&&<div style={{fontSize:10,color:'#aaa',textAlign:'center',marginTop:6}}>
+              {!composerFocus&&<div style={{fontSize:10,color:'#aaa',textAlign:'center',marginTop:6}}>
                 {chatInput.length}/300 · Tap a message to react or reply · Type @ to mention
               </div>}
               </div>
@@ -7313,7 +7314,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           </>)}
       </main>
 
-      <footer style={{textAlign:'center',padding:'16px 12px',fontSize:10,color:'#8a9580',borderTop:`1px solid ${T.cardBorder}`,background:T.bodyBg}}>
+      {/* FINGERPRINT_V361 — hidden while typing in chat, so the message box can sit right on the keyboard */}
+      <footer style={{display:tab==='Chat'&&composerFocus?'none':undefined,textAlign:'center',padding:'16px 12px',fontSize:10,color:'#8a9580',borderTop:`1px solid ${T.cardBorder}`,background:T.bodyBg}}>
         {/* FINGERPRINT_V252_FOOTER_RULES — rules line follows the game being played. Built from the real
             tier counts, so normal weeks read "2 Favorites · 4 Contenders · 4 Longshots" as before and the
             TOUR Championship correctly reads 2 · 2 · 2; team events describe the match pick'em. */}
