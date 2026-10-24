@@ -1,5 +1,5 @@
 'use client';
-// build: keyboard-dock-v361-20261006-0930
+// build: keyboard-dock-v362-20261006-0945
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3498,11 +3498,13 @@ export default function App(){
   const [kbOffset,setKbOffset]=useState(0);
   const [composerH,setComposerH]=useState(0);
   const composerRef=useRef(null);
+  const measureKbRef=useRef(()=>{});
   useEffect(()=>{
     if(tab!=='Chat'||typeof window==='undefined'||!window.visualViewport) return;
     const vv=window.visualViewport;
     // V361 — iPhone Safari shrinks window.innerHeight with the keyboard, so measure against the layout height
     const upd=()=>{ const full=document.documentElement.clientHeight||window.innerHeight; setKbOffset(Math.max(0,Math.round(full-vv.height-vv.offsetTop))); };
+    measureKbRef.current=upd;
     upd(); vv.addEventListener('resize',upd); vv.addEventListener('scroll',upd);
     return ()=>{ vv.removeEventListener('resize',upd); vv.removeEventListener('scroll',upd); };
   },[tab]);
@@ -6499,9 +6501,10 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   onChange={e=>setChatInput(e.target.value)}
                   onKeyDown={e=>e.key==='Enter'&&!chatSending&&sendChatMessage()}
                   onFocus={()=>{ try{ setComposerH(composerRef.current?.offsetHeight||0); }catch{} setComposerFocus(true);
+                    [0,60,140,240,360,500,700,950].forEach(ms=>setTimeout(()=>measureKbRef.current(),ms));   // V362 — keyboard is still sliding up
                     setTimeout(()=>{ const e2=chatScrollRef.current; if(e2){ e2.scrollTop=e2.scrollHeight; setChatNewBelow(false); } },320); }}
                   onBlur={()=>setTimeout(()=>setComposerFocus(false),120)}
-                  style={{...inp,flex:1,marginBottom:0}}/>
+                  style={{...inp,flex:1,marginBottom:0,fontSize:16}}/>{/* V362 — 16pt stops iPhone's zoom-on-tap */}
                 <button type="button" onClick={sendChatMessage} disabled={chatSending||!chatInput.trim()}
                   onPointerDown={e=>e.preventDefault()} onMouseDown={e=>e.preventDefault()}
                   style={{...pri,padding:'10px 18px',opacity:(chatSending||!chatInput.trim())?.4:1}}>
