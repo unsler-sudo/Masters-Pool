@@ -2741,7 +2741,7 @@ export async function POST(request) {
         ok: true,
         archived: archivedName,
         archivedEntries,
-        rotatedTo: nextEventName || '(unchanged — DataGolf event unavailable)',
+        rotatedTo: nextEventName || '(unchanged — live feed event unavailable)',
         note: 'Entries and payments wiped. Pool is locked + unpaid for the new event. Roster preserved.',
       });
     }
@@ -2961,7 +2961,7 @@ export async function POST(request) {
       if (notStartedWithFlag.length) {
         await srvAlertCommissioners(pools, `${evTag}_flags_unreliable`,
           `${ev}: automatic results paused — please enter results manually`,
-          `<p>DataGolf is showing a team flag on matches that haven't started, so the flag can't be trusted to mean
+          `<p>The live feed is showing a team flag on matches that haven't started, so the flag can't be trusted to mean
            "winner" on this page. The app hasn't recorded any results — enter them in Admin → Match Pick'em.</p>`);
         results.paused = 'team flag appears on unstarted matches';
       } else {
@@ -3069,7 +3069,7 @@ export async function POST(request) {
       if (corrected.length) {
         await srvAlertCommissioners(pools, `${evTag}_corrected_${corrected.join('/')}`,
           `${ev}: ${corrected.length === 1 ? 'a result was' : corrected.length + ' results were'} corrected automatically`,
-          `<p>DataGolf's final result differed from what the app had recorded, so it was corrected:</p>
+          `<p>The live feed's final result differed from what the app had recorded, so it was corrected:</p>
            <p>${corrected.join('<br>')}</p><p>Results you entered yourself are never changed.</p>`);
         results.corrected = corrected.length;
       }
@@ -3077,7 +3077,7 @@ export async function POST(request) {
         await redis('SET', srvTeamMatchesKey(ev, year), JSON.stringify(all));
         await srvAlertCommissioners(pools, `${evTag}_first_results`,
           `${ev}: first results recorded automatically — quick check?`,
-          `<p>The app just recorded these results from DataGolf:</p><p>${recorded.join('<br>')}</p>
+          `<p>The app just recorded these results from the live feed:</p><p>${recorded.join('<br>')}</p>
            <p>If any is wrong, fix it in Admin → Match Pick'em — your entry always wins and won't be overwritten.
            You'll only hear from the app again if it can't read a result.</p>`);
       }
