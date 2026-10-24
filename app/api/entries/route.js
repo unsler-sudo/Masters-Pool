@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: no-default-pw-v228-20261006-0900
+// build: recap-awards-v229-20261006-1130
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -520,6 +520,20 @@ async function srvSendRecap(poolId, archiveKey) {
   const last = (pk) => String(pk || '').split(',')[0].trim();
   const winners = res.filter(r => r.place === 1).map(r => r.entry.name);
   const subject = `🏆 ${winners.join(' & ')} ${winners.length > 1 ? 'share' : 'wins'} the ${label} pool`;
+  // FINGERPRINT_V229_AWARDS — "This week's awards" in the recap (money weeks): best pick, biggest bust, the chalk
+  let awards = '';
+  if (!pts) {
+    const E = a.earnings || {}, own = {}, fullN = (n) => String(n || '').includes(',') ? String(n).split(',').map(x => x.trim()).reverse().join(' ') : String(n || '');
+    for (const r of res) for (const p of (r.entry.picks || [])) (own[p] = own[p] || []).push(r.entry.name);
+    const golfers = Object.keys(own), used = new Set(), lines = [];
+    const best = golfers.filter(p => (E[p] || 0) > 0 && own[p].length <= 2).sort((x, y) => (E[y] || 0) - (E[x] || 0))[0];
+    if (best) { used.add(best); lines.push(`🎯 <b>Best pick:</b> ${srvEscHtml(fullN(best))} — ${srvBig(E[best])}, ${own[best].length === 1 ? `only in ${srvEscHtml(own[best][0])}'s lineup` : `only in ${srvEscHtml(srvJoinNames(own[best]))}'s lineups`}`); }
+    const bust = golfers.filter(p => !((E[p] || 0) > 0) && own[p].length >= 2 && !used.has(p)).sort((x, y) => own[y].length - own[x].length)[0];
+    if (bust) { used.add(bust); lines.push(`💀 <b>Biggest bust:</b> ${srvEscHtml(fullN(bust))} — picked by ${own[bust].length} of you, missed the cut`); }
+    const chalk = golfers.filter(p => !used.has(p)).sort((x, y) => own[y].length - own[x].length)[0];
+    if (chalk && own[chalk].length >= 3) lines.push(`🐑 <b>The chalk:</b> ${srvEscHtml(fullN(chalk))} — in ${own[chalk].length} of ${res.length} lineups, ${(E[chalk] || 0) > 0 ? `earned ${srvBig(E[chalk])}` : 'missed the cut'}`);
+    if (lines.length) awards = `<div style="margin-top:16px;padding:12px 14px;border-radius:10px;background:#fff8e6;border:1px solid #f0c060;font-size:14px;line-height:1.6"><div style="font-size:11px;font-weight:700;letter-spacing:.5px;color:#7a5500;margin-bottom:4px">🏅 THIS WEEK'S AWARDS</div>${lines.map(l => `<div>${l}</div>`).join('')}</div>`;
+  }
   const top = res.slice(0, 5).map(r => `<tr><td style="padding:6px 8px;color:#6b7280;width:28px">${r.place === 1 ? '🥇' : r.place === 2 ? '🥈' : r.place === 3 ? '🥉' : r.place}</td>
     <td style="padding:6px 8px;font-weight:700;color:#1a4d2e">${srvEscHtml(r.entry.name)}</td><td style="padding:6px 8px;text-align:right">${amt(r.total)}</td>
     <td style="padding:6px 8px;text-align:right;color:#15803d;font-weight:700">${r.prize > 0 ? '💰 ' + usd(r.prize) : ''}</td></tr>`).join('');
@@ -547,6 +561,7 @@ async function srvSendRecap(poolId, archiveKey) {
   <h2 style="margin:6px 0 4px;color:#1a4d2e;font-size:22px">${srvEscHtml(label)} — final results</h2>
   <p style="font-size:15px;margin:10px 0 14px">Hi ${srvEscHtml(first)}, ${winners.length > 1 ? `it's a tie at the top — ${srvEscHtml(winners.join(' & '))} share it` : `<b>${srvEscHtml(winners[0])}</b> wins the pool`}! 🏆</p>
   <table style="width:100%;border-collapse:collapse;font-size:14px;background:#f6f3ea;border-radius:10px">${top}</table>
+  ${awards}
   <div style="margin-top:16px;padding:12px 14px;border:1px solid #e5e7eb;border-radius:10px;font-size:15px"><div style="font-size:11px;font-weight:700;letter-spacing:.5px;color:#6b7280;margin-bottom:4px">YOUR FINISH</div>${lines}</div>
   ${season}
   <p style="margin:22px 0"><a href="${poolUrl}?tab=history" style="background:#1a4d2e;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block">See full results →</a></p>
