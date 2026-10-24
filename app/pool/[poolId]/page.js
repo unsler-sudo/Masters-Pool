@@ -1,5 +1,5 @@
 'use client';
-// build: no-dg-text-v353-20261006-0630
+// build: cut-msg-v355-20261006-0730
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1740,6 +1740,7 @@ export default function App(){
   const [chatSending,setChatSending]=useState(false);
   const [chatVerifying,setChatVerifying]=useState(false);
   const chatScrollRef=useRef(null);
+  const [chatNewBelow,setChatNewBelow]=useState(false);   // FINGERPRINT_V354 — new messages arrived while you were scrolled up
   const timer=useRef(null);
 
   // Build theme: base + dynamic schedule data + (if pgatour mode) per-event overrides
@@ -3437,10 +3438,13 @@ export default function App(){
         body:JSON.stringify({poolId,action:'chat-fetch'})});
       const d=await r.json();
       if(d.messages){
-        setChatMessages(d.messages);
+        // FINGERPRINT_V354 — only follow to the bottom if you're already there; scrolled up = stay put
+        const el=chatScrollRef.current, near=!el||el.scrollHeight-el.scrollTop-el.clientHeight<90;
+        let grew=false;
+        setChatMessages(prev=>{ const a=prev||[], b=d.messages; grew=b.length>a.length||(b.length&&a.length&&b[b.length-1].id!==a[a.length-1].id); return b; });
         if(d.seen)setChatSeen(d.seen); // FINGERPRINT_V209_CHAT_SEEN — read receipts
-        // Auto-scroll to bottom
-        setTimeout(()=>{if(chatScrollRef.current)chatScrollRef.current.scrollTop=chatScrollRef.current.scrollHeight;},50);
+        setTimeout(()=>{ const e2=chatScrollRef.current; if(!e2) return;
+          if(near){ e2.scrollTop=e2.scrollHeight; setChatNewBelow(false); } else if(grew) setChatNewBelow(true); },50);
       }
     }catch{}
   };
@@ -6316,7 +6320,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   <div style={{fontSize:11,opacity:.85}}>You can read messages but need an entry in the current major to post.</div>
                 </div>
               </div>}
-              <div ref={chatScrollRef} style={{
+              <div ref={chatScrollRef} onScroll={(e)=>{ const t=e.currentTarget; if(chatNewBelow&&t.scrollHeight-t.scrollTop-t.clientHeight<90) setChatNewBelow(false); }} style={{
                 background:'#fff',borderRadius:11,border:`1px solid ${T.cardBorder}`,
                 height:380,overflowY:'auto',padding:12,marginBottom:10,
               }}>
@@ -6348,9 +6352,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                       }}>
                         <div style={{maxWidth:'75%',position:'relative'}}>
                           <div onClick={()=>setReactionPickerFor(reactionPickerFor===m.id?null:m.id)}
-                            onTouchStart={()=>{ clearTimeout(pressTimer.current); pressTimer.current=setTimeout(()=>{ setReactionPickerFor(null); setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)}); try{chatInputRef.current?.focus();}catch{} },500); }}
+                            onTouchStart={()=>{ clearTimeout(pressTimer.current); pressTimer.current=setTimeout(()=>{ setReactionPickerFor(null); if(adminOk){ deleteChatMessage(m.id); return; } setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)}); try{chatInputRef.current?.focus();}catch{} },500); }}
                             onTouchEnd={()=>clearTimeout(pressTimer.current)} onTouchMove={()=>clearTimeout(pressTimer.current)}
-                            onContextMenu={(e)=>{ e.preventDefault(); setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)}); try{chatInputRef.current?.focus();}catch{} }}
+                            onContextMenu={(e)=>{ e.preventDefault(); if(adminOk){ deleteChatMessage(m.id); return; } setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)}); try{chatInputRef.current?.focus();}catch{} }}
                             style={{
                             background:m.bot?`${T.primary}14`:isMe?T.primary:'#f1f1f1',
                             border:m.bot?`1px solid ${T.primary}33`:'none',
@@ -6366,7 +6370,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                             </div>
                             {m.replyTo&&<div style={{fontSize:12,lineHeight:1.35,margin:'2px 0 5px',padding:'4px 8px',borderLeft:`3px solid ${isMe?'rgba(255,255,255,.6)':T.primary}`,background:isMe?'rgba(255,255,255,.14)':'rgba(0,0,0,.05)',borderRadius:4,opacity:.9}}>
                               <b>↩︎ {m.replyTo.name}</b> <span>{m.replyTo.text}{String(m.replyTo.text||'').length>=90?'…':''}</span></div>}
-                            <div style={{fontSize:14,lineHeight:1.4,wordBreak:'break-word'}}>{m.message}</div>
+                            <div style={{fontSize:14,lineHeight:1.4,wordBreak:'break-word',whiteSpace:'pre-line'}}>{m.message}</div>
                           </div>
                           {reactionEntries.length>0&&<div style={{display:'flex',gap:3,marginTop:4,flexWrap:'wrap',justifyContent:isMe?'flex-end':'flex-start'}}>
                             {reactionEntries.map(([emoji,users])=>{
@@ -6395,6 +6399,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                           }} onClick={e=>e.stopPropagation()}>
                             <button type="button" onClick={()=>{setReactionPickerFor(null);setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)});try{chatInputRef.current?.focus();}catch{}}}
                               style={{background:'#f0f0f0',border:'none',fontSize:12,fontWeight:700,cursor:'pointer',padding:'5px 8px',borderRadius:6,lineHeight:1,color:'#444',whiteSpace:'nowrap'}}>↩︎ Reply</button>
+                            {adminOk&&<button type="button" onClick={()=>{setReactionPickerFor(null);deleteChatMessage(m.id);}}
+                              style={{background:'#fdecea',border:'none',fontSize:12,fontWeight:700,cursor:'pointer',padding:'5px 8px',borderRadius:6,lineHeight:1,color:'#b3261e',whiteSpace:'nowrap'}}>🗑 Delete</button>}
                             <div style={{width:1,height:20,background:'#ddd',margin:'0 2px'}}/>
                             {QUICK_REACTIONS.map(emoji=>(
                               <button key={emoji} type="button" onClick={()=>{reactToMessage(m.id,emoji);setReactionPickerFor(null);}}
@@ -6410,8 +6416,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                             </button>
                           </div>}
                         </div>
-                        {adminOk&&<button type="button" onClick={()=>deleteChatMessage(m.id)}
-                          style={{background:'transparent',border:'none',color:'#c44',cursor:'pointer',fontSize:10,padding:'4px 6px',alignSelf:'flex-end'}}>✕</button>}
+                        {/* FINGERPRINT_V354 — commissioner deletes with a long-press (or 🗑 in the tap menu), no ✕ */}
                       </div>
                     );
                   })
@@ -6434,6 +6439,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   </div>;
                 })()}
               </div>
+              {/* FINGERPRINT_V354 — new messages while you were reading further up */}
+              {chatNewBelow&&<div style={{position:'relative',height:0,zIndex:3}}>
+                <button type="button" onClick={()=>{ const e2=chatScrollRef.current; if(e2) e2.scrollTo({top:e2.scrollHeight,behavior:'smooth'}); setChatNewBelow(false); }}
+                  style={{position:'absolute',left:'50%',transform:'translateX(-50%)',bottom:10,background:T.primary,color:'#fff',border:'none',borderRadius:16,padding:'6px 14px',fontSize:12,fontWeight:800,cursor:'pointer',boxShadow:'0 3px 10px rgba(0,0,0,.25)',whiteSpace:'nowrap'}}>↓ New messages</button>
+              </div>}
               {/* FINGERPRINT_V346_CHAT — replying-to bar, and @ suggestions */}
               {replyTo&&<div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,padding:'6px 10px',borderLeft:`3px solid ${T.primary}`,background:`${T.primary}0d`,borderRadius:6,fontSize:12}}>
                 <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>↩︎ Replying to <b>{replyTo.name}</b>: {replyTo.text}</span>
