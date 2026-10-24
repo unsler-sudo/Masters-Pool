@@ -82,7 +82,7 @@ const DEFAULT_MAJOR = MAJORS[0].key; // soonest upcoming major
 // FINGERPRINT_HOME_CAMPAIGN — the home page hypes whatever's next: each major from the end of the previous
 // event through its final round; after The Open, weekly PGA Tour pools; a week before a Cup, the Cup; then
 // back to the Masters. Dates confirmed from the 2027 schedule (add the 2028 U.S. Open / Open / Presidents Cup
-// here once they're announced — until then it promotes weekly pools after the 2028 PGA Championship).
+// here once they're announced).
 const GP_EVENTS = [
   ['masters', '2027-04-08', '2027-04-11', 'Augusta National'],
   ['pga',     '2027-05-20', '2027-05-23', 'PGA Frisco'],
@@ -91,6 +91,11 @@ const GP_EVENTS = [
   ['ryder',   '2027-09-17', '2027-09-19', 'Adare Manor'],
   ['masters', '2028-04-06', '2028-04-09', 'Augusta National'],
   ['pga',     '2028-05-18', '2028-05-21', 'The Olympic Club'],
+  ['usopen',  '2028-06-15', '2028-06-18', 'Winged Foot', { headline:'The U.S. Open at Winged Foot.',
+    pitch:'Golf’s toughest test on one of its most feared courses. Get your crew’s picks in before Thursday and watch the money move.' }],
+  ['open',    '2028-08-03', '2028-08-06', 'Royal Lytham & St Annes', { headline:'The Open at Royal Lytham.',
+    pitch:'Golf’s oldest major moves to August for one year only — the Claret Jug, links golf and the perfect excuse for a pool.' }],
+  // 2028 Presidents Cup: Kingston Heath, Melbourne — dates not announced yet (Australian editions often run Nov/Dec).
 ];
 const GP_CAMPAIGN = {
   masters: { name:'The Masters', emoji:'🌸', bg:'linear-gradient(160deg,#08331e 0%,#0f5a34 55%,#1f7d47 100%)', accent:'#f4d35e',
@@ -117,18 +122,19 @@ function gpCampaign(now) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const next = GP_EVENTS.find(e => day(e[2]) >= today);
   if (!next) return { key:'tour', ...GP_CAMPAIGN.tour };
-  const [key, st, en, venue] = next, start = day(st), end = day(en);
+  const [key, st, en, venue, ov] = next, start = day(st), end = day(en);   // ov = that year's own headline/pitch
   if ((key === 'ryder' || key === 'presidents') && (start - today) / 864e5 > 7) return { key:'tour', ...GP_CAMPAIGN.tour };
   const days = Math.round((start - today) / 864e5);
   const mon = (d) => d.toLocaleString('en-US', { month: 'long' });
   const dates = start.getMonth() === end.getMonth() ? `${mon(start)} ${start.getDate()}–${end.getDate()}` : `${mon(start)} ${start.getDate()} – ${mon(end)} ${end.getDate()}`;
   const countdown = days > 1 ? `${days} days until the first tee` : days === 1 ? 'Tees off tomorrow' : days === 0 ? 'Tees off today' : 'Happening now';
-  return { key, ...GP_CAMPAIGN[key], venue, dates, countdown, days };
+  return { key, ...GP_CAMPAIGN[key], ...(ov || {}), venue, dates, countdown, days };
 }
 
 export default function LandingPage() {
   const [step, setStep]     = useState('home');
   useEffect(() => { gpEmojiSetup(); }, []);   // FINGERPRINT_EMOJI_FONT
+  useEffect(()=>{ try{ if(!document.getElementById('gp-nozoom')){ const st=document.createElement('style'); st.id='gp-nozoom'; st.textContent='@media (max-width: 700px) and (pointer: coarse){ input, textarea, select { font-size:16px !important; } }'; document.head.appendChild(st); } }catch{} },[]);   // FINGERPRINT_NO_ZOOM — every screen, every text box
   const [form, setForm]     = useState({ poolName:'', commissionerName:'', commissionerEmail:'', adminPassword:'', major:DEFAULT_MAJOR, bypassCode:'' });
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
