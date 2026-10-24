@@ -1,5 +1,5 @@
 'use client';
-// build: oad-extras-v368-20261006-1400
+// build: oad-hide-v369-20261006-1530
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3538,6 +3538,7 @@ export default function App(){
   const loadOad=()=>fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'oad-get',auth:acctToken||undefined})})
     .then(r=>r.json()).then(d=>{ if(d?.ok) setOadData(d); }).catch(()=>{});
   useEffect(()=>{ if(tab!=='OAD') return; loadOad(); const t=setInterval(loadOad,60000); return ()=>clearInterval(t); },[tab,acctToken]);
+  useEffect(()=>{ if(poolMeta?.oad?.on) loadOad(); },[poolMeta?.oad?.on,acctToken]);   // FINGERPRINT_V369 — know whether to show the tab
   const [oadAdmin,setOadAdmin]=useState(null);           // FINGERPRINT_V368 — commissioner's list of who's paid
   const [oadFeeIn,setOadFeeIn]=useState(null);
   const loadOadAdmin=()=>adminAction('oad-get',{auth:acctToken||undefined}).then(d=>{ if(d?.ok) setOadAdmin(d); }).catch(()=>{});
@@ -5145,7 +5146,7 @@ export default function App(){
       {gpDark&&<style>{gpDarkCss(T)}</style>}{/* FINGERPRINT_V313_DARK — the dark layer, only while dark */}
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
-        {(poolMeta?.oad?.on?[...TABS.slice(0,4),'OAD',...TABS.slice(4)]:TABS).filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t==='History'?'Season':t==='OAD'?'🎯 1&Done':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
+        {(poolMeta?.oad?.on&&oadData?.enabled&&(!oadData.started||oadData.joined||adminOk||ownerAdmin)?[...TABS.slice(0,4),'OAD',...TABS.slice(4)]:TABS).filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t==='History'?'Season':t==='OAD'?'🎯 1&Done':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
       <button type="button" onClick={()=>openAcct(acct?null:'signin')} aria-label="Your profile" title={acct?`${acct.name} — your profile`:'Sign in'}
           style={{flex:'0 0 auto',padding:'0 10px',background:'transparent',border:'none',fontSize:17,cursor:'pointer',position:'relative',display:'flex',alignItems:'center'}}>
           {/* FINGERPRINT_V311_PHOTO — your Google photo IS the profile button (amber ring = cell number missing) */}
