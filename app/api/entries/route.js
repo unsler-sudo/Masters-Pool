@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: pct-scale-v225-20261006-0615
+// build: cut-msg-v227-20261006-0730
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -786,13 +786,23 @@ async function srvNotifyPool(pid, meta, subs, st, dg) {
           const second = table[1];
           if (round >= 4 && leader) await srvChatBot(pid, meta, `🏆 ${leader.name} wins the ${evName} pool with ${srvBig(leader.total)}!${second ? ` ${second.name} takes 2nd.` : ''}`);
           else if (cutNow) {
+            // FINGERPRINT_V227_CUT_MSG — where the cut fell, then one line per entry that lost golfers (full names)
+            const full = (n) => String(n || '').includes(',') ? String(n).split(',').map(x => x.trim()).reverse().join(' ') : String(n || '').trim();
+            const toPar = (p) => { const v = p.current_score ?? p.total_to_par ?? p.total; return v == null || v === '' || isNaN(+v) ? null : +v; };
+            const madeScores = players.filter(p => !/CUT|MC|WD|DQ/i.test(String(p.current_pos || ''))).map(toPar).filter(v => v != null);
+            const lineN = madeScores.length ? Math.max(...madeScores) : null;
+            const at = lineN == null ? '' : ` at ${lineN === 0 ? 'E' : lineN > 0 ? `+${lineN}` : lineN}`;
             const outs = players.filter(p => /CUT|MC/i.test(String(p.current_pos || '')));
-            const hit = [];
-            for (const g of outs) { const vars = new Set(srvNameVariants(g.player_name));
-              const who = table.filter(r => r.picks.some(pk => vars.has(srvNormalizeName(pk)))).map(r => r.name);
-              if (who.length) hit.push(`${srvLast(g.player_name)} — sorry ${srvJoinNames(who.slice(0, 3))}${who.length > 3 ? ' & co' : ''}`); }
-            await srvChatBot(pid, meta, hit.length ? `✂️ The cut's in. Missed it: ${hit.slice(0, 6).join('; ')}${hit.length > 6 ? ` …and ${hit.length - 6} more` : ''}.` : `✂️ The cut's in — every pick in this pool made it!`);
-          } else if (leader) await srvChatBot(pid, meta, `🏁 After Round ${round}: ${leader.name} leads the pool with ${srvBig(leader.total)}${second ? `, with ${second.name} next on ${srvBig(second.total)}` : ''}.`);
+            const lost = table.map(r => ({ name: r.name, gone: outs.filter(g => { const vars = new Set(srvNameVariants(g.player_name)); return r.picks.some(pk => vars.has(srvNormalizeName(pk))); }).map(g => full(g.player_name)) }))
+              .filter(x => x.gone.length).sort((a, b) => b.gone.length - a.gone.length || a.name.localeCompare(b.name));
+            await srvChatBot(pid, meta, lost.length
+              ? `✂️ The cut's in${at}.\nMissed the cut:\n` + lost.slice(0, 8).map(x => `${x.name} — ${x.gone.join(', ')}`).join('\n') + (lost.length > 8 ? `\n…and ${lost.length - 8} more` : '')
+              : `✂️ The cut's in${at} — every pick in this pool made it! 🎉`);
+          } else if (leader && (!second || leader.total > second.total) && ev.botRoundLeader !== leader.name) {   // V226 — only a NEW leader
+            const was = ev.botRoundLeader; ev.botRoundLeader = leader.name; changed = true;
+            if (was) await srvChatBot(pid, meta, `🏁 After Round ${round}: ${leader.name} takes over the pool lead with ${srvBig(leader.total)}${second ? `, with ${second.name} next on ${srvBig(second.total)}` : ''}.`);
+            else await srvChatBot(pid, meta, `🏁 After Round ${round}: ${leader.name} leads the pool with ${srvBig(leader.total)}${second ? `, with ${second.name} next on ${srvBig(second.total)}` : ''}.`);
+          }
         } catch {}
       }
       // 🔥 Sunday lead changes (opt-in), at most one an hour
@@ -804,7 +814,8 @@ async function srvNotifyPool(pid, meta, subs, st, dg) {
         if (ev.leader !== leader.name) { ev.leader = leader.name; changed = true; }
       }
       // FINGERPRINT_V223_BOT — a new pool leader (rounds 2–4, at most one an hour)
-      if (round >= 2 && !roundDone && leader && leader.total > 0) {
+      const outright = leader && (!table[1] || leader.total > table[1].total);   // V226 — ties at the top don't count
+      if (round >= 2 && !roundDone && leader && leader.total > 0 && outright) {
         if (ev.botLeader && ev.botLeader !== leader.name && now - (ev.botLeaderAt || 0) >= 60 * 60000) {
           try { await srvChatBot(pid, meta, `🔥 ${leader.name} takes the lead in the pool — ${srvBig(leader.total)}.`); } catch {}
           ev.botLeaderAt = now; changed = true;
