@@ -443,6 +443,7 @@ export default function LandingPage() {
           { emoji:'🌍', title:'Majors, PGA Tour & DP World', desc:'All four majors and the Players, plus any weekly PGA Tour or DP World Tour event — branded automatically, purses filled in for you' },
           { emoji:'🇺🇸', title:'Presidents Cup & Ryder Cup', desc:'A match pick\'em with auto-posted pairings, matches that lock at their own tee time, pick splits and a live cup score' },
           { emoji:'🏆', title:'Season Standings', desc:'Season-long races for the majors, PGA Tour and DP World — plus every player\'s own career record' },
+          { emoji:'🎯', title:'One & Done', desc:'A season-long side game: pick one golfer a week, majors included, and bank his real prize money — but you can never use him again. January to the TOUR Championship' },
           { emoji:'👤', title:'One Account', desc:'Players sign in once with Google, Apple or email — their entries, history and winnings follow them' },
           { emoji:'🔔', title:'Notifications & Recaps', desc:'Lock reminders, the cut, round recaps and final results — by phone notification and email' },
           { emoji:'📲', title:'Works Like an App', desc:'Add it to your Home Screen for one-tap access, notifications and dark mode' },
