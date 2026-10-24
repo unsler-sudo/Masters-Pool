@@ -1,5 +1,5 @@
 'use client';
-// build: chat-open-bottom-v358-20261006-0830
+// build: no-checkmarks-v359-20261006-0845
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -6323,10 +6323,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             </div>
 
             :<div>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,padding:'8px 14px',background:`${T.primary}0a`,borderRadius:9}}>
-                <span style={{fontSize:12,color:T.primary,fontWeight:600}}>{chatVerified?<>💬 Chatting as <b>{chatName} ✓</b></>:<>👀 Chatting as a spectator — <b>{guestName||acct?.nickname||acct?.name}</b></>}</span>
-                {/* FINGERPRINT_V357 — no Sign out here; signing out lives in the profile */}
-              </div>
+              {/* FINGERPRINT_V359 — no "Chatting as … ✓" banner for entrants; spectators get a small note */}
+              {!chatVerified&&<div style={{marginBottom:10,padding:'7px 14px',background:`${T.primary}0a`,borderRadius:9,fontSize:12,color:T.primary,fontWeight:600}}>
+                👀 You're chatting as a spectator — <b>{guestName||acct?.nickname||acct?.name}</b></div>}
               {chatVerified&&!entries.find(e=>e.name===chatName)&&<div style={{background:'#fef3c7',border:'1px solid #fbbf24',borderRadius:9,padding:'10px 14px',marginBottom:10,fontSize:12,color:'#92400e',display:'flex',alignItems:'center',gap:8}}>
                 <span style={{fontSize:18}}>⚠️</span>
                 <div>
@@ -6380,7 +6379,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                             cursor:'pointer',
                           }}>
                             <div style={{fontSize:10,fontWeight:700,opacity:.7,marginBottom:2}}>
-                              {m.bot?'🤖 Pool Bot':m.name}{m.bot?'':m.guest?' 👀':' ✓'} <span style={{fontWeight:400,marginLeft:4}}>{timeAgo}</span>
+                              {m.bot?'🤖 Pool Bot':m.name}{m.guest?' 👀':''} <span style={{fontWeight:400,marginLeft:4}}>{timeAgo}</span>
                             </div>
                             {m.replyTo&&<div style={{fontSize:12,lineHeight:1.35,margin:'2px 0 5px',padding:'4px 8px',borderLeft:`3px solid ${isMe?'rgba(255,255,255,.6)':T.primary}`,background:isMe?'rgba(255,255,255,.14)':'rgba(0,0,0,.05)',borderRadius:4,opacity:.9}}>
                               <b>↩︎ {m.replyTo.name}</b> <span>{m.replyTo.text}{String(m.replyTo.text||'').length>=90?'…':''}</span></div>}
