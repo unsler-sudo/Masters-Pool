@@ -1,5 +1,5 @@
 'use client';
-// build: cut-msg-v355-20261006-0730
+// build: react-picker-v356-20261006-0800
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -1741,6 +1741,7 @@ export default function App(){
   const [chatVerifying,setChatVerifying]=useState(false);
   const chatScrollRef=useRef(null);
   const [chatNewBelow,setChatNewBelow]=useState(false);   // FINGERPRINT_V354 — new messages arrived while you were scrolled up
+  const [reactMore,setReactMore]=useState(false);          // FINGERPRINT_V356 — picker shows 3 reactions until ＋ is tapped
   const timer=useRef(null);
 
   // Build theme: base + dynamic schedule data + (if pgatour mode) per-event overrides
@@ -3490,6 +3491,17 @@ export default function App(){
   };
 
   const [reactionPickerFor,setReactionPickerFor]=useState(null);
+  // FINGERPRINT_V356 — tap anywhere outside the reaction picker to close it
+  useEffect(()=>{
+    setReactMore(false);
+    if(!reactionPickerFor) return;
+    // tap anywhere outside the picker closes it (tapping the same message is left to its own toggle)
+    const onDown=(e)=>{ const t=e.target; if(!t||!t.closest) return;
+      if(t.closest('[data-reactpicker]')||t.closest(`[data-msgid="${reactionPickerFor}"]`)) return;
+      setReactionPickerFor(null); };
+    document.addEventListener('pointerdown',onDown,true);
+    return ()=>document.removeEventListener('pointerdown',onDown,true);
+  },[reactionPickerFor]);
   const [customEmojiFor,setCustomEmojiFor]=useState(null);
 
   // FINGERPRINT_V278_HEADSHOTS — load the droplet-collected photo list once per visit
@@ -6351,7 +6363,7 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                         gap:8,
                       }}>
                         <div style={{maxWidth:'75%',position:'relative'}}>
-                          <div onClick={()=>setReactionPickerFor(reactionPickerFor===m.id?null:m.id)}
+                          <div data-msgid={m.id} onClick={()=>setReactionPickerFor(reactionPickerFor===m.id?null:m.id)}
                             onTouchStart={()=>{ clearTimeout(pressTimer.current); pressTimer.current=setTimeout(()=>{ setReactionPickerFor(null); if(adminOk){ deleteChatMessage(m.id); return; } setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)}); try{chatInputRef.current?.focus();}catch{} },500); }}
                             onTouchEnd={()=>clearTimeout(pressTimer.current)} onTouchMove={()=>clearTimeout(pressTimer.current)}
                             onContextMenu={(e)=>{ e.preventDefault(); if(adminOk){ deleteChatMessage(m.id); return; } setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)}); try{chatInputRef.current?.focus();}catch{} }}
@@ -6393,21 +6405,25 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                             padding:'6px 8px',
                             boxShadow:'0 4px 16px rgba(0,0,0,.15)',
                             display:'flex',
+                            flexWrap:'wrap',
+                            maxWidth:'calc(100vw - 70px)',
                             gap:2,
                             zIndex:5,
                             alignItems:'center',
-                          }} onClick={e=>e.stopPropagation()}>
+                          }} data-reactpicker="1" onClick={e=>e.stopPropagation()}>
                             <button type="button" onClick={()=>{setReactionPickerFor(null);setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)});try{chatInputRef.current?.focus();}catch{}}}
                               style={{background:'#f0f0f0',border:'none',fontSize:12,fontWeight:700,cursor:'pointer',padding:'5px 8px',borderRadius:6,lineHeight:1,color:'#444',whiteSpace:'nowrap'}}>↩︎ Reply</button>
                             {adminOk&&<button type="button" onClick={()=>{setReactionPickerFor(null);deleteChatMessage(m.id);}}
                               style={{background:'#fdecea',border:'none',fontSize:12,fontWeight:700,cursor:'pointer',padding:'5px 8px',borderRadius:6,lineHeight:1,color:'#b3261e',whiteSpace:'nowrap'}}>🗑 Delete</button>}
                             <div style={{width:1,height:20,background:'#ddd',margin:'0 2px'}}/>
-                            {QUICK_REACTIONS.map(emoji=>(
+                            {(reactMore?QUICK_REACTIONS:QUICK_REACTIONS.slice(0,3)).map(emoji=>(
                               <button key={emoji} type="button" onClick={()=>{reactToMessage(m.id,emoji);setReactionPickerFor(null);}}
                                 style={{background:'transparent',border:'none',fontSize:20,cursor:'pointer',padding:'2px 4px',borderRadius:6,lineHeight:1}}>
                                 {emoji}
                               </button>
                             ))}
+                            {!reactMore&&<button type="button" aria-label="More reactions" onClick={()=>setReactMore(true)}
+                              style={{background:'#f0f0f0',border:'none',fontSize:16,fontWeight:800,cursor:'pointer',width:30,height:30,borderRadius:'50%',lineHeight:1,color:'#555',marginLeft:2}}>＋</button>}
                             <div style={{width:1,height:20,background:'#ddd',margin:'0 2px'}}/>
                             <button type="button" onClick={()=>{setReactionPickerFor(null);setCustomEmojiFor(m.id);}}
                               title="Add any emoji"
