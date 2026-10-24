@@ -1,5 +1,5 @@
 'use client';
-// build: react-picker-v356-20261006-0800
+// build: chat-open-bottom-v358-20261006-0830
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3442,10 +3442,11 @@ export default function App(){
         // FINGERPRINT_V354 — only follow to the bottom if you're already there; scrolled up = stay put
         const el=chatScrollRef.current, near=!el||el.scrollHeight-el.scrollTop-el.clientHeight<90;
         let grew=false;
-        setChatMessages(prev=>{ const a=prev||[], b=d.messages; grew=b.length>a.length||(b.length&&a.length&&b[b.length-1].id!==a[a.length-1].id); return b; });
+        let first=false;
+        setChatMessages(prev=>{ const a=prev||[], b=d.messages; first=!a.length&&b.length>0; grew=b.length>a.length||(b.length&&a.length&&b[b.length-1].id!==a[a.length-1].id); return b; });
         if(d.seen)setChatSeen(d.seen); // FINGERPRINT_V209_CHAT_SEEN — read receipts
         setTimeout(()=>{ const e2=chatScrollRef.current; if(!e2) return;
-          if(near){ e2.scrollTop=e2.scrollHeight; setChatNewBelow(false); } else if(grew) setChatNewBelow(true); },50);
+          if(near||first){ e2.scrollTop=e2.scrollHeight; setChatNewBelow(false); } else if(grew) setChatNewBelow(true); },50);
       }
     }catch{}
   };
@@ -3491,6 +3492,13 @@ export default function App(){
   };
 
   const [reactionPickerFor,setReactionPickerFor]=useState(null);
+  // FINGERPRINT_V358 — opening the Chat tab always starts you at the latest message
+  useEffect(()=>{
+    if(tab!=='Chat') return;
+    const go=()=>{ const e2=chatScrollRef.current; if(e2){ e2.scrollTop=e2.scrollHeight; setChatNewBelow(false); } };
+    const t1=setTimeout(go,30), t2=setTimeout(go,250);          // again once avatars/reactions have laid out
+    return ()=>{ clearTimeout(t1); clearTimeout(t2); };
+  },[tab]);
   // FINGERPRINT_V356 — tap anywhere outside the reaction picker to close it
   useEffect(()=>{
     setReactMore(false);
@@ -6317,15 +6325,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
             :<div>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,padding:'8px 14px',background:`${T.primary}0a`,borderRadius:9}}>
                 <span style={{fontSize:12,color:T.primary,fontWeight:600}}>{chatVerified?<>💬 Chatting as <b>{chatName} ✓</b></>:<>👀 Chatting as a spectator — <b>{guestName||acct?.nickname||acct?.name}</b></>}</span>
-                <button type="button" onClick={()=>{
-                  if(typeof window!=='undefined'){
-                    localStorage.removeItem(`chat_${poolId}_name`);
-                    localStorage.removeItem(`chat_${poolId}_code`);
-                  }
-                  setChatName('');setChatCode('');setChatVerified(false);
-                }} style={{background:'transparent',border:'none',color:T.primary,fontSize:10,cursor:'pointer',textDecoration:'underline'}}>Sign out</button>
+                {/* FINGERPRINT_V357 — no Sign out here; signing out lives in the profile */}
               </div>
-              {!entries.find(e=>e.name===chatName)&&<div style={{background:'#fef3c7',border:'1px solid #fbbf24',borderRadius:9,padding:'10px 14px',marginBottom:10,fontSize:12,color:'#92400e',display:'flex',alignItems:'center',gap:8}}>
+              {chatVerified&&!entries.find(e=>e.name===chatName)&&<div style={{background:'#fef3c7',border:'1px solid #fbbf24',borderRadius:9,padding:'10px 14px',marginBottom:10,fontSize:12,color:'#92400e',display:'flex',alignItems:'center',gap:8}}>
                 <span style={{fontSize:18}}>⚠️</span>
                 <div>
                   <div style={{fontWeight:700,marginBottom:2}}>Enter the pool to chat</div>
