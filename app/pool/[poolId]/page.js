@@ -1,5 +1,5 @@
 'use client';
-// build: fullscreen-chat-v363-20261006-1000
+// build: chat-dark-picker-v364-20261006-1030
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -552,11 +552,12 @@ const gpLighten = (hex, amt = 0.55) => { const m = gpRgb(hex); if (!m) return he
   return `rgb(${L(r)}, ${L(g)}, ${L(b)})`; };
 const GP_DARK = {
   bg: { '#fff':'#1a211c','#ffffff':'#1a211c','#fafafa':'#1a211c','#f5f5f0':'#151b17','#f5f5f5':'#1a211c','#f0f0f0':'#1d241f','#f2f4f0':'#1d241f',
-        '#eee':'#232b25','#ddd':'#2c352d','#f0f0ea':'#232b25','#f6f3ea':'#1a211c','#d6d6cf':'#3a443b',
+        '#eee':'#232b25','#ddd':'#2c352d','#f1f1f1':'#232b25','#f0f0ea':'#232b25','#f6f3ea':'#1a211c','#d6d6cf':'#3a443b',
         '#e8f5e8':'#1c2b1e','#fff0d6':'#2c2416','#fff8e6':'#2c2416','#fff7e6':'#2c2416','#fff3d6':'#2c2416','#f0e6c8':'#2c2718',
         '#f2f6fb':'#18222e','#eef2ff':'#1c2236','#ffcdd2':'#3a1d1f','#fdecea':'#3a1d1f' },
   fg: { '#2a3a1e':'#e7ece4','#3a4a2e':'#dfe6db','#1f2937':'#e7ece4','#1a2e0a':'#e7ece4','#2a3a4e':'#d6dde8','#374151':'#d6dcd2','#555':'#c9d1c5',
         '#6b7c5e':'#a6b29f','#5a6b4e':'#a6b29f','#8a9580':'#97a291','#6b7280':'#a1a7b0','#888':'#9aa095','#999':'#8d9389','#aaa':'#80867c','#bbb':'#727870','#a3ac98':'#7c8576',
+        '#222':'#e7ece4','#333':'#dfe6db','#444':'#cfd6cb','#666':'#b3bbaf','#777':'#a6aea2',   // V364 — more greys
         '#2d7a1e':'#6fd062','#15803d':'#6fd062','#2d9a3e':'#6fd062','#7a5500':'#e7b75c','#7a4a00':'#e7b75c','#9a6a00':'#e7b75c','#5a4a1a':'#d9c08a','#8b6914':'#e0b85a','#b45309':'#f0a35c','#d97706':'#f5b04a',
         '#1a2a5c':'#9fb4ec','#b3261e':'#ff8a80','#a03030':'#ff8a80','#c44':'#ff8a80','#dc2626':'#ff8a80','#8b2020':'#ff8a80','#b91c1c':'#ff8a80' },
   bd: { '#f0f0ea':'#2a332b','#f0ebe0':'#2a332b','#eee8dc':'#2a332b','#eee':'#2a332b','#f5f0e8':'#2a332b','#e5e5dc':'#323c33','#e5e7eb':'#323c33','#f3f4f6':'#2a332b',
@@ -6414,9 +6415,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                             onTouchEnd={()=>clearTimeout(pressTimer.current)} onTouchMove={()=>clearTimeout(pressTimer.current)}
                             onContextMenu={(e)=>{ e.preventDefault(); if(adminOk){ deleteChatMessage(m.id); return; } setReplyTo({id:m.id,name:m.bot?'Pool Bot':m.name,text:String(m.message).slice(0,90)}); try{chatInputRef.current?.focus();}catch{} }}
                             style={{
-                            background:m.bot?`${T.primary}14`:isMe?T.primary:'#f1f1f1',
-                            border:m.bot?`1px solid ${T.primary}33`:'none',
-                            color:isMe?'#fff':'#222',
+                            background:m.bot?(gpDark?'rgba(255,255,255,.08)':`${T.primary}14`):isMe?T.primary:(gpDark?'#2a332b':'#f1f1f1'),   // V364 — readable in dark mode
+                            border:m.bot?`1px solid ${gpDark?'rgba(255,255,255,.16)':`${T.primary}33`}`:'none',
+                            color:isMe?'#fff':(gpDark?'#e7ece4':'#222'),
                             borderRadius:14,
                             padding:'8px 12px',
                             borderTopLeftRadius:isMe?14:4,
@@ -6451,8 +6452,9 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                             padding:'6px 8px',
                             boxShadow:'0 4px 16px rgba(0,0,0,.15)',
                             display:'flex',
-                            flexWrap:'wrap',
-                            maxWidth:'calc(100vw - 70px)',
+                            flexWrap:'nowrap',
+                            maxWidth:'calc(100vw - 40px)',
+                            overflowX:'auto',
                             gap:2,
                             zIndex:5,
                             alignItems:'center',
@@ -6468,14 +6470,12 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                                 {emoji}
                               </button>
                             ))}
-                            {!reactMore&&<button type="button" aria-label="More reactions" onClick={()=>setReactMore(true)}
-                              style={{background:'#f0f0f0',border:'none',fontSize:16,fontWeight:800,cursor:'pointer',width:30,height:30,borderRadius:'50%',lineHeight:1,color:'#555',marginLeft:2}}>＋</button>}
-                            <div style={{width:1,height:20,background:'#ddd',margin:'0 2px'}}/>
-                            <button type="button" onClick={()=>{setReactionPickerFor(null);setCustomEmojiFor(m.id);}}
-                              title="Add any emoji"
-                              style={{background:'#f0f0f0',border:'none',fontSize:14,cursor:'pointer',padding:'4px 8px',borderRadius:6,lineHeight:1,color:'#666',fontWeight:700}}>
-                              +
-                            </button>
+                            {/* FINGERPRINT_V364 — one ＋ at a time: first it shows more reactions, then it becomes "any emoji" */}
+                            {!reactMore
+                              ? <button type="button" aria-label="More reactions" onClick={()=>setReactMore(true)}
+                                  style={{background:'#f0f0f0',border:'none',fontSize:16,fontWeight:800,cursor:'pointer',width:30,height:30,borderRadius:'50%',lineHeight:1,color:'#555',marginLeft:2,flexShrink:0}}>＋</button>
+                              : <button type="button" aria-label="Add any emoji" title="Add any emoji" onClick={()=>{setReactionPickerFor(null);setCustomEmojiFor(m.id);}}
+                                  style={{background:'#f0f0f0',border:'none',fontSize:16,fontWeight:800,cursor:'pointer',width:30,height:30,borderRadius:'50%',lineHeight:1,color:'#555',marginLeft:2,flexShrink:0}}>＋</button>}
                           </div>}
                         </div>
                         {/* FINGERPRINT_V354 — commissioner deletes with a long-press (or 🗑 in the tap menu), no ✕ */}
