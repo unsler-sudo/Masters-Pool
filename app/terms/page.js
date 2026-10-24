@@ -44,7 +44,7 @@ export default function TermsPage() {
 
       <section style={{marginBottom:36}}>
         <h2 style={{fontSize:18,fontWeight:700,color:'#1a2a5c',marginBottom:12}}>7. Disclaimer</h2>
-        <p style={{lineHeight:1.7,color:'#374151'}}>The Service is provided "as is" without warranty of any kind. Live score data is sourced from DataGolf and may occasionally be delayed or unavailable. We are not responsible for any decisions made based on data displayed in the platform.</p>
+        <p style={{lineHeight:1.7,color:'#374151'}}>The Service is provided "as is" without warranty of any kind. Live score data is sourced from third-party data providers and may occasionally be delayed or unavailable. We are not responsible for any decisions made based on data displayed in the platform.</p>
       </section>
 
       <section style={{marginBottom:36}}>
