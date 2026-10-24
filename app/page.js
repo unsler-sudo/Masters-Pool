@@ -145,6 +145,8 @@ export default function LandingPage() {
   const [acct, setAcct] = useState(null);
   const [myPools, setMyPools] = useState([]);
   const [freeAvail, setFreeAvail] = useState(true);   // FINGERPRINT_FIRST_POOL_FREE
+  const [stats, setStats] = useState(null);            // FINGERPRINT_HOME_STATS — real counts, shown once ≥ 50 players
+  useEffect(() => { fetch('/api/auth?stats=1').then(r => r.json()).then(d => { if (d?.ok) setStats(d); }).catch(() => {}); }, []);
   const [providers, setProviders] = useState({ google:false, apple:false });
   const [authMode, setAuthMode] = useState('signup');          // signup | signin | forgot | reset
   const [af, setAf] = useState({ name:'', email:'', phone:'', password:'', code:'' });
@@ -416,6 +418,7 @@ export default function LandingPage() {
               </div>}
               <button type="button" onClick={()=>setStep('create')} style={{background:C.accent,color:'#14213d',border:'none',borderRadius:12,padding:'17px 38px',fontSize:18,fontWeight:900,cursor:'pointer',boxShadow:`0 8px 28px ${C.accent}66`}}>
                 {freeAvail?'Start your free pool ⛳':'Create your pool ⛳'}</button>
+              {stats&&stats.players>=50&&<div style={{fontSize:14,fontWeight:700,color:'#fff',marginTop:14,opacity:.92}}>⛳ {stats.players.toLocaleString()} players{stats.pools>=5?` · ${stats.pools.toLocaleString()} pools`:''}</div>}
               <div style={{fontSize:13,color:'rgba(255,255,255,.75)',marginTop:12}}>{freeAvail?<><b style={{color:'#fff'}}>Your first pool is free</b> · Players always join free</>:'$10 per tournament · Players always join free'}</div>
             </div>
             <div style={{background:'rgba(0,0,0,.28)',padding:'14px 20px',textAlign:'center',fontSize:13,lineHeight:1.5,color:'rgba(255,255,255,.88)'}}>
