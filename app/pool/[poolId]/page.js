@@ -1,5 +1,5 @@
 'use client';
-// build: no-checkmarks-v359-20261006-0845
+// build: keyboard-dock-v360-20261006-0915
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3492,6 +3492,20 @@ export default function App(){
   };
 
   const [reactionPickerFor,setReactionPickerFor]=useState(null);
+  // FINGERPRINT_V360_KEYBOARD — iMessage-style: while typing, the message box docks right on top of the keyboard.
+  // The keyboard's height = how much of the layout viewport the visual viewport no longer shows.
+  const [composerFocus,setComposerFocus]=useState(false);
+  const [kbOffset,setKbOffset]=useState(0);
+  const [composerH,setComposerH]=useState(0);
+  const composerRef=useRef(null);
+  useEffect(()=>{
+    if(tab!=='Chat'||typeof window==='undefined'||!window.visualViewport) return;
+    const vv=window.visualViewport;
+    const upd=()=>setKbOffset(Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop)));
+    upd(); vv.addEventListener('resize',upd); vv.addEventListener('scroll',upd);
+    return ()=>{ vv.removeEventListener('resize',upd); vv.removeEventListener('scroll',upd); };
+  },[tab]);
+  const docked=composerFocus&&kbOffset>60;              // a real keyboard is up (desktop never docks)
   // FINGERPRINT_V358 — opening the Chat tab always starts you at the latest message
   useEffect(()=>{
     if(tab!=='Chat') return;
@@ -6456,6 +6470,11 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   </div>;
                 })()}
               </div>
+              {/* FINGERPRINT_V360_KEYBOARD — docks on the keyboard while typing; a spacer keeps the page from jumping */}
+              {docked&&<div style={{height:composerH}}/>}
+              <div ref={composerRef} style={docked?{position:'fixed',left:0,right:0,bottom:kbOffset,zIndex:60,background:'#fff',
+                  padding:'8px 10px',borderTop:`1px solid ${T.cardBorder}`,boxShadow:'0 -4px 14px rgba(0,0,0,.08)'}:{}}>
+              <div style={docked?{maxWidth:760,margin:'0 auto'}:{}}>
               {/* FINGERPRINT_V354 — new messages while you were reading further up */}
               {chatNewBelow&&<div style={{position:'relative',height:0,zIndex:3}}>
                 <button type="button" onClick={()=>{ const e2=chatScrollRef.current; if(e2) e2.scrollTo({top:e2.scrollHeight,behavior:'smooth'}); setChatNewBelow(false); }}
@@ -6478,14 +6497,20 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                 <input ref={chatInputRef} type="text" placeholder={replyTo?`Reply to ${replyTo.name}…`:'Say something... (type @ to mention)'} value={chatInput} maxLength={300}
                   onChange={e=>setChatInput(e.target.value)}
                   onKeyDown={e=>e.key==='Enter'&&!chatSending&&sendChatMessage()}
-                  style={{...inp,flex:1}}/>
+                  onFocus={()=>{ try{ setComposerH(composerRef.current?.offsetHeight||0); }catch{} setComposerFocus(true);
+                    setTimeout(()=>{ const e2=chatScrollRef.current; if(e2){ e2.scrollTop=e2.scrollHeight; setChatNewBelow(false); } },320); }}
+                  onBlur={()=>setTimeout(()=>setComposerFocus(false),120)}
+                  style={{...inp,flex:1,marginBottom:0}}/>
                 <button type="button" onClick={sendChatMessage} disabled={chatSending||!chatInput.trim()}
+                  onPointerDown={e=>e.preventDefault()} onMouseDown={e=>e.preventDefault()}
                   style={{...pri,padding:'10px 18px',opacity:(chatSending||!chatInput.trim())?.4:1}}>
                   {chatSending?'...':'Send'}
                 </button>
               </div>
-              <div style={{fontSize:10,color:'#aaa',textAlign:'center',marginTop:6}}>
+              {!docked&&<div style={{fontSize:10,color:'#aaa',textAlign:'center',marginTop:6}}>
                 {chatInput.length}/300 · Tap a message to react or reply · Type @ to mention
+              </div>}
+              </div>
               </div>
             </div>
           }
