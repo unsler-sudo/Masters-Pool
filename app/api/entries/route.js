@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: oad-hide-v235-20261006-1530
+// build: oad-events-v236-20261006-1600
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -724,6 +724,7 @@ async function srvOadSettle(poolId, W) {
   if (!W?.done || !W.event) return false;
   const year = W.year, wk = `${srvOadSlug(W.event)}_${year}`, d = await srvOadLoad(poolId, year);
   if (d.weeks?.[wk]?.done) return false;
+  if (srvOadSkip(await getPoolMeta(poolId), year).has(srvOadSlug(W.event))) return false;   // V236 — week switched off
   const picked = [...new Set(Object.values(d.players || {}).map(pl => pl.picks?.[wk]?.g).filter(Boolean))];
   let purse = null; try { const pr = await redis('GET', 'tournament:purse:pgatour'); purse = pr ? parseInt(pr, 10) : null; } catch {}
   if (!purse) purse = srvIsTourChampionship(W.event.toLowerCase()) ? 40000000 : (srvIsSignature(W.event.toLowerCase(), null) ? 20000000 : 9000000);
@@ -736,9 +737,31 @@ async function srvOadSettle(poolId, W) {
   try { await srvOadResultsEmail(poolId, await getPoolMeta(poolId), d, wk); } catch (e) { console.log('[oad email]', e.message); }   // V232
   return true;
 }
+// FINGERPRINT_V236_OAD_EVENTS — the commissioner chooses which PGA Tour events count (all on by default).
+// Switched-off weeks take no picks, aren't settled, and are left out of standings and "used" golfers.
+const srvOadWkSlug = (wk) => String(wk || '').replace(/_\d{4}$/, '');
+async function srvOadSchedule(year) {
+  try { const c = await redis('GET', `oad:sched:${year}`); if (c) { const j = JSON.parse(c); if (Date.now() - j.at < 12 * 3600e3) return j.events; } } catch {}
+  let events = [];
+  try {
+    const r = await fetch(`https://feeds.datagolf.com/get-schedule?tour=pga&season=${year}&file_format=json&key=${process.env.DATAGOLF_API_KEY}`, { cache: 'no-store', signal: AbortSignal.timeout(6000) });
+    const j = r.ok ? await r.json() : null;
+    const all = (j?.schedule || []).filter(e => e.event_name && /^\d{4}-\d{2}-\d{2}/.test(e.start_date || '') && String(e.start_date).startsWith(String(year)))
+      .sort((a, b) => String(a.start_date).localeCompare(String(b.start_date)));
+    const tc = all.findIndex(e => srvIsTourChampionship(e.event_name.toLowerCase()));
+    events = (tc >= 0 ? all.slice(0, tc + 1) : all).map(e => ({ name: e.event_name, slug: srvOadSlug(e.event_name), start: String(e.start_date).slice(0, 10),
+      major: !!srvMajorOfEvent(e.event_name) && srvMajorOfEvent(e.event_name) !== 'players', players: srvMajorOfEvent(e.event_name) === 'players',
+      signature: srvIsSignature(e.event_name.toLowerCase(), null) }));
+  } catch {}
+  if (events.length) { try { await redis('SET', `oad:sched:${year}`, JSON.stringify({ at: Date.now(), events })); } catch {} }
+  return events;
+}
+const srvOadSkip = (meta, year) => new Set((meta?.oad?.skip?.[year]) || []);
+
 function srvOadTable(d, curWk, revealCur) {
   const rows = Object.entries(d.players || {}).map(([uid, pl]) => {
-    const weeks = Object.entries(pl.picks || {}).map(([wk, pk]) => { const W = d.weeks?.[wk];
+    const off = new Set(d.skip || []);
+    const weeks = Object.entries(pl.picks || {}).filter(([wk]) => !off.has(srvOadWkSlug(wk))).map(([wk, pk]) => { const W = d.weeks?.[wk];
       const show = wk !== curWk || revealCur || W?.done;
       return { wk, event: W?.event || pk.event || '', g: show ? pk.g : null, earned: W?.done ? (+W.earnings?.[pk.g] || 0) : null, done: !!W?.done }; })
       .sort((a, b) => String(b.wk).localeCompare(String(a.wk)));
@@ -791,7 +814,7 @@ async function srvOadRemind(poolId, meta, W) {
   const now = new Date(); if (now.getUTCDay() !== 3 || now.getUTCHours() < 21) return 0;
   if (now.getUTCMonth() >= 8 && !srvIsTourChampionship(W.event.toLowerCase())) return 0;          // off-season
   const year = W.year, wk = `${srvOadSlug(W.event)}_${year}`, d = await srvOadLoad(poolId, year);
-  if (d.closed || d.remindedWk === wk) return 0;
+  if (d.closed || d.remindedWk === wk || srvOadSkip(meta, year).has(srvOadSlug(W.event))) return 0;   // V236
   d.remindedWk = wk; await srvOadSave(poolId, year, d);                                            // once per week, even if sending fails
   const need = Object.entries(d.players || {}).filter(([, pl]) => !pl.picks?.[wk]).map(([uid]) => uid);
   const users = await srvOadUsers(need);
@@ -3819,17 +3842,20 @@ export async function POST(request) {
       const user = body.auth ? await verifyToken(body.auth) : null;
       // off-season: September–December (the fall events don't count), except the TOUR Championship itself
       const offSeason = new Date().getMonth() >= 8 && !(W.event && srvIsTourChampionship(W.event.toLowerCase()));
-      const locked = !!W.started || !!d.weeks?.[wk]?.done, closed = !!d.closed || offSeason;
+      const weekOff = !!wk && srvOadSkip(meta, year).has(srvOadSlug(W.event));   // V236 — commissioner switched this week off
+      const locked = !!W.started || !!d.weeks?.[wk]?.done || weekOff, closed = !!d.closed || offSeason;
       if (body.action === 'oad-pick') {
         if (!user) return Response.json({ error:'Sign in to play' }, { status:401 });
         if (closed) return Response.json({ error: offSeason ? `The ${year + 1} season starts in January` : 'The season is over' }, { status:409 });
         if (!wk) return Response.json({ error:'No PGA Tour event this week' }, { status:409 });
+        if (weekOff) return Response.json({ error:'This week doesn’t count in One & Done' }, { status:409 });
         if (locked) return Response.json({ error:'This week’s picks are locked' }, { status:409 });
         const g = String(body.golfer || '');
         if (!W.field.includes(g)) return Response.json({ error:'That golfer isn’t in this week’s field' }, { status:400 });
         const me = d.players[user.uid] = d.players[user.uid] || { name: String(user.nickname || user.name || 'Player').slice(0, 30), picks: {} };
         me.name = String(user.nickname || user.name || me.name).slice(0, 30);
-        if (Object.entries(me.picks).some(([w2, pk]) => w2 !== wk && pk.g === g)) return Response.json({ error:'You’ve already used him this season' }, { status:409 });
+        const offS = new Set(d.skip || []);
+        if (Object.entries(me.picks).some(([w2, pk]) => w2 !== wk && pk.g === g && !offS.has(srvOadWkSlug(w2)))) return Response.json({ error:'You’ve already used him this season' }, { status:409 });
         me.picks[wk] = { g, event: W.event, at: new Date().toISOString() };
         await srvOadSave(poolId, year, d);
         try { await redis('SADD', `user:${user.uid}:pools`, poolId); } catch {}
@@ -3849,8 +3875,26 @@ export async function POST(request) {
         started: !offSeason && (locked || Object.values(d.weeks || {}).some(w => w.done)),
         joined: !!(user && (pd.players?.[user.uid] || d.players?.[user.uid])),
         field: locked || closed ? [] : W.field, standings: srvOadTable(d, wk, locked),
-        me: user ? { uid: user.uid, pick: mine?.picks?.[wk]?.g || null, used: Object.entries(mine?.picks || {}).filter(([w2]) => w2 !== wk).map(([, pk]) => pk.g) } : null,
+        weekOff,
+        me: user ? { uid: user.uid, pick: mine?.picks?.[wk]?.g || null, used: Object.entries(mine?.picks || {}).filter(([w2]) => w2 !== wk && !new Set(d.skip || []).has(srvOadWkSlug(w2))).map(([, pk]) => pk.g) } : null,
         counts });
+    }
+    if (body.action === 'oad-schedule' || body.action === 'set-oad-schedule') {   // FINGERPRINT_V236_OAD_EVENTS
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId); if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
+      const now = new Date(), year = +body.year || (now.getMonth() >= 8 ? now.getFullYear() + 1 : now.getFullYear());
+      const events = await srvOadSchedule(year), today = now.toISOString().slice(0, 10);
+      let started = ''; try { const W = await srvOadWeek(); if (W.started && W.year === year) started = srvOadSlug(W.event); } catch {}
+      const fixed = (e) => e.start < today || e.slug === started;              // already played / under way
+      const skip = srvOadSkip(meta, year);
+      if (body.action === 'set-oad-schedule') {
+        const want = new Set((Array.isArray(body.skip) ? body.skip : []).map(String));
+        for (const e of events) if (!fixed(e)) { if (want.has(e.slug)) skip.add(e.slug); else skip.delete(e.slug); }
+        meta.oad = { ...(meta.oad || {}), skip: { ...((meta.oad || {}).skip || {}), [year]: [...skip] } };
+        await redis('SET', k(poolId, 'meta'), JSON.stringify(meta));
+        const d = await srvOadLoad(poolId, year); d.skip = [...skip]; await srvOadSave(poolId, year, d);   // standings read this
+      }
+      return Response.json({ ok:true, year, events: events.map(e => ({ ...e, on: !skip.has(e.slug), fixed: fixed(e) })) });
     }
     if (body.action === 'set-oad') {
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
