@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: recap-awards-v229-20261006-1130
+// build: major-tables-v234-20261006-1500
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -545,6 +545,9 @@ async function srvSendRecap(poolId, archiveKey) {
   const uidByEmail = {};
   const emails = [...new Set(res.map(r => String(r.entry.email || '').toLowerCase().trim()).filter(Boolean))];
   if (emails.length) { const u = await redis('MGET', ...emails.map(e => `user:email:${e}`)); emails.forEach((e, i) => { if (u[i]) uidByEmail[e] = u[i]; }); }
+  // FINGERPRINT_V232_OAD_RECAP — each one-and-done player's line (settle the week first so it's there)
+  let oadD = null, oadWeek = null;
+  if (meta?.oad?.on) { try { await srvOadSettle(poolId, await srvOadWeek()); oadD = await srvOadLoad(poolId, new Date().getFullYear()); oadWeek = srvOadRecentWeek(oadD); } catch {} }
   const out = [];
   for (const email of emails) {
     const mine = res.filter(r => String(r.entry.email || '').toLowerCase().trim() === email);
@@ -554,7 +557,9 @@ async function srvSendRecap(poolId, archiveKey) {
       + (r.best && r.best.v > 0 ? `<div style="font-size:13px;color:#6b7280">${srvEscHtml(last(r.best.p))} led your team with ${srvBig(r.best.v)}</div>` : '') + `</div>`).join('');
     const uid = mine.map(r => r.entry.uid).find(Boolean) || uidByEmail[email];
     const si = uid ? seasonRows.findIndex(x => x.uid === uid) : -1;
-    const season = si >= 0 ? `<p style="font-size:14px;color:#374151;margin:14px 0 0">📈 Season: you're <b>${srvOrd(si + 1)}</b> in the ${raceName} standings with <b>${usd(seasonRows[si].winnings)}</b> won.</p>` : '';
+    const oadLine = oadD && oadWeek && uid ? srvOadLine(oadD, uid, oadWeek) : '';
+    const season = (si >= 0 ? `<p style="font-size:14px;color:#374151;margin:14px 0 0">📈 Season: you're <b>${srvOrd(si + 1)}</b> in the ${raceName} standings with <b>${usd(seasonRows[si].winnings)}</b> won.</p>` : '')
+      + (oadLine ? `<p style="font-size:14px;color:#374151;margin:8px 0 0">${oadLine}</p>` : '');
     out.push({ from: 'Tuna Golf Pool <noreply@tunagolfpool.com>', to: email, subject, html:
 `<div style="font-family:-apple-system,system-ui,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f2937">
   <div style="font-size:12px;font-weight:700;color:#1a4d2e;letter-spacing:.6px">⛳ ${srvEscHtml(poolName).toUpperCase()}</div>
@@ -687,6 +692,117 @@ async function srvChatBot(pid, meta, text) {
 const srvLast = (n) => String(n || '').includes(',') ? String(n).split(',')[0].trim() : String(n || '').trim().split(/\s+/).slice(-1)[0];
 const srvJoinNames = (a) => a.length <= 1 ? (a[0] || '') : a.length === 2 ? `${a[0]} & ${a[1]}` : `${a.slice(0, -1).join(', ')} & ${a[a.length - 1]}`;
 
+// FINGERPRINT_V230_OAD — ONE-AND-DONE: a season-long side game that belongs to the POOL (not its mode), so it
+// keeps running — and stays visible — whatever the pool is following. It follows the PGA Tour schedule itself:
+// each week every player picks one golfer from that week's PGA Tour field, earns his real prize money, and can
+// never use him again that season. Season = calendar year, January → TOUR Championship. Picks lock when the
+// first group starts (live feed). A missed week scores $0. Stored at pool:{id}:oad:{year}.
+const srvOadSlug = (n) => String(n || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+const srvOadKey = (poolId, year) => k(poolId, `oad:${year}`);
+async function srvOadLoad(poolId, year) { try { const r = await redis('GET', srvOadKey(poolId, year)); return r ? JSON.parse(r) : { players: {}, weeks: {} }; } catch { return { players: {}, weeks: {} }; } }
+async function srvOadSave(poolId, year, d) { await redis('SET', srvOadKey(poolId, year), JSON.stringify(d)); }
+// this week's PGA Tour event + live leaderboard, shared by every pool (cached briefly)
+async function srvOadWeek() {
+  const dk = process.env.DATAGOLF_API_KEY, now = Date.now();
+  try { const c = await redis('GET', 'oad:week'); if (c) { const j = JSON.parse(c); if (now - j.at < 120000) return j; } } catch {}
+  const get = async (path) => { try { const r = await fetch(`https://feeds.datagolf.com/${path}&file_format=json&key=${dk}`, { cache: 'no-store', signal: AbortSignal.timeout(6000) }); return r.ok ? await r.json() : null; } catch { return null; } };
+  const [fu, ip] = await Promise.all([get('field-updates?tour=pga'), get('preds/in-play?tour=pga&dead_heat=no&odds_format=percent')]);
+  const event = fu?.event_name || ip?.info?.event_name || '';
+  const players = (ip?.data || []);
+  const sameEvent = !!(event && ip?.info?.event_name && srvEvMatch(ip.info.event_name, event));
+  const started = sameEvent && players.some(p => { const t = String(p.thru ?? '').toUpperCase(); return t === 'F' || +t > 0; });
+  const round = sameEvent ? (+ip.info.current_round || 0) : 0;
+  const active = srvApplyMakeCut(players).filter(p => !/CUT|WD|DQ|MC/i.test(String(p.current_pos || '')));
+  const done = sameEvent && round >= 4 && active.length > 0 && active.every(p => String(p.thru).toUpperCase() === 'F' || +p.thru === 18);
+  const field = (fu?.field || []).map(p => p.player_name).filter(Boolean);
+  const w = { at: now, event, year: new Date().getFullYear(), started, done, field, players: done ? players : [] };
+  try { await redis('SET', 'oad:week', JSON.stringify(w)); } catch {}
+  return w;
+}
+// settle a finished week: the prize money of every golfer picked that week (official payouts, ties, purse)
+async function srvOadSettle(poolId, W) {
+  if (!W?.done || !W.event) return false;
+  const year = W.year, wk = `${srvOadSlug(W.event)}_${year}`, d = await srvOadLoad(poolId, year);
+  if (d.weeks?.[wk]?.done) return false;
+  const picked = [...new Set(Object.values(d.players || {}).map(pl => pl.picks?.[wk]?.g).filter(Boolean))];
+  let purse = null; try { const pr = await redis('GET', 'tournament:purse:pgatour'); purse = pr ? parseInt(pr, 10) : null; } catch {}
+  if (!purse) purse = srvIsTourChampionship(W.event.toLowerCase()) ? 40000000 : (srvIsSignature(W.event.toLowerCase(), null) ? 20000000 : 9000000);
+  const em = srvComputeEarnings(srvApplyMakeCut(W.players), purse, W.event, srvMajorOfEvent(W.event) || 'pgatour') || {};   // V234 — majors use their own tables
+  const byNorm = {}; for (const [n, v] of Object.entries(em)) byNorm[srvNormalizeName(n)] = v;
+  const earnings = {}; for (const g of picked) { let v = em[g]; if (v == null) for (const x of srvNameVariants(g)) if (byNorm[x] != null) { v = byNorm[x]; break; } earnings[g] = +v || 0; }
+  d.weeks = d.weeks || {}; d.weeks[wk] = { event: W.event, done: true, at: new Date().toISOString(), earnings };
+  if (srvIsTourChampionship(W.event.toLowerCase())) d.closed = true;     // season over
+  await srvOadSave(poolId, year, d);
+  try { await srvOadResultsEmail(poolId, await getPoolMeta(poolId), d, wk); } catch (e) { console.log('[oad email]', e.message); }   // V232
+  return true;
+}
+function srvOadTable(d, curWk, revealCur) {
+  const rows = Object.entries(d.players || {}).map(([uid, pl]) => {
+    const weeks = Object.entries(pl.picks || {}).map(([wk, pk]) => { const W = d.weeks?.[wk];
+      const show = wk !== curWk || revealCur || W?.done;
+      return { wk, event: W?.event || pk.event || '', g: show ? pk.g : null, earned: W?.done ? (+W.earnings?.[pk.g] || 0) : null, done: !!W?.done }; })
+      .sort((a, b) => String(b.wk).localeCompare(String(a.wk)));
+    return { uid, name: pl.name, total: weeks.reduce((t, w) => t + (w.earned || 0), 0), played: weeks.filter(w => w.done).length, weeks };
+  });
+  rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  return rows;
+}
+
+// FINGERPRINT_V232_OAD_EXTRAS — one-and-done: the season's most recently settled week, emails, reminders
+const srvFlipName = (n) => String(n || '').includes(',') ? String(n).split(',').map(x => x.trim()).reverse().join(' ') : String(n || '');
+function srvOadRecentWeek(d, maxDays = 4) {
+  const ws = Object.entries(d.weeks || {}).filter(([, w]) => w.done && w.at && Date.now() - Date.parse(w.at) < maxDays * 864e5).sort((a, b) => String(b[1].at).localeCompare(String(a[1].at)));
+  return ws.length ? { wk: ws[0][0], ...ws[0][1] } : null;
+}
+async function srvOadUsers(uids) {
+  if (!uids.length) return {};
+  const r = await redis('MGET', ...uids.map(u => `user:${u}`)); const out = {};
+  uids.forEach((u, i) => { try { if (r[i]) out[u] = JSON.parse(r[i]); } catch {} }); return out;
+}
+// "🎯 Your One & Done: Rai — $3.69M · you're 2nd for the season at $5.4M"
+function srvOadLine(d, uid, week) {
+  if (!week || !d.players?.[uid]) return '';
+  const table = srvOadTable(d, week.wk, true), i = table.findIndex(r => r.uid === uid), me = table[i];
+  const g = d.players[uid].picks?.[week.wk]?.g, earned = g ? (+week.earnings?.[g] || 0) : 0;
+  return g ? `🎯 Your One &amp; Done: <b>${srvEscHtml(srvFlipName(g))}</b> — ${earned ? srvBig(earned) : '$0'} · you're <b>${srvOrd(i + 1)}</b> for the season at <b>${me.total ? srvBig(me.total) : '$0'}</b>`
+           : `🎯 One &amp; Done: no pick this week ($0) · you're <b>${srvOrd(i + 1)}</b> for the season at <b>${me.total ? srvBig(me.total) : '$0'}</b>`;
+}
+const srvOadUrl = (poolId) => `${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}?tab=oad`;
+const srvOadMail = (to, subject, body, poolId, btn) => ({ from: 'Tuna Golf Pool <noreply@tunagolfpool.com>', to, subject, html:
+  `<div style="font-family:-apple-system,system-ui,Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1f2937">${body}
+   <p style="margin:22px 0"><a href="${srvOadUrl(poolId)}" style="background:#1a4d2e;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block">${btn} →</a></p>
+   <p style="font-size:11px;color:#9ca3af">You're getting this because you're playing One &amp; Done in this pool.</p></div>` });
+// results email for pools NOT in PGA Tour mode (PGA Tour pools get the line in their weekly recap instead)
+async function srvOadResultsEmail(poolId, meta, d, wk) {
+  if (!process.env.RESEND_API_KEY || meta?.major === 'pgatour') return 0;
+  const week = { wk, ...d.weeks[wk] }, table = srvOadTable(d, wk, true), users = await srvOadUsers(Object.keys(d.players || {}));
+  const top = table.slice(0, 5).map((r, i) => `<tr><td style="padding:5px 8px;color:#6b7280">${i + 1}</td><td style="padding:5px 8px;font-weight:700;color:#1a4d2e">${srvEscHtml(r.name)}</td><td style="padding:5px 8px;text-align:right">${r.total ? srvBig(r.total) : '$0'}</td></tr>`).join('');
+  const out = Object.keys(d.players || {}).map(uid => { const u = users[uid]; if (!u?.email) return null;
+    return srvOadMail(u.email, `🎯 One & Done: ${week.event} results`,
+      `<div style="font-size:12px;font-weight:700;color:#1a4d2e;letter-spacing:.6px">⛳ ${srvEscHtml(String(meta?.poolName || '').toUpperCase())}</div>
+       <h2 style="margin:6px 0 10px;color:#1a4d2e;font-size:21px">One &amp; Done — ${srvEscHtml(week.event)}</h2>
+       <p style="font-size:15px;margin:0 0 14px">${srvOadLine(d, uid, week)}</p>
+       <table style="width:100%;border-collapse:collapse;font-size:14px;background:#f6f3ea;border-radius:10px">${top}</table>`, poolId, 'See the standings'); }).filter(Boolean);
+  return out.length ? srvResendBatch(out) : 0;
+}
+// Wednesday ~5 PM Eastern: remind anyone in this season's game who hasn't picked yet (once a week, by email)
+async function srvOadRemind(poolId, meta, W) {
+  if (!process.env.RESEND_API_KEY || !W?.event || W.started) return 0;
+  const now = new Date(); if (now.getUTCDay() !== 3 || now.getUTCHours() < 21) return 0;
+  if (now.getUTCMonth() >= 8 && !srvIsTourChampionship(W.event.toLowerCase())) return 0;          // off-season
+  const year = W.year, wk = `${srvOadSlug(W.event)}_${year}`, d = await srvOadLoad(poolId, year);
+  if (d.closed || d.remindedWk === wk) return 0;
+  d.remindedWk = wk; await srvOadSave(poolId, year, d);                                            // once per week, even if sending fails
+  const need = Object.entries(d.players || {}).filter(([, pl]) => !pl.picks?.[wk]).map(([uid]) => uid);
+  const users = await srvOadUsers(need);
+  const out = need.map(uid => users[uid]?.email && srvOadMail(users[uid].email, `⏰ Make your One & Done pick for the ${W.event}`,
+    `<div style="font-size:12px;font-weight:700;color:#1a4d2e;letter-spacing:.6px">⛳ ${srvEscHtml(String(meta?.poolName || '').toUpperCase())}</div>
+     <h2 style="margin:6px 0 10px;color:#1a4d2e;font-size:21px">Your One &amp; Done pick is due</h2>
+     <p style="font-size:15px;line-height:1.5">The <b>${srvEscHtml(W.event)}</b> starts tomorrow and you haven't picked yet. Picks lock when the first group tees off — no pick means $0 this week.</p>`,
+    poolId, 'Make my pick')).filter(Boolean);
+  return out.length ? srvResendBatch(out) : 0;
+}
+
 async function srvNotifyTick() {
   if (!srvPushReady()) return { skipped: 'no VAPID keys' };
   let pids = [];
@@ -708,6 +824,7 @@ async function srvNotifyTick() {
   for (let i = 0; i < pids.length; i++) {
     try {
       const meta = JSON.parse(vals[i * 3] || 'null'), subs = JSON.parse(vals[i * 3 + 1] || '{}'), st = JSON.parse(vals[i * 3 + 2] || '{}');
+      if (meta?.oad?.on) { const opid = pids[i]; try { const W = await srvOadWeek(); await srvOadSettle(opid, W); await srvOadRemind(opid, meta, W); } catch (e) { console.log('[oad]', opid, e.message); } }   // FINGERPRINT_V230_OAD / V232 reminder
       if (!meta || (!Object.values(subs).some(v => (v || []).length) && (meta.chatBot === false || meta.active === false))) continue;
       out[pids[i]] = await srvNotifyPool(pids[i], meta, subs, st, dg);
     } catch (e) { out[pids[i]] = 'error: ' + e.message; }
@@ -1290,12 +1407,113 @@ function srvParsePos(pos) {
   const n = parseInt(s, 10);
   return isNaN(n) ? null : n;
 }
+// FINGERPRINT_V234_MAJOR_TABLES — copied exactly from the page's payout tables, so server money matches
+const SRV_PAYOUT_MASTERS = {
+  1:0.20000000,2:0.10800000,3:0.06800000,4:0.04800000,5:0.04000000,
+  6:0.03600000,7:0.03350000,8:0.03100000,9:0.02900000,10:0.02700000,
+  11:0.02500000,12:0.02300000,13:0.02100000,14:0.01900000,15:0.01800000,
+  16:0.01700000,17:0.01600000,18:0.01500000,19:0.01400000,20:0.01300000,
+  21:0.01200000,22:0.01120000,23:0.01040000,24:0.00960000,25:0.00880000,
+  26:0.00800000,27:0.00770000,28:0.00740000,29:0.00710000,30:0.00680000,
+  31:0.00650000,32:0.00620000,33:0.00590000,34:0.00565000,35:0.00540000,
+  36:0.00515000,37:0.00490000,38:0.00470000,39:0.00450000,40:0.00430000,
+  41:0.00410000,42:0.00390000,43:0.00370000,44:0.00350000,45:0.00330000,
+  46:0.00310000,47:0.00290000,48:0.00274000,49:0.00260000,50:0.00252000,
+  51:0.00246000,52:0.00240000,53:0.00236000,54:0.00232000
+};
+const SRV_PAYOUT_PGA = {
+  1:0.18000000,2:0.10800000,3:0.06800000,4:0.04800000,5:0.04000000,
+  6:0.03549268,7:0.03322195,8:0.03104390,9:0.02896098,10:0.02697561,
+  11:0.02508098,12:0.02328293,13:0.02157902,14:0.01997024,15:0.01845561,
+  16:0.01703610,17:0.01571122,18:0.01448049,19:0.01334488,20:0.01230390,
+  21:0.01135756,22:0.01050585,23:0.00974829,24:0.00913317,25:0.00854195,
+  26:0.00797366,27:0.00742976,28:0.00690927,29:0.00641220,30:0.00593902,
+  31:0.00556049,32:0.00522927,33:0.00494537,34:0.00470878,35:0.00451951,
+  36:0.00433951,37:0.00416439,38:0.00399415,39:0.00382829,40:0.00366732,
+  41:0.00351122,42:0.00336000,43:0.00321317,44:0.00307122,45:0.00293415,
+  46:0.00280146,47:0.00267366,48:0.00255073,49:0.00243220,50:0.00231902,
+  51:0.00220976,52:0.00210585,53:0.00200634,54:0.00191171,55:0.00182195,
+  56:0.00173659,57:0.00165610,58:0.00159024,59:0.00153317,60:0.00148585,
+  61:0.00144829,62:0.00142049,63:0.00139707,64:0.00137463,65:0.00135317,
+  66:0.00133220,67:0.00131171,68:0.00129171,69:0.00127220,70:0.00125317,
+  71:0.00123707,72:0.00122146,73:0.00120634,74:0.00119659,75:0.00118878,
+  76:0.00118195,77:0.00117707,78:0.00117268,79:0.00116927,80:0.00116732,
+  81:0.00116634,82:0.00116585
+};
+const SRV_PAYOUT_USOPEN = {
+  1:0.20000000,2:0.10800000,3:0.06811244,4:0.04092809,5:0.04092809,
+  6:0.04092809,7:0.02742622,8:0.02742622,9:0.02742622,10:0.02742622,
+  11:0.01803831,12:0.01803831,13:0.01803831,14:0.01803831,15:0.01803831,
+  16:0.01803831,17:0.01248738,18:0.01248738,19:0.01248738,20:0.01248738,
+  21:0.01248738,22:0.01023200,23:0.00804893,24:0.00804893,25:0.00804893,
+  26:0.00804893,27:0.00804893,28:0.00804893,29:0.00804893,30:0.00804893,
+  31:0.00804893,32:0.00572249,33:0.00572249,34:0.00572249,35:0.00572249,
+  36:0.00572249,37:0.00572249,38:0.00572249,39:0.00452707,40:0.00452707,
+  41:0.00452707,42:0.00452707,43:0.00322631,44:0.00322631,45:0.00322631,
+  46:0.00322631,47:0.00322631,48:0.00322631,49:0.00322631,50:0.00322631,
+  51:0.00322631,52:0.00322631,53:0.00228742,54:0.00228742,55:0.00228742,
+  56:0.00216111,57:0.00216111,58:0.00216111,59:0.00216111,60:0.00216111,
+  61:0.00209964,62:0.00209964,63:0.00206893,64:0.00206893,65:0.00199724,
+  66:0.00199724,67:0.00199724,68:0.00199724,69:0.00199724,70:0.00199724,
+  71:0.00192551,72:0.00190502,
+};
+const SRV_PAYOUT_OPEN = {
+  1:0.18028169,2:0.10377465,3:0.06653521,4:0.05166197,5:0.04157746,
+  6:0.03603944,7:0.03096901,8:0.02609859,9:0.02288451,10:0.02067606,
+  11:0.01882817,12:0.01667606,13:0.01569014,14:0.01468732,15:0.01362817,
+  16:0.01254648,17:0.01194366,18:0.01138028,19:0.01090704,20:0.01039437,
+  21:0.00990986,22:0.00941408,23:0.00890704,24:0.00841127,25:0.00812676,
+  26:0.00777465,27:0.00749296,28:0.00723380,29:0.00691831,30:0.00656338,
+  31:0.00634930,32:0.00602254,33:0.00580845,34:0.00564507,35:0.00544789,
+  36:0.00523380,37:0.00498592,38:0.00473803,39:0.00456338,40:0.00441690,
+  41:0.00423662,42:0.00402817,43:0.00384789,44:0.00362817,45:0.00341972,
+  46:0.00324507,47:0.00311549,48:0.00299155,49:0.00285634,50:0.00278310,
+  51:0.00272394,52:0.00267606,53:0.00263662,54:0.00259718,55:0.00255211,
+  56:0.00251831,57:0.00249296,58:0.00247606,59:0.00245775,60:0.00244085,
+  61:0.00242817,62:0.00241690,63:0.00240563,64:0.00239437,65:0.00237465,
+  66:0.00235634,67:0.00233803,68:0.00232113,69:0.00230423,70:0.00229296,
+  71:0.00228592,72:0.00227887,73:0.00227183,74:0.00226479,75:0.00225775,
+  // FINGERPRINT_V197_OPEN_FINAL — final field: 78 professionals completed 72 holes.
+  // 77/78 encoded per the published final list ($38,825/$38,700). NOTE: those two values break
+  // the R&A's stated $125-per-place rule (which yields $39,825/$39,700) and sit below its $39,450
+  // floor — likely a source typo (39→38 thousands digit), kept as published per commissioner call.
+  76:0.00225070,77:0.00218732,78:0.00218028
+};
+const SRV_PAYOUT_PLAYERS = {
+  1:0.18000000,2:0.10900000,3:0.06900000,4:0.04900000,5:0.03700000,
+  6:0.03700000,7:0.03700000,8:0.02925000,9:0.02925000,10:0.02925000,
+  11:0.02425000,12:0.02425000,13:0.01636111,14:0.01636111,15:0.01636111,
+  16:0.01636111,17:0.01636111,18:0.01636111,19:0.01636111,20:0.01636111,
+  21:0.01636111,22:0.01085000,23:0.01085000,24:0.00885000,25:0.00885000,
+  26:0.00885000,27:0.00715000,28:0.00715000,29:0.00715000,30:0.00715000,
+  31:0.00715000,32:0.00513000,33:0.00513000,34:0.00513000,35:0.00513000,
+  36:0.00513000,37:0.00513000,38:0.00513000,39:0.00513000,40:0.00513000,
+  41:0.00513000,42:0.00365000,43:0.00365000,44:0.00365000,45:0.00365000,
+  46:0.00288500,47:0.00288500,48:0.00288500,49:0.00288500,50:0.00244333,
+  51:0.00244333,52:0.00244333,53:0.00244333,54:0.00244333,55:0.00244333,
+  56:0.00232000,57:0.00232000,58:0.00229000,59:0.00225000,60:0.00225000,
+  61:0.00225000,62:0.00218000,63:0.00218000,64:0.00218000,65:0.00218000,
+  66:0.00211000,67:0.00211000,68:0.00211000,69:0.00207000,70:0.00203000,
+  71:0.00203000,72:0.00203000,73:0.00199000
+};
+const SRV_PAYOUT_BY_MAJOR = { masters: SRV_PAYOUT_MASTERS, pga: SRV_PAYOUT_PGA, usopen: SRV_PAYOUT_USOPEN, open: SRV_PAYOUT_OPEN, players: SRV_PAYOUT_PLAYERS };
+// which major (or the Players) a PGA Tour event is, from its name — not the BMW PGA, Senior or Women's events
+const srvMajorOfEvent = (n) => { const x = String(n || '').toLowerCase().trim();
+  if (/senior|women|amateur|bmw/.test(x)) return null;
+  if (/^(the )?masters( tournament)?$/.test(x)) return 'masters';
+  if (/^(the )?pga championship$/.test(x)) return 'pga';
+  if (/^(the )?u\.?\s?s\.? open( championship)?$/.test(x)) return 'usopen';
+  if (/^the open( championship)?$|^(the )?british open$/.test(x)) return 'open';
+  if (/^the players( championship)?$/.test(x)) return 'players';
+  return null; };
 function srvComputeEarnings(players, purse, eventName, major) {
   const useSig = srvIsSignature(eventName, purse);
   // FINGERPRINT_V145_SRV_NOCUT / FINGERPRINT_V148_SRV_TOURCHAMP
   // Tour Championship has its own 25% table; else no-cut (Sentry/Travelers/St.Jude/BMW) vs cut sig.
   let table;
-  if (major === 'dpworld') {
+  if (SRV_PAYOUT_BY_MAJOR[major]) {
+    table = SRV_PAYOUT_BY_MAJOR[major];             // V234 — the majors and the Players have their own tables
+  } else if (major === 'dpworld') {
     // FINGERPRINT_V165_DPWORLD — DP World uses one fixed 17%-winner ladder for every event.
     table = SRV_PAYOUT_DPWORLD;
   } else if (useSig && srvIsTourChampionship(eventName)) {
@@ -3569,6 +3787,76 @@ export async function POST(request) {
     }
 
     // FINGERPRINT_V218_VENMO — commissioner: Venmo username + "trust I've paid"
+    // FINGERPRINT_V230_OAD — one-and-done: view the season / make this week's pick / commissioner switch
+    if (body.action === 'oad-paid') {   // FINGERPRINT_V232_OAD_BUYIN — a player says they've paid the season buy-in
+      const meta = await getPoolMeta(poolId); const user = await verifyToken(body.auth);
+      if (!user) return Response.json({ error:'Sign in first' }, { status:401 });
+      if (!meta?.oad?.on || !(+meta.oad.fee > 0)) return Response.json({ error:'There’s no buy-in for this game' }, { status:400 });
+      const year = new Date().getMonth() >= 8 ? new Date().getFullYear() + 1 : new Date().getFullYear(), d = await srvOadLoad(poolId, year);
+      d.players[user.uid] = d.players[user.uid] || { name: String(user.nickname || user.name || 'Player').slice(0, 30), picks: {} };
+      d.paid = d.paid || {}; d.payPending = d.payPending || {};
+      if (meta.trustPaid) { d.paid[user.uid] = true; delete d.payPending[user.uid]; } else d.payPending[user.uid] = new Date().toISOString();
+      await srvOadSave(poolId, year, d);
+      if (!meta.trustPaid) { try { await srvPushMany(poolId, [{ name:'__admin__', type:'unpaid', payload:{ title:`💵 ${d.players[user.uid].name} says they've paid One & Done`,
+        body:`$${meta.oad.fee} — confirm it in Admin → One & Done.`, url:`${process.env.NEXT_PUBLIC_BASE_URL || 'https://tunagolfpool.com'}/pool/${poolId}?tab=admin`, tag:`oadpaid-${poolId}` } }]); } catch {} }
+      return Response.json({ ok:true, status: meta.trustPaid ? 'paid' : 'pending', year });
+    }
+    if (body.action === 'oad-confirm') {   // commissioner: confirm / mark paid or unpaid
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const year = +body.year || new Date().getFullYear(), d = await srvOadLoad(poolId, year), uid = String(body.uid || '');
+      d.paid = d.paid || {}; d.payPending = d.payPending || {};
+      if (body.received) d.paid[uid] = true; else delete d.paid[uid];
+      delete d.payPending[uid]; await srvOadSave(poolId, year, d);
+      return Response.json({ ok:true });
+    }
+    if (body.action === 'oad-get' || body.action === 'oad-pick') {
+      const meta = await getPoolMeta(poolId);
+      if (!meta?.oad?.on) return Response.json({ ok:true, enabled:false });
+      const W = await srvOadWeek();
+      try { await srvOadSettle(poolId, W); } catch {}
+      const year = W.year, wk = W.event ? `${srvOadSlug(W.event)}_${year}` : null;
+      let d = await srvOadLoad(poolId, year);
+      const user = body.auth ? await verifyToken(body.auth) : null;
+      // off-season: September–December (the fall events don't count), except the TOUR Championship itself
+      const offSeason = new Date().getMonth() >= 8 && !(W.event && srvIsTourChampionship(W.event.toLowerCase()));
+      const locked = !!W.started || !!d.weeks?.[wk]?.done, closed = !!d.closed || offSeason;
+      if (body.action === 'oad-pick') {
+        if (!user) return Response.json({ error:'Sign in to play' }, { status:401 });
+        if (closed) return Response.json({ error: offSeason ? `The ${year + 1} season starts in January` : 'The season is over' }, { status:409 });
+        if (!wk) return Response.json({ error:'No PGA Tour event this week' }, { status:409 });
+        if (locked) return Response.json({ error:'This week’s picks are locked' }, { status:409 });
+        const g = String(body.golfer || '');
+        if (!W.field.includes(g)) return Response.json({ error:'That golfer isn’t in this week’s field' }, { status:400 });
+        const me = d.players[user.uid] = d.players[user.uid] || { name: String(user.nickname || user.name || 'Player').slice(0, 30), picks: {} };
+        me.name = String(user.nickname || user.name || me.name).slice(0, 30);
+        if (Object.entries(me.picks).some(([w2, pk]) => w2 !== wk && pk.g === g)) return Response.json({ error:'You’ve already used him this season' }, { status:409 });
+        me.picks[wk] = { g, event: W.event, at: new Date().toISOString() };
+        await srvOadSave(poolId, year, d);
+        try { await redis('SADD', `user:${user.uid}:pools`, poolId); } catch {}
+      }
+      // FINGERPRINT_V232_OAD_BUYIN — "I've paid" (trust switch shared with the weekly pool)
+      const mine = user ? d.players[user.uid] : null;
+      const counts = {}; if (locked && wk) for (const pl of Object.values(d.players)) { const g = pl.picks?.[wk]?.g; if (g) counts[g] = (counts[g] || 0) + 1; }
+      // buy-in: fee, pot and who's paid — during the off-season that's for NEXT season
+      const fee = +meta.oad.fee || 0, payYear = offSeason ? year + 1 : year, pd = offSeason ? await srvOadLoad(poolId, payYear) : d;
+      const paid = pd.paid || {}, pending = pd.payPending || {};
+      const isAdm = body.password ? await checkAdmin(body.password) : false;
+      const payRows = isAdm ? Object.entries(pd.players || {}).map(([uid, pl]) => ({ uid, name: pl.name, paid: !!paid[uid], pending: !!pending[uid] })) : undefined;
+      return Response.json({ ok:true, enabled:true, year, closed, offSeason, nextYear: year + 1, event: W.event, wk, locked,
+        fee, payYear, pot: fee * Object.keys(pd.players || {}).length, paidUids: Object.keys(paid), payRows,
+        mePaid: user ? (paid[user.uid] ? 'paid' : pending[user.uid] ? 'pending' : 'unpaid') : null,
+        field: locked || closed ? [] : W.field, standings: srvOadTable(d, wk, locked),
+        me: user ? { uid: user.uid, pick: mine?.picks?.[wk]?.g || null, used: Object.entries(mine?.picks || {}).filter(([w2]) => w2 !== wk).map(([, pk]) => pk.g) } : null,
+        counts });
+    }
+    if (body.action === 'set-oad') {
+      if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
+      const meta = await getPoolMeta(poolId); if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
+      meta.oad = { ...(meta.oad || {}), ...(body.on !== undefined ? { on: !!body.on } : {}), ...(body.fee !== undefined ? { fee: Math.max(0, Math.min(10000, Math.round(+body.fee || 0))) } : {}) };
+      await redis('SET', k(poolId, 'meta'), JSON.stringify(meta));
+      return Response.json({ ok:true, oad: meta.oad });
+    }
+
     if (body.action === 'set-chat-bot') {   // FINGERPRINT_V223_BOT
       if (!await checkAdmin(body.password)) return Response.json({ error:'Wrong password' }, { status:401 });
       const meta = await getPoolMeta(poolId); if (!meta) return Response.json({ error:'Pool not found' }, { status:404 });
