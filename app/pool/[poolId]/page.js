@@ -1,5 +1,5 @@
 'use client';
-// build: keyboard-dock-v362-20261006-0945
+// build: fullscreen-chat-v363-20261006-1000
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3508,7 +3508,27 @@ export default function App(){
     upd(); vv.addEventListener('resize',upd); vv.addEventListener('scroll',upd);
     return ()=>{ vv.removeEventListener('resize',upd); vv.removeEventListener('scroll',upd); };
   },[tab]);
-  const docked=composerFocus&&kbOffset>60;              // a real keyboard is up (desktop never docks)
+  const docked=false;   // V363 — replaced by the full-screen chat on phones (below)
+  // FINGERPRINT_V363_FULLSCREEN_CHAT — iMessage-style on phones: the chat is its own full-screen view sized to the
+  // VISIBLE screen (visualViewport). When the keyboard opens the view gets shorter and the message box, pinned to
+  // its bottom edge, rides up with it — nothing to measure, so no lag. Computers/iPads keep the normal tab.
+  const [isPhone,setIsPhone]=useState(false);
+  const [vvBox,setVvBox]=useState(null);                 // {top, h} of the visible screen
+  const prevTabRef=useRef('Standings');
+  useEffect(()=>{ try{ setIsPhone(window.matchMedia('(max-width: 700px)').matches&&window.matchMedia('(pointer: coarse)').matches); }catch{} },[]);
+  useEffect(()=>{ if(tab!=='Chat') prevTabRef.current=tab; },[tab]);
+  const chatFull=isPhone&&tab==='Chat'&&!!(chatVerified||acct);
+  useEffect(()=>{
+    if(!chatFull) { setVvBox(null); return; }
+    const vv=window.visualViewport;
+    const upd=()=>setVvBox(vv?{top:Math.round(vv.offsetTop),h:Math.round(vv.height)}:{top:0,h:window.innerHeight});
+    upd(); measureKbRef.current=upd;                      // focus re-measures through the keyboard animation
+    vv&&vv.addEventListener('resize',upd); vv&&vv.addEventListener('scroll',upd); window.addEventListener('scroll',upd);
+    const html=document.documentElement, body=document.body, was=[html.style.overflow,body.style.overflow];
+    html.style.overflow='hidden'; body.style.overflow='hidden';          // lock the page behind
+    return ()=>{ vv&&vv.removeEventListener('resize',upd); vv&&vv.removeEventListener('scroll',upd); window.removeEventListener('scroll',upd);
+      html.style.overflow=was[0]; body.style.overflow=was[1]; };
+  },[chatFull]);
   // FINGERPRINT_V358 — opening the Chat tab always starts you at the latest message
   useEffect(()=>{
     if(tab!=='Chat') return;
@@ -6339,7 +6359,14 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   </>}
             </div>
 
-            :<div>
+            :<div style={chatFull?{position:'fixed',left:0,right:0,top:vvBox?vvBox.top:0,height:vvBox?vvBox.h:'100%',zIndex:55,
+                background:T.bodyBg||'#f6f3ea',display:'flex',flexDirection:'column',padding:'0 10px 8px',boxSizing:'border-box'}:{}}>
+              {chatFull&&<div style={{display:'flex',alignItems:'center',gap:10,padding:'calc(6px + env(safe-area-inset-top, 0px)) 2px 8px',flexShrink:0}}>
+                <button type="button" onClick={()=>setTab(prevTabRef.current||'Standings')}
+                  style={{background:'none',border:'none',color:T.primary,fontSize:15,fontWeight:700,cursor:'pointer',padding:'4px 2px'}}>‹ Back</button>
+                <div style={{flex:1,textAlign:'center',fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:16,color:T.primary,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>💬 {poolMeta?.poolName||'Pool chat'}</div>
+                <span style={{width:52}}/>
+              </div>}
               {/* FINGERPRINT_V359 — no "Chatting as … ✓" banner for entrants; spectators get a small note */}
               {!chatVerified&&<div style={{marginBottom:10,padding:'7px 14px',background:`${T.primary}0a`,borderRadius:9,fontSize:12,color:T.primary,fontWeight:600}}>
                 👀 You're chatting as a spectator — <b>{guestName||acct?.nickname||acct?.name}</b></div>}
@@ -6352,7 +6379,8 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
               </div>}
               <div ref={chatScrollRef} onScroll={(e)=>{ const t=e.currentTarget; if(chatNewBelow&&t.scrollHeight-t.scrollTop-t.clientHeight<90) setChatNewBelow(false); }} style={{
                 background:'#fff',borderRadius:11,border:`1px solid ${T.cardBorder}`,
-                height:380,overflowY:'auto',padding:12,marginBottom:10,
+                height:chatFull?'auto':380,flex:chatFull?1:undefined,minHeight:chatFull?0:undefined,overflowY:'auto',padding:12,marginBottom:chatFull?8:10,
+                WebkitOverflowScrolling:'touch',overscrollBehavior:'contain',
               }}>
                 {chatMessages.length===0
                   ?<div style={{textAlign:'center',color:'#aaa',fontSize:13,padding:'40px 0'}}>
