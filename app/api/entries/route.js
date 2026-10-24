@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: cut-msg-v227-20261006-0730
+// build: no-default-pw-v228-20261006-0900
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -2036,7 +2036,10 @@ export async function POST(request) {
       if (!pw) return false;
       // an owned pool with no backup password must NEVER fall back to the built-in default
       if (meta.ownerUid && !meta.adminPassword) return false;
-      const validPw = meta.adminPassword || process.env.ADMIN_PASSWORD || 'masters2026';
+      // FINGERPRINT_V228_NO_DEFAULT_PW — no built-in password (the code is public): a pool's own password, else
+      // the ADMIN_PASSWORD setting in Vercel if there is one, else no password works (owners use their account)
+      const validPw = meta.adminPassword || process.env.ADMIN_PASSWORD || '';
+      if (!validPw) return false;
       return pw === validPw;
     };
 
