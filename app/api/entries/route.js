@@ -3,7 +3,7 @@ import webpush from 'web-push';                            // FINGERPRINT_V193_P
 import tzlookup from 'tz-lookup';                          // FINGERPRINT_V201_TZ
 import { verifyToken, addUserPool } from '../auth/lib';    // FINGERPRINT_V202_ACCOUNTS
 export const dynamic = 'force-dynamic';
-// build: major-tables-v234-20261006-1500
+// build: oad-hide-v235-20261006-1530
 
 const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -3845,6 +3845,9 @@ export async function POST(request) {
       return Response.json({ ok:true, enabled:true, year, closed, offSeason, nextYear: year + 1, event: W.event, wk, locked,
         fee, payYear, pot: fee * Object.keys(pd.players || {}).length, paidUids: Object.keys(paid), payRows,
         mePaid: user ? (paid[user.uid] ? 'paid' : pending[user.uid] ? 'pending' : 'unpaid') : null,
+        // FINGERPRINT_V235_OAD_HIDE — once a week has locked, only players in the game (and the commissioner) see the tab
+        started: !offSeason && (locked || Object.values(d.weeks || {}).some(w => w.done)),
+        joined: !!(user && (pd.players?.[user.uid] || d.players?.[user.uid])),
         field: locked || closed ? [] : W.field, standings: srvOadTable(d, wk, locked),
         me: user ? { uid: user.uid, pick: mine?.picks?.[wk]?.g || null, used: Object.entries(mine?.picks || {}).filter(([w2]) => w2 !== wk).map(([, pk]) => pk.g) } : null,
         counts });
