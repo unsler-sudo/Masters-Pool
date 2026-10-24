@@ -1,5 +1,5 @@
 'use client';
-// build: no-zoom-v365-20261006-1100
+// build: oad-extras-v368-20261006-1400
 import React, { useState, useEffect, useRef } from 'react';
 import { HEADSHOT_MAP } from './player-headshots';
 import tzlookup from 'tz-lookup';   // FINGERPRINT_V282_TZ — exact time zone from a venue's coordinates
@@ -3531,6 +3531,25 @@ export default function App(){
     return ()=>{ vv&&vv.removeEventListener('resize',upd); vv&&vv.removeEventListener('scroll',upd); window.removeEventListener('scroll',upd);
       html.style.overflow=was[0]; body.style.overflow=was[1]; };
   },[chatFull]);
+  // FINGERPRINT_V366_OAD — one-and-done (belongs to the pool, works in any mode)
+  const [oadData,setOadData]=useState(null);
+  const [oadQ,setOadQ]=useState('');
+  const [oadOpen,setOadOpen]=useState(null);
+  const loadOad=()=>fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'oad-get',auth:acctToken||undefined})})
+    .then(r=>r.json()).then(d=>{ if(d?.ok) setOadData(d); }).catch(()=>{});
+  useEffect(()=>{ if(tab!=='OAD') return; loadOad(); const t=setInterval(loadOad,60000); return ()=>clearInterval(t); },[tab,acctToken]);
+  const [oadAdmin,setOadAdmin]=useState(null);           // FINGERPRINT_V368 — commissioner's list of who's paid
+  const [oadFeeIn,setOadFeeIn]=useState(null);
+  const loadOadAdmin=()=>adminAction('oad-get',{auth:acctToken||undefined}).then(d=>{ if(d?.ok) setOadAdmin(d); }).catch(()=>{});
+  useEffect(()=>{ if(tab==='Admin'&&adminOk&&adminPw&&poolMeta?.oad?.on) loadOadAdmin(); },[tab,adminOk,adminPw,poolMeta?.oad?.on]);
+  const oadPaid=async()=>{
+    const d=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'oad-paid',auth:acctToken})}).then(r=>r.json()).catch(()=>null);
+    if(d?.ok){ msg(d.status==='paid'?'Marked paid ✓':'Thanks — your commissioner will confirm it'); loadOad(); } else msg(d?.error||'Could not update');
+  };
+  const oadPick=async(g)=>{
+    const d=await fetch('/api/entries',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poolId,action:'oad-pick',auth:acctToken,golfer:g})}).then(r=>r.json()).catch(()=>null);
+    if(d?.ok){ setOadData(d); setOadQ(''); msg(`Your pick: ${flip(g)} ✓`); } else msg(d?.error||'Could not save your pick');
+  };
   // FINGERPRINT_V358 — opening the Chat tab always starts you at the latest message
   useEffect(()=>{
     if(tab!=='Chat') return;
@@ -3873,6 +3892,7 @@ export default function App(){
     if(openTab==='picks') setTab('Enter Pool');
     else if(openTab==='admin') setTab('Admin');          // FINGERPRINT_V287 — "Manage" from My pools
     else if(openTab==='history') setTab('History');      // FINGERPRINT_V298 — "See full results" in the recap email
+    else if(openTab==='oad') setTab('OAD');              // FINGERPRINT_V368 — One & Done emails
     if(!t) return;
     (async()=>{
       try{
@@ -5125,7 +5145,7 @@ export default function App(){
       {gpDark&&<style>{gpDarkCss(T)}</style>}{/* FINGERPRINT_V313_DARK — the dark layer, only while dark */}
       <nav style={{display:'flex',background:T.navBg,borderBottom:`2px solid ${T.navBorder}`,position:'sticky',top:0,zIndex:10,boxShadow:'0 2px 6px rgba(0,0,0,.06)',maxWidth:600,margin:'0 auto'}}>
         <style>{`@keyframes chatdotblink { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.8)} }`}</style>
-        {TABS.filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t==='History'?'Season':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
+        {(poolMeta?.oad?.on?[...TABS.slice(0,4),'OAD',...TABS.slice(4)]:TABS).filter(t=>!(t==='Enter Pool'&&pastTeeTime&&!isTeamPool&&!lateOK)).map(t=><button key={t} onClick={()=>{setTab(t);setSearch('');}} style={{flex:1,padding:'11px 4px',fontSize:12,fontWeight:tab===t?700:500,border:'none',background:tab===t?T.navActive:'transparent',color:tab===t?T.primary:'#8a9580',borderBottom:tab===t?`3px solid ${T.primary}`:'3px solid transparent',letterSpacing:.3,position:'relative'}}>{isTeamPool&&t==='Enter Pool'?'Match Picks':isTeamPool&&t==='Field'?'Matches':t==='History'?'Season':t==='OAD'?'🎯 1&Done':t}{t==='Chat'&&hasUnreadChat&&<span style={{position:'absolute',top:4,marginLeft:3,minWidth:16,height:16,padding:'0 4px',borderRadius:8,background:'#e0322c',color:'#fff',fontSize:10,fontWeight:800,lineHeight:'16px',textAlign:'center',display:'inline-block',boxShadow:'0 0 0 2px #fff',animation:'chatdotblink 1.1s ease-in-out infinite'}}>{unreadChatCount>99?'99+':unreadChatCount}</span>}</button>)}
       <button type="button" onClick={()=>openAcct(acct?null:'signin')} aria-label="Your profile" title={acct?`${acct.name} — your profile`:'Sign in'}
           style={{flex:'0 0 auto',padding:'0 10px',background:'transparent',border:'none',fontSize:17,cursor:'pointer',position:'relative',display:'flex',alignItems:'center'}}>
           {/* FINGERPRINT_V311_PHOTO — your Google photo IS the profile button (amber ring = cell number missing) */}
@@ -6347,6 +6367,82 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
           </div>
         </>}
 
+        {/* FINGERPRINT_V366_OAD — One & Done */}
+        {tab==='OAD'&&(()=>{
+          const d=oadData;
+          if(!d) return <div style={bx}><p style={{color:'#8a9580',margin:0}}>Loading…</p></div>;
+          if(!d.enabled) return <div style={bx}><div style={{fontSize:36}}>🎯</div><p style={{color:'#8a9580'}}>One &amp; Done isn't switched on for this pool.</p></div>;
+          const big=(n)=>!n?'$0':n>=1e6?'$'+(n/1e6).toFixed(2).replace(/\.?0+$/,'')+'M':'$'+Math.round(n/1000)+'K';
+          const used=new Set(d.me?.used||[]), q=oadQ.trim().toLowerCase();
+          const list=(d.field||[]).filter(g=>!q||flip(g).toLowerCase().includes(q)).slice(0,q?60:400);
+          return <>
+            <div style={sec}>
+              <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
+                <h3 style={{...stl,marginBottom:0,flex:1}}>🎯 One &amp; Done · {d.year}</h3>
+                <span style={{fontSize:11,fontWeight:700,padding:'3px 9px',borderRadius:10,background:d.closed?'#eee':d.locked?'#fdecea':'#e8f5e8',color:d.closed?'#666':d.locked?'#b3261e':'#2d7a1e'}}>
+                  {d.offSeason?'Off-season':d.closed?'Season over':d.locked?'🔒 Picks locked':'Picks open'}</span>
+              </div>
+              <div style={{fontSize:12,color:'#6b7c5e',margin:'4px 0 10px',lineHeight:1.5}}>
+                {d.offSeason?<>The <b>{d.nextYear}</b> season starts with the first PGA Tour event in January and runs to the TOUR Championship.{(d.standings||[]).length?' Here are last season’s final standings.':''}</>:d.closed?'Final standings for the season.':d.event?<>This week: <b>{d.event}</b> · one golfer, his real prize money, and you can't use him again this season.{!d.locked&&' Picks lock when the first group tees off.'}</>:'No PGA Tour event this week.'}</div>
+              {!d.closed&&d.event&&(!acct
+                ? <button type="button" onClick={()=>openAcct('signin')} style={{...pri,width:'100%'}}>Sign in to play</button>
+                : d.locked
+                  ? <div style={{fontSize:15,padding:'8px 0'}}>Your pick: <b style={{color:T.primary}}>{d.me?.pick?flip(d.me.pick):'— none this week ($0)'}</b></div>
+                  : <>
+                      <div style={{fontSize:14,marginBottom:8}}>Your pick: <b style={{color:T.primary}}>{d.me?.pick?flip(d.me.pick):'not picked yet'}</b>{d.me?.pick&&<span style={{fontSize:11,color:'#8a9580'}}> · you can change it until the lock</span>}</div>
+                      <input style={{...inp,marginBottom:8}} placeholder={`Search ${d.field.length} golfers…`} value={oadQ} onChange={e=>setOadQ(e.target.value)}/>
+                      <div style={{maxHeight:320,overflowY:'auto',border:`1px solid ${T.cardBorder}`,borderRadius:9}}>
+                        {list.map(g=>{ const u=used.has(g), mine=d.me?.pick===g;
+                          return <button key={g} type="button" disabled={u} onClick={()=>!mine&&oadPick(g)}
+                            style={{display:'flex',alignItems:'center',gap:8,width:'100%',textAlign:'left',padding:'9px 12px',border:'none',borderBottom:'1px solid #f0f0ea',
+                              background:mine?`${T.primary}14`:'#fff',cursor:u?'default':'pointer',opacity:u?.45:1}}>
+                            <span style={{flex:1,fontSize:14,fontWeight:mine?800:600,color:'#2a3a1e'}}>{flip(g)}</span>
+                            {u?<span style={{fontSize:11,color:'#8a9580'}}>used</span>:mine?<span style={{fontSize:12,fontWeight:800,color:T.primary}}>✓ Your pick</span>:null}
+                          </button>;})}
+                        {!list.length&&<div style={{padding:12,fontSize:13,color:'#8a9580'}}>No golfers match.</div>}
+                      </div>
+                    </>)}
+            </div>
+            {/* FINGERPRINT_V368 — season buy-in */}
+            {d.fee>0&&<div style={{...sec,borderColor:d.mePaid==='paid'?T.cardBorder:'#f0c060',background:d.mePaid==='paid'?undefined:'#fff8e6'}}>
+              <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap'}}>
+                <div style={{flex:1,fontSize:14,fontWeight:800,color:'#2a3a1e'}}>💵 {d.payYear} buy-in: ${d.fee}</div>
+                <div style={{fontSize:12,color:'#6b7c5e'}}>Pot: <b>${d.pot.toLocaleString()}</b></div>
+              </div>
+              {!acct?<div style={{fontSize:12,color:'#8a9580',marginTop:4}}>Sign in to join and pay.</div>
+                :d.mePaid==='paid'?<div style={{fontSize:13,fontWeight:700,color:'#2d7a1e',marginTop:4}}>Paid ✓</div>
+                :d.mePaid==='pending'?<div style={{fontSize:13,fontWeight:700,color:'#9a6a00',marginTop:4}}>⏳ Paid — awaiting confirmation</div>
+                :(()=>{ const v=poolMeta?.venmoUser?gpVenmo(poolMeta.venmoUser,d.fee,[poolMeta?.poolName,`One & Done ${d.payYear}`,acct?.nickname||acct?.name].filter(Boolean).join(' · ')):null;
+                  return <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginTop:8}}>
+                    {v&&<a href={v.href} onClick={v.onClick} target="_blank" rel="noopener noreferrer" aria-label={`Pay $${d.fee} with Venmo`}
+                      style={{background:'#008CFF',borderRadius:8,padding:12,display:'inline-flex',alignItems:'center',lineHeight:0}}>
+                      <img src="/brand/venmo-logo-white.png" alt="Venmo" height={12} width={63} style={{display:'block',height:12,width:'auto'}}/></a>}
+                    <button type="button" onClick={oadPaid} style={{background:'#fff',color:T.primary,border:`1.5px solid ${T.primary}`,borderRadius:8,padding:'8px 14px',fontWeight:700,fontSize:13,cursor:'pointer'}}>I've paid</button>
+                  </div>; })()}
+            </div>}
+            {d.locked&&Object.keys(d.counts||{}).length>0&&<div style={sec}><h3 style={stl}>This week's picks</h3>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>{Object.entries(d.counts).sort((a,b)=>b[1]-a[1]).map(([g,n])=>
+                <span key={g} style={{fontSize:12,padding:'4px 10px',borderRadius:12,background:`${T.primary}10`,color:'#2a3a1e',fontWeight:600}}>{flip(g)} ×{n}</span>)}</div></div>}
+            <div style={sec}><h3 style={stl}>Season standings</h3>
+              {!(d.standings||[]).length&&<div style={{fontSize:13,color:'#8a9580'}}>No picks yet — be the first.</div>}
+              {(d.standings||[]).map((r,i)=>{ const open=oadOpen===r.uid;
+                return <div key={r.uid} style={{borderTop:i?'1px solid #f0f0ea':'none'}}>
+                  <button type="button" onClick={()=>setOadOpen(open?null:r.uid)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',background:'none',border:'none',padding:'9px 2px',cursor:'pointer',textAlign:'left'}}>
+                    <span style={{width:22,fontSize:13,color:'#8a9580',fontWeight:700}}>{i+1}</span>
+                    <span style={{flex:1,fontSize:14,fontWeight:700,color:'#2a3a1e'}}>{r.name}{d.fee>0&&(d.paidUids||[]).includes(r.uid)&&<span title="Paid" style={{fontSize:11,color:'#2d7a1e'}}> ✓</span>}{d.me?.uid===r.uid&&<span style={{fontSize:11,color:'#8a9580'}}> (you)</span>}</span>
+                    <span style={{fontSize:12,color:'#8a9580'}}>{r.played} wk{r.played===1?'':'s'}</span>
+                    <span style={{fontSize:15,fontWeight:800,color:T.primary,minWidth:64,textAlign:'right'}}>{big(r.total)}</span>
+                    <span style={{color:'#bbb'}}>{open?'▾':'›'}</span>
+                  </button>
+                  {open&&<div style={{padding:'0 4px 10px 32px'}}>
+                    {r.weeks.map(w=><div key={w.wk} style={{display:'flex',gap:8,fontSize:12,padding:'3px 0',color:'#2a3a1e'}}>
+                      <span style={{flex:1,color:'#6b7c5e'}}>{w.event}</span><span style={{fontWeight:700}}>{w.g?flip(w.g):'🔒 hidden'}</span>
+                      <span style={{minWidth:56,textAlign:'right',color:w.done?'#2a3a1e':'#8a9580'}}>{w.done?big(w.earned):'live'}</span></div>)}
+                  </div>}
+                </div>;})}
+            </div>
+          </>;
+        })()}
         {tab==='Chat'&&<>
           {!(chatVerified||acct)   /* FINGERPRINT_V346 — anyone signed in can chat */
             ?<div style={{background:'#fff',borderRadius:11,padding:24,border:`1px solid ${T.cardBorder}`,textAlign:'center'}}>
@@ -7232,6 +7328,35 @@ ${payoutLine}${countdownLine}→ ${shareLink}`;
                   const d=await adminAction('set-admin-password',{newPassword:''});
                   if(d?.ok){ setPoolMeta(prev=>({...(prev||{}),hasAdminPassword:false})); msg('Backup password removed'); } else msg(d?.error||'Could not remove');
                 }} style={{background:'none',border:'none',color:'#a03030',fontSize:12,textDecoration:'underline',cursor:'pointer',padding:0,marginTop:10}}>Remove backup password</button>}
+            </div>
+            {/* FINGERPRINT_V366_OAD — commissioner switch; works in any mode */}
+            <div style={sec}><h3 style={stl}>🎯 One &amp; Done</h3>
+              <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+                <span style={{flex:1,fontSize:13,color:'#2a3a1e',lineHeight:1.45}}>Season-long side game
+                  <span style={{display:'block',fontSize:11,color:'#8a9580',marginTop:2}}>Each week players pick one PGA Tour golfer and earn his prize money — and can't use him again all season (January → TOUR Championship). Runs in any pool mode.</span></span>
+                <span role="switch" aria-checked={!!poolMeta?.oad?.on} onClick={async(e)=>{e.preventDefault();const on=!poolMeta?.oad?.on;const d=await adminAction('set-oad',{on});
+                    if(d?.ok){setPoolMeta(prev=>({...(prev||{}),oad:d.oad}));msg(on?'One & Done is on — look for the 🎯 1&Done tab':'One & Done is off');}}}
+                  style={{width:44,height:26,borderRadius:13,background:poolMeta?.oad?.on?T.primary:'#d6d6cf',position:'relative',transition:'background .15s',flexShrink:0}}>
+                  <span style={{position:'absolute',top:3,left:poolMeta?.oad?.on?21:3,width:20,height:20,borderRadius:'50%',background:'#fff',boxShadow:'0 1px 2px rgba(0,0,0,.25)',transition:'left .15s'}}/>
+                </span>
+              </label>
+              {poolMeta?.oad?.on&&<>{/* FINGERPRINT_V368 — season buy-in + who's paid */}
+                <div style={{display:'flex',gap:8,alignItems:'center',marginTop:12,flexWrap:'wrap'}}>
+                  <span style={{fontSize:13,color:'#2a3a1e'}}>Season buy-in $</span>
+                  <input style={{...inp,marginBottom:0,width:90}} inputMode="numeric" value={oadFeeIn??String(poolMeta?.oad?.fee||'')} placeholder="0" onChange={e=>setOadFeeIn(e.target.value.replace(/[^0-9]/g,''))}/>
+                  <button type="button" onClick={async()=>{const d=await adminAction('set-oad',{fee:+(oadFeeIn??poolMeta?.oad?.fee??0)||0}); if(d?.ok){setPoolMeta(prev=>({...(prev||{}),oad:d.oad}));setOadFeeIn(null);msg(d.oad.fee?`Buy-in set to $${d.oad.fee}`:'No buy-in');loadOadAdmin();}}} style={pri}>Save</button>
+                </div>
+                <div style={{fontSize:11,color:'#8a9580',marginTop:4}}>Players pay with the venmo button on the 🎯 1&amp;Done tab. "Trust I've paid" above applies here too.</div>
+                {(oadAdmin?.payRows||[]).length>0&&+poolMeta?.oad?.fee>0&&<div style={{marginTop:10}}>
+                  <div style={{fontSize:12,fontWeight:800,color:'#5a6b4e',marginBottom:4}}>{oadAdmin.payYear} buy-ins</div>
+                  {oadAdmin.payRows.sort((a,b)=>(b.pending-a.pending)||(a.paid-b.paid)||a.name.localeCompare(b.name)).map(r=><div key={r.uid} style={{display:'flex',alignItems:'center',gap:8,padding:'5px 0',borderTop:'1px solid #f0f0ea'}}>
+                    <span style={{flex:1,fontSize:13,fontWeight:600}}>{r.name}</span>
+                    <span style={{fontSize:12,fontWeight:700,color:r.paid?'#2d7a1e':r.pending?'#9a6a00':'#c62828'}}>{r.paid?'Paid ✓':r.pending?'⏳ Says paid':'Unpaid'}</span>
+                    {!r.paid&&<button type="button" onClick={async()=>{const d=await adminAction('oad-confirm',{uid:r.uid,year:oadAdmin.payYear,received:true}); if(d?.ok){msg(`${r.name} paid ✓`);loadOadAdmin();}}} style={{...pri,padding:'4px 10px',fontSize:12}}>{r.pending?'Confirm':'Mark paid'}</button>}
+                    {(r.paid||r.pending)&&<button type="button" onClick={async()=>{const d=await adminAction('oad-confirm',{uid:r.uid,year:oadAdmin.payYear,received:false}); if(d?.ok){msg(r.pending?'Not received':'Marked unpaid');loadOadAdmin();}}} style={{background:'#fff',color:'#8b2020',border:'1px solid #8b202060',borderRadius:7,padding:'4px 10px',fontSize:12,fontWeight:600,cursor:'pointer'}}>{r.pending?'Not received':'Undo'}</button>}
+                  </div>)}
+                </div>}
+              </>}
             </div>
             <div style={sec}><h3 style={stl}>🎨 Custom Pool Logo</h3>
               <p style={{fontSize:12,color:'#6b7c5e',marginBottom:8}}>Override the major's default logo with your own. Paste a public image URL (PNG/JPG). Leave blank to use the default major logo.</p>
